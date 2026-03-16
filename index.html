@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MEM·SIM — Memory Endianness Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     TOPBAR
+═══════════════════════════════════════════════════════ -->
+<header id="topbar">
+  <div class="tb-brand">
+    <svg class="tb-logo" viewBox="0 0 28 28" fill="none">
+      <rect x="1" y="1" width="11" height="11" rx="1" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="16" y="1" width="11" height="11" rx="1" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="1" y="16" width="11" height="11" rx="1" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="16" y="16" width="11" height="11" rx="1" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="6.5" y1="12" x2="6.5" y2="16" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="21.5" y1="12" x2="21.5" y2="16" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="12" y1="6.5" x2="16" y2="6.5" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="12" y1="21.5" x2="16" y2="21.5" stroke="currentColor" stroke-width="1.5"/>
+    </svg>
+    <div>
+      <div class="tb-title">MEM·SIM</div>
+      <div class="tb-sub">Memory Endianness Simulator</div>
+    </div>
+  </div>
+
+  <nav class="tb-nav">
+    <div class="pc-chip">
+      <span class="chip-lbl">PC</span>
+      <span class="chip-val" id="pcDisplay">0x0000</span>
+    </div>
+    <div class="clock-chip" id="clockChip">
+      <span class="chip-lbl">LAST OP</span>
+      <span class="chip-val" id="clockDisplay">—</span>
+    </div>
+    <div class="ops-chip">
+      <span class="chip-lbl">OPS</span>
+      <span class="chip-val" id="opsDisplay">0</span>
+    </div>
+  </nav>
+
+  <div class="tb-actions">
+    <button class="tb-btn" id="btnHelp" title="Ajuda / Tutorial">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4" fill="none"/><text x="8" y="12" text-anchor="middle" fill="currentColor" font-size="10" font-family="serif" font-weight="bold">?</text></svg>
+    </button>
+    <button class="tb-btn" id="btnSave" title="Salvar simulação">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9H2V2h1zm4 9a2 2 0 100-4 2 2 0 000 4zm2-9v3H5V2h4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="tb-btn" id="btnLoad" title="Carregar simulação">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M2 11v3h12v-3M8 2v8m-3-3l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <input type="file" id="fileInput" accept=".json" style="display:none">
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════════════════ -->
+<div id="appShell">
+
+  <!-- ─────────── LEFT SIDEBAR ─────────── -->
+  <aside id="sidebar">
+
+    <!-- ENDIANNESS -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">FORMATO</div>
+      <div class="endian-toggle">
+        <button class="etbtn active" id="eLittle" onclick="App.setEndian('little')">
+          <span class="et-name">LITTLE</span>
+          <span class="et-sub">LSB primeiro</span>
+        </button>
+        <button class="etbtn" id="eBig" onclick="App.setEndian('big')">
+          <span class="et-name">BIG</span>
+          <span class="et-sub">MSB primeiro</span>
+        </button>
+      </div>
+      <div class="endian-hint" id="endianHint">
+        <span class="eh-arrow">0x0000</span> ← byte menos significativo
+      </div>
+    </section>
+
+    <!-- DATA SIZE -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">TAMANHO</div>
+      <div class="size-toggle">
+        <button class="stbtn" id="sByte" onclick="App.setSize('byte')">BYTE<br><small>8 bit</small></button>
+        <button class="stbtn" id="sWord" onclick="App.setSize('word')">WORD<br><small>16 bit</small></button>
+        <button class="stbtn active" id="sDword" onclick="App.setSize('dword')">DWORD<br><small>32 bit</small></button>
+      </div>
+    </section>
+
+    <!-- REGISTER SELECT -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">REGISTRADOR</div>
+      <div class="reg-picker" id="regPicker">
+        <button class="rpbtn active" id="rEAX" onclick="App.selectReg('EAX')">
+          <span class="rp-name">EAX</span>
+          <span class="rp-val" id="rpv-EAX">DEADBEEF</span>
+        </button>
+        <button class="rpbtn" id="rEBX" onclick="App.selectReg('EBX')">
+          <span class="rp-name">EBX</span>
+          <span class="rp-val" id="rpv-EBX">CAFEBABE</span>
+        </button>
+        <button class="rpbtn" id="rECX" onclick="App.selectReg('ECX')">
+          <span class="rp-name">ECX</span>
+          <span class="rp-val" id="rpv-ECX">12345678</span>
+        </button>
+        <button class="rpbtn" id="rEDX" onclick="App.selectReg('EDX')">
+          <span class="rp-name">EDX</span>
+          <span class="rp-val" id="rpv-EDX">ABCD1234</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- VALUE INPUT -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">VALOR (HEX)</div>
+      <div class="val-input-wrap">
+        <span class="val-prefix">0x</span>
+        <input class="val-input" id="valInput" type="text" maxlength="8" value="DEADBEEF" spellcheck="false"/>
+      </div>
+      <div class="val-preview" id="valPreview"></div>
+    </section>
+
+    <!-- ADDRESS -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">ENDEREÇO</div>
+      <div class="val-input-wrap">
+        <span class="val-prefix">0x</span>
+        <input class="val-input" id="addrInput" type="text" maxlength="4" value="0000" spellcheck="false"/>
+      </div>
+    </section>
+
+    <!-- SPEED -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">VELOCIDADE — <span id="speedVal">600ms</span></div>
+      <div class="speed-wrap">
+        <span class="sp-fast">RÁPIDO</span>
+        <input type="range" id="speedSlider" min="80" max="1800" value="600" step="40">
+        <span class="sp-slow">LENTO</span>
+      </div>
+    </section>
+
+    <!-- OPERATIONS -->
+    <section class="ctrl-section ops-section">
+      <div class="ctrl-label">OPERAÇÕES</div>
+      <div class="ops-grid">
+        <button class="op-btn op-store" id="opStore" onclick="App.doStore()">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+          STORE
+        </button>
+        <button class="op-btn op-load" id="opLoad" onclick="App.doLoad()">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 17V7M10 7l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="14" height="2" rx="1" fill="currentColor"/></svg>
+          LOAD
+        </button>
+        <button class="op-btn op-fetch" id="opFetch" onclick="App.doFetch()">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M10 3v2m0 10v2M3 10h2m10 0h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          FETCH
+        </button>
+        <button class="op-btn op-clear" id="opClear" onclick="App.doClear()">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          CLEAR
+        </button>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- ─────────── CENTER CANVAS ─────────── -->
+  <main id="canvas">
+
+    <!-- REGISTERS ROW -->
+    <div id="regsRow">
+      <div class="section-badge">REGISTRADORES DE USO GERAL</div>
+      <div id="regCards">
+        <!-- injected by JS -->
+      </div>
+    </div>
+
+    <!-- SVG ANIMATION STAGE -->
+    <div id="animStage">
+      <svg id="animSVG" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowG" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#4ade80"/>
+          </marker>
+          <marker id="arrowB" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#60a5fa"/>
+          </marker>
+          <marker id="arrowA" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#fbbf24"/>
+          </marker>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <!-- dynamic content injected -->
+      </svg>
+      <div id="animLabel">Pronto — selecione uma operação</div>
+    </div>
+
+    <!-- MEMORY GRID -->
+    <div id="memSection">
+      <div class="section-badge">
+        MAPA DE MEMÓRIA
+        <span class="addr-dir-tag" id="addrDirTag">↑ endereços crescem para cima</span>
+      </div>
+      <div id="memWrapper">
+        <div id="memAddrBar"></div>
+        <div id="memGrid"></div>
+        <div id="memLegend">
+          <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
+          <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
+          <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
+          <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div id="logSection">
+      <div class="section-badge">LOG DE OPERAÇÕES <button id="logClearBtn" onclick="App.clearLog()">limpar</button></div>
+      <div id="logOutput"></div>
+    </div>
+
+  </main>
+
+  <!-- ─────────── RIGHT PANEL ─────────── -->
+  <aside id="rightPanel">
+
+    <!-- BYTE BREAKDOWN -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">BREAKDOWN DE BYTES</div>
+      <div id="byteBreakdown"></div>
+    </section>
+
+    <!-- STATS -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">ESTATÍSTICAS</div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="sg-item"><div class="sg-v" id="st-ops">0</div><div class="sg-l">Total Ops</div></div>
+        <div class="sg-item"><div class="sg-v" id="st-time">0ms</div><div class="sg-l">Tempo Total</div></div>
+        <div class="sg-item"><div class="sg-v" id="st-loads">0</div><div class="sg-l">LOADs</div></div>
+        <div class="sg-item"><div class="sg-v" id="st-stores">0</div><div class="sg-l">STOREs</div></div>
+        <div class="sg-item"><div class="sg-v" id="st-avgl">—</div><div class="sg-l">Avg LOAD</div></div>
+        <div class="sg-item"><div class="sg-v" id="st-avgs">—</div><div class="sg-l">Avg STORE</div></div>
+      </div>
+    </section>
+
+    <!-- PERF COMPARE -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">COMPARATIVO</div>
+      <div class="perf-section" id="perfSection">
+        <div class="perf-row">
+          <span class="perf-lbl">Little</span>
+          <div class="perf-bar-bg"><div class="perf-fill perf-l" id="pfl" style="width:50%"></div></div>
+          <span class="perf-cnt" id="pc-l">0</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-lbl">Big</span>
+          <div class="perf-bar-bg"><div class="perf-fill perf-b" id="pfb" style="width:50%"></div></div>
+          <span class="perf-cnt" id="pc-b">0</span>
+        </div>
+      </div>
+    </section>
+
+  </aside>
+</div><!-- end appShell -->
+
+<!-- ═══════════════════════════════════════════════════════
+     HELP MODAL
+═══════════════════════════════════════════════════════ -->
+<div class="modal-bg" id="helpBg" onclick="if(event.target===this)App.closeHelp()">
+  <div class="modal" id="helpModal">
+    <div class="modal-hd">
+      <span>GUIA DE ENDIANNESS</span>
+      <button class="modal-x" onclick="App.closeHelp()">✕</button>
+    </div>
+    <div class="help-tabs">
+      <button class="htab active" onclick="App.showHelp('intro',this)">Introdução</button>
+      <button class="htab" onclick="App.showHelp('little',this)">Little Endian</button>
+      <button class="htab" onclick="App.showHelp('big',this)">Big Endian</button>
+      <button class="htab" onclick="App.showHelp('ops',this)">Operações</button>
+    </div>
+    <div class="modal-body" id="helpBody"></div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

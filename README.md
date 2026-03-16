@@ -5,8 +5,12 @@ Simulador visual interativo de armazenamento em memória com animações byte a 
 ---
 ## Abra direto no navegador
 
+https://psylinux.github.io/memory-endianness-simulator/
+
+
+## Faça o download do projeto e rode localmente
+
 ```bash
-# Abrir o arquivo index.html diretamente:
 # Windows: clique duplo em index.html
 # Mac/Linux:
 open index.html

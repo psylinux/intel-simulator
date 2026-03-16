@@ -3,12 +3,12 @@
 Simulador visual interativo de armazenamento em memória com animações byte a byte, suporte a Little Endian e Big Endian, e interface de estilo blueprint técnico.
 
 ---
-## Abra direto no navegador
+## Opção 1: Use online
 
 https://psylinux.github.io/memory-endianness-simulator/
 
 
-## Faça o download do projeto e rode localmente
+## Opção 2: Faça o download do projeto e rode localmente
 
 ```bash
 # Windows: clique duplo em index.html

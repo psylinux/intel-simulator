@@ -90,7 +90,7 @@
 
     <!-- ENDIANNESS -->
     <section class="ctrl-section">
-      <div class="ctrl-label">FORMATO</div>
+      <div class="ctrl-label">FORMATO (EXPERIMENTAL)</div>
       <div class="endian-toggle">
         <button class="etbtn active" id="eLittle" onclick="App.setEndian('little')">
           <span class="et-name">LITTLE</span>
@@ -131,10 +131,10 @@
 
     <!-- SPEED -->
     <section class="ctrl-section">
-      <div class="ctrl-label">VELOCIDADE — <span id="speedVal">10000ms</span></div>
+      <div class="ctrl-label">VELOCIDADE — <span id="speedVal">2500ms</span></div>
       <div class="speed-wrap">
         <span class="sp-fast">RÁPIDO</span>
-        <input type="range" id="speedSlider" min="80" max="10000" value="10000" step="40">
+        <input type="range" id="speedSlider" min="80" max="10000" value="2500" step="40">
         <span class="sp-slow">LENTO</span>
       </div>
     </section>
@@ -165,14 +165,11 @@
     <!-- CPU CONTROL -->
     <section class="ctrl-section ops-section">
       <div class="ctrl-label">CPU</div>
-      <div class="ops-grid ops-grid-3">
-        <button class="op-btn op-fetch" id="opFetch" onclick="App.doFetch()">
-          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M10 3v2m0 10v2M3 10h2m10 0h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          FETCH
-        </button>
-        <button class="op-btn op-execute" id="opStep" onclick="App.doStep()">
+      <div class="cpu-cycle-hint">STEP = FETCH -> DECODE -> EXECUTE</div>
+      <div class="ops-grid ops-grid-cpu">
+        <button class="op-btn op-execute op-step-main" id="opStep" onclick="App.doStep()">
           <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          STEP
+          <span>STEP</span>
         </button>
         <button class="op-btn op-run" id="opRun" onclick="App.doRun()">
           <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
@@ -199,13 +196,16 @@
     </div>
 
     <!-- REGISTERS ROW -->
-    <div id="regsRow">
-      <div class="section-badge" id="gpBadge">REGISTRADORES DE USO GERAL</div>
-      <div id="regCards"><!-- injected by JS --></div>
-      <div class="section-badge ext-badge" id="extBadge" style="display:none">R8 — R15  (x86-64)</div>
-      <div id="extCards" style="display:none"><!-- injected by JS --></div>
-      <div class="section-badge sp-badge">PONTEIROS DE PILHA</div>
-      <div id="spCards"><!-- injected by JS --></div>
+    <div id="regsRow" class="canvas-pane">
+      <div class="canvas-pane-body">
+        <div class="section-badge" id="gpBadge">REGISTRADORES DE USO GERAL</div>
+        <div id="regCards"><!-- injected by JS --></div>
+        <div class="section-badge ext-badge" id="extBadge" style="display:none">R8 — R15  (x86-64)</div>
+        <div id="extCards" style="display:none"><!-- injected by JS --></div>
+        <div class="section-badge sp-badge">PONTEIROS DE PILHA</div>
+        <div id="spCards"><!-- injected by JS --></div>
+      </div>
+      <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
     </div>
 
     <!-- SVG ANIMATION STAGE -->
@@ -230,39 +230,48 @@
       </svg>
     </div>
 
-    <div id="asmTraceSection">
-      <div class="section-badge">
-        LISTAGENS DE CODIGO
+    <div id="asmTraceSection" class="canvas-pane">
+      <div class="canvas-pane-body">
+        <div class="section-badge">
+          LISTAGENS DE CODIGO
+        </div>
+        <div class="trace-heads">
+          <div class="trace-head">LISTAGEM ASM</div>
+          <div class="trace-head">PSEUDO-CÓDIGO</div>
+        </div>
+        <div id="asmTrace"></div>
       </div>
-      <div class="trace-heads">
-        <div class="trace-head">LISTAGEM ASM</div>
-        <div class="trace-head">PSEUDO-CÓDIGO</div>
-      </div>
-      <div id="asmTrace"></div>
+      <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
     </div>
 
     <!-- MEMORY GRID -->
-    <div id="memSection">
-      <div class="section-badge">
-        MAPA DE MEMÓRIA
-        <span class="addr-dir-tag" id="addrDirTag">0x0000 no topo · endereços crescem ↓ · convenção Intel</span>
-      </div>
-      <div id="memWrapper">
-        <div id="memAddrBar"></div>
-        <div id="memGrid"></div>
-        <div id="memLegend">
-          <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
-          <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
-          <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
-          <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
+    <div id="memSection" class="canvas-pane">
+      <div class="canvas-pane-body">
+        <div class="section-badge">
+          MAPA DE MEMÓRIA
+          <span class="addr-dir-tag" id="addrDirTag">0x0000 no topo · endereços crescem ↓ · convenção Intel</span>
+        </div>
+        <div id="memWrapper">
+          <div id="memAddrBar"></div>
+          <div id="memGrid"></div>
+          <div id="memLegend">
+            <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
+            <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
+            <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
+            <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
+          </div>
         </div>
       </div>
+      <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
     </div>
 
     <!-- LOG -->
-    <div id="logSection">
-      <div class="section-badge">LOG DE OPERAÇÕES <button id="logClearBtn" onclick="App.clearLog()">limpar</button></div>
-      <div id="logOutput"></div>
+    <div id="logSection" class="canvas-pane">
+      <div class="canvas-pane-body">
+        <div class="section-badge">LOG DE OPERAÇÕES <button id="logClearBtn" onclick="App.clearLog()">limpar</button></div>
+        <div id="logOutput"></div>
+      </div>
+      <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
     </div>
 
   </main>

@@ -41,7 +41,7 @@ python3 -m http.server 8080
 
 - **STORE** → Escreve o registrador na memória, byte a byte com animação
 - **LOAD** → Lê da memória para o registrador, construindo o valor em tempo real
-- **FETCH** → Simula busca de instrução, avança o PC
+- **STEP** → Executa o ciclo completo FETCH → DECODE → EXECUTE
 - **CLEAR** → Reinicia tudo
 
 ### Dicas

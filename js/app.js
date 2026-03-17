@@ -13,8 +13,11 @@ const S = {
   stackMode: 'full',
   sidebarPanelWidth: 240,
   stackPanelWidth: 280,
-  speed:  10000,
+  centerPaneHeights: {},
+  collapsedSections: {},
+  speed:  2500,
   busy:   false,
+  logIndent: 0,
   arch:   'ia32',   // 'ia32' | 'x64'
   regs: {
     // IA-32 / x64 general-purpose (low 32-bit names always present)
@@ -47,6 +50,13 @@ const S = {
   faulted: false,
   progRunning: false,
   callFrames: [],
+};
+
+const CENTER_PANE_CONFIG = {
+  regsRow: { initial: 332, min: 180, max: 520 },
+  asmTraceSection: { initial: 250, min: 160, max: 520 },
+  memSection: { initial: 278, min: 180, max: 520 },
+  logSection: { initial: 242, min: 170, max: 520 },
 };
 
 const DEMO_PROGRAMS = {
@@ -132,9 +142,11 @@ const is64   = () => S.arch==='x64';
 const demoProgramForArch = (arch=S.arch) => DEMO_PROGRAMS[arch==='x64' ? 'x64' : 'ia32'];
 let asmTraceClickTimer = 0;
 let lastStatusLog = '';
+const regPulseTimers = new Map();
+let centerPaneLayoutFrame = 0;
 
 // Current register name set based on arch
-function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX']; }
+function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX','ESI','EDI']; }
 function extRegs() { return is64() ? ['R8','R9','R10','R11','R12','R13','R14','R15'] : []; }
 function spRegs()  { return is64() ? ['RSP','RBP'] : ['ESP','EBP']; }
 function ptrSize() { return is64() ? 8 : 4; }
@@ -148,6 +160,18 @@ function stackRoleClass(name) {
 }
 function regWidthBytes(name) { return is64() && !isSpReg(name) ? 8 : 4; }
 function transferWidth(name=S.reg) { return Math.min(sizeN(), regWidthBytes(name)); }
+
+function scheduleCenterPaneLayout() {
+  if(typeof requestAnimationFrame !== 'function') {
+    applyCenterPaneHeights();
+    return;
+  }
+  if(centerPaneLayoutFrame) return;
+  centerPaneLayoutFrame = requestAnimationFrame(() => {
+    centerPaneLayoutFrame = 0;
+    applyCenterPaneHeights();
+  });
+}
 
 function regParts(name) {
   if(is64()) {
@@ -289,7 +313,7 @@ function clamp(n, min, max) {
 }
 
 function normalizeSpeed(speed) {
-  const raw = Number.isFinite(speed) ? speed : 10000;
+  const raw = Number.isFinite(speed) ? speed : 2500;
   return clamp(Math.round(raw), 80, 10000);
 }
 
@@ -363,14 +387,17 @@ function syncSpeedUI() {
 function init() {
   loadSidebarPanelWidth();
   loadStackPanelWidth();
+  initCollapsibleSections();
   applySidebarPanelWidth();
   applyStackPanelWidth();
+  applyCenterPaneHeights();
   buildRegCards();
   buildRegPicker();
   buildMemGrid();
   buildStackView();
   initSidebarResize();
   initStackResize();
+  initCenterPaneResize();
   syncPicker();
   refreshPreview();
   refreshBreakdown();
@@ -469,6 +496,9 @@ function init() {
   setStatus('Programa demo carregado — main em 0x0000','lbl-done');
   lg('sys',`Simulador iniciado com programa demo ${is64() ? 'x86-64' : 'IA-32'}: main + 2 funcoes que usam a stack.`);
   lg('sys', demoProgramForArch().listing.join(' | '));
+  applyCollapsedSections();
+  applyCenterPaneHeights();
+  if(typeof window !== 'undefined') window.addEventListener('resize', applyCenterPaneHeights);
 }
 
 function loadStackPanelWidth() {
@@ -482,6 +512,28 @@ function loadSidebarPanelWidth() {
   try {
     const saved = parseInt(localStorage.getItem('memsim.sidebarPanelWidth') || '', 10);
     if(Number.isFinite(saved)) S.sidebarPanelWidth = clamp(saved, 220, 420);
+  } catch(_) {}
+}
+
+function loadCenterPaneHeights() {
+  try {
+    const raw = localStorage.getItem('memsim.centerPaneHeights');
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(!saved || typeof saved !== 'object') return;
+    Object.keys(CENTER_PANE_CONFIG).forEach(key => {
+      const height = parseInt(saved[key], 10);
+      if(Number.isFinite(height)) S.centerPaneHeights[key] = height;
+    });
+  } catch(_) {}
+}
+
+function loadCollapsedSections() {
+  try {
+    const raw = localStorage.getItem('memsim.collapsedSections');
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(saved && typeof saved === 'object') S.collapsedSections = { ...saved };
   } catch(_) {}
 }
 
@@ -507,6 +559,144 @@ function persistStackPanelWidth() {
   try {
     localStorage.setItem('memsim.stackPanelWidth', String(clamp(S.stackPanelWidth, 220, 520)));
   } catch(_) {}
+}
+
+function applyCenterPaneHeights() {
+  const canvas = $('canvas');
+  if(!canvas) return;
+  Object.entries(CENTER_PANE_CONFIG).forEach(([key, cfg]) => {
+    const pane = $(key);
+    if(!pane) return;
+    if(S.collapsedSections[key]) {
+      pane.style.flex = '0 0 auto';
+      pane.style.flexBasis = 'auto';
+      pane.style.height = 'auto';
+      return;
+    }
+    const head = pane.querySelector(':scope > .section-badge');
+    const body = pane.querySelector(':scope > .canvas-pane-body');
+    const handle = pane.querySelector(':scope > .canvas-pane-handle');
+    const naturalHeight = Math.ceil(
+      (head?.offsetHeight || 0) +
+      (body?.scrollHeight || 0) +
+      ((handle && !handle.hidden) ? handle.offsetHeight : 0)
+    );
+    const autoHeight = Math.max(cfg.min, naturalHeight || cfg.initial);
+    const maxHeight = Math.max(cfg.max, autoHeight);
+    const stored = Number.isFinite(S.centerPaneHeights[key]) ? S.centerPaneHeights[key] : autoHeight;
+    const next = clamp(stored, cfg.min, maxHeight);
+    pane.style.flex = '1 1 auto';
+    pane.style.flexBasis = `${next}px`;
+    pane.style.height = `${next}px`;
+  });
+}
+
+function persistCenterPaneHeights() {
+  try {
+    localStorage.setItem('memsim.centerPaneHeights', JSON.stringify(S.centerPaneHeights || {}));
+  } catch(_) {}
+}
+
+function persistCollapsedSections() {
+  try {
+    localStorage.setItem('memsim.collapsedSections', JSON.stringify(S.collapsedSections || {}));
+  } catch(_) {}
+}
+
+function sectionStateId(el, fallbackPrefix='section') {
+  if(!el) return '';
+  if(el.id) return el.id;
+  if(el.dataset.sectionId) return el.dataset.sectionId;
+  const header = el.querySelector('.ctrl-label, .section-badge');
+  const label = (header?.textContent || `${fallbackPrefix}`).trim().replace(/\s+/g,'-').toLowerCase();
+  const id = `${fallbackPrefix}-${label}`;
+  el.dataset.sectionId = id;
+  return id;
+}
+
+function createCollapseButton(target, sectionId) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'section-collapse-btn';
+  btn.dataset.sectionToggle = sectionId;
+  btn.setAttribute('aria-expanded', 'true');
+  btn.title = 'Minimizar seção';
+  btn.textContent = '−';
+  btn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleSectionCollapsed(sectionId);
+  });
+  target.appendChild(btn);
+  return btn;
+}
+
+function setToggleVisual(btn, collapsed) {
+  if(!btn) return;
+  btn.textContent = collapsed ? '+' : '−';
+  btn.title = collapsed ? 'Expandir seção' : 'Minimizar seção';
+  btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function ensureCtrlSectionBodies() {
+  $$('#sidebar .ctrl-section, #rightPanel .ctrl-section').forEach((section, idx) => {
+    const label = section.querySelector(':scope > .ctrl-label');
+    if(!label) return;
+    if(!section.dataset.sectionId) {
+      section.dataset.sectionId = section.closest('#sidebar') ? `sidebar-${idx}` : `right-${idx}`;
+    }
+    const sectionId = sectionStateId(section, section.closest('#sidebar') ? 'sidebar' : 'right');
+    if(!label.querySelector('.section-collapse-btn')) createCollapseButton(label, sectionId);
+    let body = section.querySelector(':scope > .ctrl-section-body');
+    if(!body) {
+      body = document.createElement('div');
+      body.className = 'ctrl-section-body';
+      const nodes = [...section.children].filter(node => node !== label);
+      nodes.forEach(node => body.appendChild(node));
+      section.appendChild(body);
+    }
+  });
+}
+
+function ensureCanvasPaneHeads() {
+  $$('.canvas-pane').forEach((pane, idx) => {
+    const body = pane.querySelector(':scope > .canvas-pane-body');
+    if(!body) return;
+    const paneId = sectionStateId(pane, `canvas-${idx}`);
+    let head = pane.querySelector(':scope > .section-badge');
+    if(!head) {
+      head = body.querySelector(':scope > .section-badge');
+      if(head) pane.insertBefore(head, body);
+    }
+    if(!head) return;
+    if(!head.querySelector('.section-collapse-btn')) createCollapseButton(head, paneId);
+  });
+}
+
+function applyCollapsedSections() {
+  $$('.ctrl-section, .canvas-pane').forEach(section => {
+    const sectionId = sectionStateId(section);
+    const collapsed = !!S.collapsedSections[sectionId];
+    section.classList.toggle('is-collapsed', collapsed);
+    const body = section.querySelector(':scope > .ctrl-section-body, :scope > .canvas-pane-body');
+    const handle = section.querySelector(':scope > .canvas-pane-handle');
+    if(body) body.hidden = collapsed;
+    if(handle) handle.hidden = collapsed;
+    setToggleVisual(section.querySelector('[data-section-toggle]'), collapsed);
+  });
+  applyCenterPaneHeights();
+}
+
+function toggleSectionCollapsed(sectionId) {
+  S.collapsedSections[sectionId] = !S.collapsedSections[sectionId];
+  persistCollapsedSections();
+  applyCollapsedSections();
+}
+
+function initCollapsibleSections() {
+  ensureCtrlSectionBodies();
+  ensureCanvasPaneHeads();
+  applyCollapsedSections();
 }
 
 function resetCoreRegisters() {
@@ -631,17 +821,22 @@ function ensureCurrentTraceVisible() {
 
   const padTop = 10;
   const padBottom = 12;
-  const rootRect = root.getBoundingClientRect();
+  const rootStyle = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
+    ? window.getComputedStyle(root)
+    : { overflowY: '' };
+  const canScrollRoot = (rootStyle.overflowY === 'auto' || rootStyle.overflowY === 'scroll') && root.scrollHeight > (root.clientHeight + 2);
+  const container = canScrollRoot ? root : ($('canvas') || root);
+  const rootRect = container.getBoundingClientRect();
   const rowRect = currentRow.getBoundingClientRect();
   const overTop = rowRect.top - rootRect.top - padTop;
   const overBottom = rowRect.bottom - rootRect.bottom + padBottom;
 
   if(overTop < 0) {
-    root.scrollTop += overTop;
+    container.scrollTop += overTop;
     return;
   }
   if(overBottom > 0) {
-    root.scrollTop += overBottom;
+    container.scrollTop += overBottom;
   }
 }
 
@@ -767,6 +962,7 @@ function buildAsmTrace() {
     : '<div class="trace-separator">Nenhuma instrucao disponivel para listar.</div>';
 
   requestAnimationFrame(() => requestAnimationFrame(ensureCurrentTraceVisible));
+  scheduleCenterPaneLayout();
 }
 
 function initStackResize() {
@@ -827,6 +1023,37 @@ function initSidebarResize() {
   });
 }
 
+function initCenterPaneResize() {
+  $$('[data-pane-handle]').forEach(handle => {
+    handle.addEventListener('mousedown', e => {
+      const pane = e.currentTarget.closest('.canvas-pane');
+      if(!pane) return;
+      e.preventDefault();
+      const paneKey = pane.id;
+      const startHeight = Math.round(pane.getBoundingClientRect().height);
+      const startY = e.clientY;
+      const paneCfg = CENTER_PANE_CONFIG[paneKey] || { min: 160, max: 520 };
+      document.body.classList.add('pane-resizing');
+
+      function onMove(ev) {
+        const next = clamp(Math.round(startHeight + (ev.clientY - startY)), paneCfg.min, paneCfg.max);
+        S.centerPaneHeights[paneKey] = next;
+        pane.style.height = `${next}px`;
+      }
+
+      function onUp() {
+        document.body.classList.remove('pane-resizing');
+        persistCenterPaneHeights();
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
 // ─────────────────────────────────────────────────────────
 // REGISTER CARDS
 // ─────────────────────────────────────────────────────────
@@ -857,6 +1084,7 @@ function commitRegisterValue(name, raw) {
     refreshBreakdown();
   }
   buildStackView();
+  pulseRegister(name);
   lg('sys', `${name} ← 0x${isSpReg(name) ? fmtA(getReg(name)) : regHex(name)}`);
 }
 
@@ -904,7 +1132,7 @@ function buildRegCards() {
 
   // Main GP reg cards
   const g=$('regCards'); g.innerHTML='';
-  g.style.gridTemplateColumns = `repeat(${gp.length}, 1fr)`;
+  g.style.gridTemplateColumns = gp.length > 1 ? 'repeat(2, minmax(0, 1fr))' : `repeat(${gp.length}, 1fr)`;
   for(const name of gp) {
     const d=document.createElement('div');
     const sel = name===S.reg;
@@ -915,10 +1143,12 @@ function buildRegCards() {
     if(is64()) {
       d.innerHTML=`<div class="rc-name">${name}</div>
         <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span>${valueHex.slice(8)}</div>
+        <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     } else {
       d.innerHTML=`<div class="rc-name">${name}</div>
         <div class="rc-value rc-value-editable" id="rcv-${name}" title="Clique para editar">${valueHex}</div>
+        <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     }
     d.querySelector('.rc-value').addEventListener('click', e => {
@@ -931,6 +1161,7 @@ function buildRegCards() {
   // R8-R15 extension cards (x64 only)
   const eg=$('extCards'); if(eg) {
     eg.innerHTML='';
+    eg.style.gridTemplateColumns = ext.length ? 'repeat(4, minmax(0, 1fr))' : '';
     for(const name of ext) {
       const d=document.createElement('div');
       d.className='reg-card rc-ext'+(name===S.reg?' rc-selected':'');
@@ -963,13 +1194,103 @@ function buildRegCards() {
         <div class="rc-name">${name}</div>
         <div class="rc-sp-role">${roleLabel}</div>
       </div>
-      <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="Clique para editar">0x${fmtA(getReg(name))}</div>`;
+      <div class="rc-sp-body">
+        <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="Clique para editar">0x${fmtA(getReg(name))}</div>
+        <div class="rc-subregs rc-subregs-sp" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
+      </div>`;
     d.querySelector('.rc-value').addEventListener('click', e => {
       e.stopPropagation();
       makeRegisterEditable(d.querySelector('.rc-value'), name);
     });
     sg.appendChild(d);
   }
+  scheduleCenterPaneLayout();
+}
+
+function registerMapWidthBytes(name) {
+  return is64() && (name==='RSP' || name==='RBP') ? 8 : regWidthBytes(name);
+}
+
+function registerEncapsulationRows(name) {
+  const classic = {
+    EAX:{word:'AX', high:'AH', low:'AL', size:4},
+    EBX:{word:'BX', high:'BH', low:'BL', size:4},
+    ECX:{word:'CX', high:'CH', low:'CL', size:4},
+    EDX:{word:'DX', high:'DH', low:'DL', size:4},
+    ESI:{word:'SI', size:4},
+    EDI:{word:'DI', size:4},
+    ESP:{word:'SP', size:4},
+    EBP:{word:'BP', size:4},
+    RAX:{dword:'EAX', word:'AX', high:'AH', low:'AL', size:8},
+    RBX:{dword:'EBX', word:'BX', high:'BH', low:'BL', size:8},
+    RCX:{dword:'ECX', word:'CX', high:'CH', low:'CL', size:8},
+    RDX:{dword:'EDX', word:'DX', high:'DH', low:'DL', size:8},
+  };
+  const lowOnly = {
+    RSI:{dword:'ESI', word:'SI', low:'SIL', size:8},
+    RDI:{dword:'EDI', word:'DI', low:'DIL', size:8},
+    RSP:{dword:'ESP', word:'SP', low:'SPL', size:8},
+    RBP:{dword:'EBP', word:'BP', low:'BPL', size:8},
+    R8: {dword:'R8D',  word:'R8W',  low:'R8B', size:8},
+    R9: {dword:'R9D',  word:'R9W',  low:'R9B', size:8},
+    R10:{dword:'R10D', word:'R10W', low:'R10B', size:8},
+    R11:{dword:'R11D', word:'R11W', low:'R11B', size:8},
+    R12:{dword:'R12D', word:'R12W', low:'R12B', size:8},
+    R13:{dword:'R13D', word:'R13W', low:'R13B', size:8},
+    R14:{dword:'R14D', word:'R14W', low:'R14B', size:8},
+    R15:{dword:'R15D', word:'R15W', low:'R15B', size:8},
+  };
+
+  if(classic[name]) {
+    const rows = [];
+    if(classic[name].dword) rows.push({ label:classic[name].dword, bits:32, start:0, count:4, tone:'dword' });
+    rows.push({ label:classic[name].word, bits:16, start:0, count:2, tone:'word' });
+    if(classic[name].high && classic[name].low) {
+      rows.push({ label:classic[name].high, bits:8, start:1, count:1, tone:'high' });
+      rows.push({ label:classic[name].low, bits:8, start:0, count:1, tone:'low' });
+    } else if(classic[name].low) {
+      rows.push({ label:classic[name].low, bits:8, start:0, count:1, tone:'low' });
+    }
+    return rows;
+  }
+
+  if(lowOnly[name]) {
+    return [
+      { label:lowOnly[name].dword, bits:32, start:0, count:4, tone:'dword' },
+      { label:lowOnly[name].word, bits:16, start:0, count:2, tone:'word' },
+      { label:lowOnly[name].low, bits:8, start:0, count:1, tone:'low' },
+    ];
+  }
+
+  return [];
+}
+
+function renderRegisterEncapsulation(name) {
+  const rows = registerEncapsulationRows(name);
+  if(!rows.length) return '';
+  const totalBytes = registerMapWidthBytes(name);
+  const displayBytes = regBytes(name, totalBytes).slice().reverse().map(hex8);
+  return rows.map(row => {
+    const rowValue = displayBytes
+      .filter((_, idx) => {
+        const littleIdx = totalBytes - 1 - idx;
+        return littleIdx >= row.start && littleIdx < (row.start + row.count);
+      })
+      .join('');
+    const cells = displayBytes.map((byte, idx) => {
+      const littleIdx = totalBytes - 1 - idx;
+      const active = littleIdx >= row.start && littleIdx < (row.start + row.count);
+      return `<span class="rc-subcell${active ? ' rc-subcell-active' : ''}">${active ? byte : '··'}</span>`;
+    }).join('');
+    return `<div class="rc-subrow rc-subrow-${row.tone||'neutral'}" title="${row.label} = 0x${rowValue || '00'}">
+      <div class="rc-submeta">
+        <span class="rc-subname">${row.label}</span>
+      </div>
+      <div class="rc-subgrid rc-subgrid-${totalBytes}">
+        ${cells}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderByteStrip(name, opts={}) {
@@ -1013,9 +1334,14 @@ function renderByteStrip(name, opts={}) {
 }
 
 function updateRegCard(name) {
-  const v=$('rcv-'+name), b=$('rcb-'+name);
+  const v=$('rcv-'+name), b=$('rcb-'+name), s=$('rcs-'+name);
   if(!v) return;
-  if(isSpReg(name)) { v.textContent='0x'+fmtA(getReg(name)); return; }
+  if(isSpReg(name)) {
+    v.textContent='0x'+fmtA(getReg(name));
+    if(s) s.innerHTML=renderRegisterEncapsulation(name);
+    pulseRegister(name);
+    return;
+  }
   const valueHex = regHex(name);
   if(is64()) {
     const hiSpan = v.querySelector('.rc-hi');
@@ -1028,12 +1354,31 @@ function updateRegCard(name) {
   } else {
     v.textContent=valueHex;
   }
+  if(s) s.innerHTML=renderRegisterEncapsulation(name);
   if(b) b.innerHTML=renderByteStrip(name);
+  pulseRegister(name);
+}
+
+function pulseRegister(name) {
+  ['rc-'+name, 'r'+name].forEach(id => {
+    const el = $(id);
+    if(!el) return;
+    el.classList.remove('reg-animating');
+    void el.offsetWidth;
+    el.classList.add('reg-animating');
+    const prevTimer = regPulseTimers.get(id);
+    if(prevTimer) clearTimeout(prevTimer);
+    const timer = setTimeout(() => {
+      el.classList.remove('reg-animating');
+      regPulseTimers.delete(id);
+    }, 520);
+    regPulseTimers.set(id, timer);
+  });
 }
 
 // Live update during LOAD
 function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
-  const v=$('rcv-'+name);
+  const v=$('rcv-'+name), s=$('rcs-'+name);
   const valueHex = regHex(name);
   if(v) {
     if(is64()) {
@@ -1047,6 +1392,7 @@ function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
       } else v.textContent=valueHex;
     } else v.textContent=valueHex;
   }
+  if(s) s.innerHTML=renderRegisterEncapsulation(name);
 
   const hexPos = displayPosForTransferByte(name, byteIdx, transferCount);
   const done=new Set();
@@ -1054,11 +1400,7 @@ function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
 
   const b=$('rcb-'+name);
   if(b) b.innerHTML=renderByteStrip(name, {activePos:hexPos, doneSet:done, transferCount});
-
-  const card=$('rc-'+name);
-  if(card){ card.classList.add('reg-animating'); setTimeout(()=>card?.classList.remove('reg-animating'),420); }
-  $('r'+name)?.classList.add('reg-animating');
-  setTimeout(()=>$('r'+name)?.classList.remove('reg-animating'),420);
+  pulseRegister(name);
 }
 
 // Highlight byte being SENT during STORE
@@ -1066,10 +1408,7 @@ function storeHighlight(name, hexPos, transferCount=transferWidth(name)) {
   const b=$('rcb-'+name);
   if(!b) return;
   b.innerHTML=renderByteStrip(name, {activePos:hexPos, transferCount});
-  const card=$('rc-'+name);
-  if(card){ card.classList.add('reg-animating'); setTimeout(()=>card?.classList.remove('reg-animating'),420); }
-  $('r'+name)?.classList.add('reg-animating');
-  setTimeout(()=>$('r'+name)?.classList.remove('reg-animating'),420);
+  pulseRegister(name);
 }
 
 function setLoading(name, on) {
@@ -1166,6 +1505,7 @@ function buildMemGrid() {
     }
   }
   a.innerHTML+='<span class="mem-dir-bottom"><span class="mem-dir-chip">0x003F</span> endereços maiores</span>';
+  scheduleCenterPaneLayout();
 }
 
 const memEl = idx => $('memGrid').querySelector(`.mem-cell[data-idx="${idx}"]`);
@@ -1907,41 +2247,72 @@ async function doFetch() {
 // ─────────────────────────────────────────────────────────
 // EXECUTE — núcleo interno (sem setBusy, para uso por doRun)
 // ─────────────────────────────────────────────────────────
-async function _executeOne() {
+async function _executeOne(opts={}) {
+  const traceMode = opts.traceMode || 'run';
+  const isStepTrace = traceMode==='step';
   if(S.halt) return;
   const addr=S.pc;
   const instr=decodeAt(addr);
+  if(isStepTrace) {
+    lg('step', `STEP em 0x${fmtA(addr)} — ciclo completo da instrução atual.`);
+  }
 
   // ── FASE 1: FETCH ──────────────────────────────────────
   // Lê bytes da memória → IR; IP incrementa imediatamente (Intel SDM §6.3)
   const np_seq = (addr+instr.size)&0x3F;   // PC sequencial (pode ser sobrescrito por JMP)
-  setStatus(`FETCH  IP=0x${fmtA(addr)} | ${instr.size}B → IR`,'lbl-fetch');
+  setStatus(`FETCH  IP=0x${fmtA(addr)} | ${instr.size}B → IR`,'lbl-fetch',{log:false});
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,'mc-pc');}
-  lg('info',`FETCH  IP=0x${fmtA(addr)} opcode=0x${hex8(instr.op)}`);
+  if(isStepTrace) {
+    lg('info', `Busca ${instr.size} byte(s) em 0x${fmtA(addr)} e carrega a instrução no registrador de instrução.`, asmForOp('fetch', { addr, newPC: np_seq }), { indent:1, kindLabel:'FETCH' });
+  } else {
+    lg('info',`FETCH  IP=0x${fmtA(addr)} opcode=0x${hex8(instr.op)}`);
+  }
   await sleep(S.speed * 0.25);
 
   // IP avança durante o fetch
   setPC(np_seq);
+  if(isStepTrace) {
+    lg('info', `${ipReg()} avança para 0x${fmtA(np_seq)} após o FETCH, antes do efeito da instrução.`, null, { indent:1, kindLabel:'FETCH' });
+  }
   await sleep(S.speed * 0.1);
 
   // ── FASE 2: DECODE ─────────────────────────────────────
-  setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch');
-  lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+  setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch',{log:false});
+  if(isStepTrace) {
+    lg('info', `Os bytes buscados são decodificados como ${instr.mnem}.`, instr.asm, { indent:1, kindLabel:'DECODE' });
+  } else {
+    lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+  }
   if(isInstructionFault(instr)) {
-    reportMemoryError(
-      instr.errorAddrs || [addr],
-      instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
-      instr.asm,
-      { halt:true, pc: addr }
-    );
+    const prevIndent = S.logIndent;
+    if(isStepTrace) S.logIndent = 2;
+    try {
+      reportMemoryError(
+        instr.errorAddrs || [addr],
+        instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
+        instr.asm,
+        { halt:true, pc: addr }
+      );
+    } finally {
+      S.logIndent = prevIndent;
+    }
     syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
     return;
   }
   await sleep(S.speed * 0.2);
 
   // ── FASE 3: EXECUTE ────────────────────────────────────
-  setStatus(`EXECUTE: ${instr.mnem}`,'lbl-load');
-  instr.exec();
+  setStatus(`EXECUTE: ${instr.mnem}`,'lbl-load',{log:false});
+  if(isStepTrace) {
+    lg('info', `Aplica os efeitos arquiteturais da instrução decodificada sobre PC, registradores, memória e stack quando necessário.`, instr.asm, { indent:1, kindLabel:'EXECUTE' });
+  }
+  const prevIndent = S.logIndent;
+  if(isStepTrace) S.logIndent = 2;
+  try {
+    instr.exec();
+  } finally {
+    S.logIndent = prevIndent;
+  }
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
   if(S.faulted) {
     syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
@@ -1953,28 +2324,37 @@ async function _executeOne() {
 
   await sleep(S.speed * 0.2);
 
-  lg('store',`EXEC OK: ${instr.mnem}`, instr.asm);
+  if(isStepTrace) {
+    lg('sys', `STEP concluído — ${ipReg()} agora aponta para 0x${fmtA(S.pc)}.`, null, { indent:1, kindLabel:'RESULTADO' });
+  } else {
+    lg('store',`EXEC OK: ${instr.mnem}`, instr.asm);
+  }
 
-  if(S.halt) { setStatus('HLT — CPU parada','lbl-error'); lg('error','HLT executado. CPU parada.'); }
-  else setStatus(`EXECUTE concluído — IP = 0x${fmtA(S.pc)}`,'lbl-done');
+  if(S.halt) {
+    setStatus('HLT — CPU parada','lbl-error',{log:false});
+    if(isStepTrace) lg('error','HLT executado. CPU parada.', null, { indent:1, kindLabel:'HALT' });
+    else lg('error','HLT executado. CPU parada.');
+  } else {
+    setStatus(`EXECUTE concluído — IP = 0x${fmtA(S.pc)}`,'lbl-done',{log:false});
+  }
 
   buildStackView();
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
 }
 
-async function doExecute() {
+async function doExecute(opts={}) {
   if(S.busy) return;
   clearFaultLatch();
   if(S.halt){ lg('error','CPU halted. CLEAR para reiniciar.'); return; }
   S.busy=true; setBusy(true);
-  await _executeOne();
+  await _executeOne(opts);
   S.busy=false; setBusy(false);
 }
 
 // ─────────────────────────────────────────────────────────
 // PROGRAMA — RUN / STEP
 // ─────────────────────────────────────────────────────────
-async function doStep() { await doExecute(); }
+async function doStep() { await doExecute({ traceMode:'step' }); }
 
 async function doRun() {
   if(S.busy||S.progRunning) return;
@@ -1982,14 +2362,14 @@ async function doRun() {
   S.halt=false; S.progRunning=true;
   S.busy=true;
   // Desabilita tudo EXCETO o botão STOP (opRun)
-  ['opStore','opLoad','opFetch','opClear','opExecute','opStep','opPush','opPop'].forEach(id=>{
+  ['opStore','opLoad','opClear','opStep','opPush','opPop'].forEach(id=>{
     const b=$(id); if(b) b.disabled=true;
   });
   const runBtn=$('opRun');
   if(runBtn){ runBtn.textContent='STOP'; runBtn.disabled=false; runBtn.onclick=()=>{ S.halt=true; }; }
 
   while(!S.halt) {
-    await _executeOne();
+    await _executeOne({ traceMode:'run' });
     if(S.halt) break;
     await sleep(S.speed * 0.1);
   }
@@ -2664,6 +3044,7 @@ function buildStackView() {
   if(stackLbl) stackLbl.textContent = `STACK  ${spName}/${bpName}`;
   const toggle = $('stackToggleBtn');
   if(toggle) toggle.textContent = S.stackMode === 'frame' ? 'FULL' : 'FRAME';
+  scheduleCenterPaneLayout();
 }
 
 function toggleStackMode() {
@@ -2776,7 +3157,9 @@ function asmForOp(type, ctx) {
   }
 }
 
-function logKindLabel(type) {
+function logKindLabel(type, overrideLabel='') {
+  if(overrideLabel) return overrideLabel;
+  if(type==='step') return 'STEP';
   if(type==='store') return 'STORE';
   if(type==='load') return 'LOAD';
   if(type==='info') return 'CPU';
@@ -2784,11 +3167,17 @@ function logKindLabel(type) {
   return 'SISTEMA';
 }
 
-function lg(type, msg, asm) {
+function lg(type, msg, asm, opts={}) {
   const out=$('logOutput'); if(!out) return;
   const d=document.createElement('div');
-  d.className='le le-'+type;
+  const indent = Math.max(0, Number.isFinite(opts.indent) ? opts.indent : (S.logIndent || 0));
+  d.className='le le-'+type+(indent ? ` le-indent-${Math.min(indent,3)}` : '');
   d.dataset.type = type;
+  if(indent > 0) {
+    const offset = indent * 20;
+    d.style.marginLeft = `${offset}px`;
+    d.style.maxWidth = `calc(100% - ${offset}px)`;
+  }
   const ts=new Date().toTimeString().slice(0,8);
   const tsEl=document.createElement('span');
   tsEl.className='le-ts';
@@ -2796,7 +3185,7 @@ function lg(type, msg, asm) {
 
   const kindEl=document.createElement('span');
   kindEl.className='le-kind';
-  kindEl.textContent=logKindLabel(type);
+  kindEl.textContent=logKindLabel(type, opts.kindLabel || '');
 
   const msgEl=document.createElement('span');
   msgEl.className='le-msg';
@@ -2821,6 +3210,7 @@ function doClearLog(){
   const o=$('logOutput');
   if(o) o.innerHTML='';
   lastStatusLog = '';
+  scheduleCenterPaneLayout();
 }
 
 function recOp(type,ms){
@@ -2848,15 +3238,15 @@ function refreshStats(){
   $('pc-l').textContent=st.littleOps; $('pc-b').textContent=st.bigOps;
 }
 
-function setBusy(on){['opStore','opLoad','opFetch','opClear','opExecute','opStep','opRun','opPush','opPop'].forEach(id=>{const b=$(id);if(b)b.disabled=on;});}
+function setBusy(on){['opStore','opLoad','opClear','opStep','opRun','opPush','opPop'].forEach(id=>{const b=$(id);if(b)b.disabled=on;});}
 function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 
 // ─────────────────────────────────────────────────────────
 // SAVE / LOAD
 // ─────────────────────────────────────────────────────────
 function saveSim(){
-  const data={version:4,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,stackPanelWidth:S.stackPanelWidth,speed:S.speed,
+  const data={version:7,state:{
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,stackPanelWidth:S.stackPanelWidth,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
     regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
   }};
@@ -2876,6 +3266,15 @@ function loadSim(e){
       if(d.stackMode) S.stackMode=d.stackMode;
       if(Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
       if(Number.isFinite(d.stackPanelWidth)) S.stackPanelWidth = clamp(d.stackPanelWidth, 220, 520);
+      if(d.centerPaneHeights && typeof d.centerPaneHeights==='object') {
+        Object.keys(CENTER_PANE_CONFIG).forEach(key => {
+          const height = parseInt(d.centerPaneHeights[key], 10);
+          if(Number.isFinite(height)) S.centerPaneHeights[key] = height;
+        });
+      }
+      if(d.collapsedSections && typeof d.collapsedSections==='object') {
+        S.collapsedSections = { ...d.collapsedSections };
+      }
       if(Number.isFinite(d.speed)) S.speed = normalizeSpeed(d.speed);
       if(d.arch) S.arch=d.arch;
       Object.assign(S.regs,d.regs);
@@ -2885,6 +3284,10 @@ function loadSim(e){
       persistSidebarPanelWidth();
       applyStackPanelWidth();
       persistStackPanelWidth();
+      applyCenterPaneHeights();
+      persistCenterPaneHeights();
+      applyCollapsedSections();
+      persistCollapsedSections();
       doSetEndian(S.endian); doSetArch(S.arch); doSetSize(S.size); doSelectReg(S.reg);
       buildRegCards(); buildRegPicker(); buildMemGrid(); setPC(S.pc);
       buildStackView();
@@ -2941,7 +3344,7 @@ const HELP={
   ops:`<h3>OPERAÇÕES</h3>
 <p><span class="hl">STORE</span> — Grava o valor do registrador na memória, byte a byte. O nibble sendo enviado fica destacado e um pacote animado voa até a célula de memória.</p>
 <p><span class="hl-b">LOAD</span> — Lê bytes da memória para o registrador. O registrador começa em zero e é preenchido byte a byte em tempo real — você vê o valor se construindo!</p>
-<p><span style="color:var(--amb)">FETCH</span> — Simula busca de instrução. O PC avança automaticamente.</p>
+<p><span style="color:var(--amb)">STEP</span> — Executa o ciclo completo <strong>FETCH → DECODE → EXECUTE</strong>, atualizando PC, registradores, memória e stack conforme a instrução.</p>
 <p><span style="color:var(--red)">CLEAR</span> — Reinicia memória e registradores.</p>
 <div class="info-box">💡 Clique em qualquer célula de memória para selecionar aquele endereço.<br>
 💡 Use DWORD para ver o efeito completo Little vs Big Endian.<br>
@@ -2966,7 +3369,6 @@ const App = {
   selectReg:  doSelectReg,
   doStore,
   doLoad,
-  doFetch,
   doClear,
   doExecute,
   doStep,

@@ -1193,7 +1193,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   overflow: hidden;
 }
 #asmTraceSection .split-pane-body {
-  overflow: visible;
+  overflow: hidden;
 }
 .trace-heads {
   display: grid;
@@ -1218,19 +1218,15 @@ body.code-mem-resizing #codeMemSplitHandle {
 #asmTrace {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 4px;
   max-height: none;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 6px 14px 10px;
   scroll-padding-top: 6px;
   scroll-padding-bottom: 10px;
-}
-#codeMemRow.pane-manual #asmTrace {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
 }
 .trace-row {
   display: grid;

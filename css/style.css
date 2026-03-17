@@ -239,6 +239,7 @@ body.pane-resizing {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   font-size: 10px; letter-spacing: 1.8px; color: #f8fbff;
   margin-bottom: 8px; font-weight: 800;
   padding: 6px 9px;
@@ -786,6 +787,7 @@ body.pane-resizing .canvas-pane-handle {
 .section-badge {
   font-size: 10px; letter-spacing: 1.8px; color: #f8fbff; font-weight: 800;
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  flex: 0 0 auto;
   min-height: 0;
   line-height: 1.35;
   margin: 8px 14px 6px;

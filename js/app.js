@@ -3058,7 +3058,7 @@ async function doPush() {
   const spName = is64() ? 'RSP' : 'ESP';
   const nextSp = S.regs.ESP - width;
   if(!stackAccessFits(nextSp, width)) {
-    reportStackBoundsError(`PUSH ${reg}`, nextSp, width, `PUSH ${reg}`);
+    reportStackBoundsError(`PUSH ${reg}`, nextSp, width, `PUSH ${reg}`, { halt: true });
     S.busy=false; setBusy(false);
     return;
   }
@@ -3094,7 +3094,7 @@ async function doPop() {
   S.busy=true; setBusy(true);
   const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP >>> 0, width=ptrSize();
   if(!stackAccessFits(sp, width)) {
-    reportStackBoundsError(`POP ${reg}`, sp, width, `POP ${reg}`);
+    reportStackBoundsError(`POP ${reg}`, sp, width, `POP ${reg}`, { halt: true });
     S.busy=false; setBusy(false);
     return;
   }
@@ -3527,7 +3527,7 @@ function assemble(src, baseAddr=S.pc) {
   if(mnem==='JMP' && ops.length===1) {
     const lbl=ops[0].replace('SHORT','').trim();
     const target = lbl.startsWith('0X') ? parseInt(lbl,16) : parseInt(lbl,10);
-    const rel = ((target - (baseAddr+2))+128)&0xFF;
+    const rel = (target - (baseAddr+2))&0xFF;
     return [0xEB, rel&0xFF];
   }
   if(mnem==='CALL' && ops.length===1) {

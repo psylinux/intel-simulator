@@ -217,8 +217,17 @@ globalThis.__memsim = {
 // ─────────────────────────────────────────────────────────────────────────
 // Test helpers
 // ─────────────────────────────────────────────────────────────────────────
+
+// Arrays produced inside the vm context have a different Array.prototype
+// than the host context. assert.deepEqual (strict mode) checks prototypes,
+// so comparisons always fail unless we convert to a plain native Array first.
+function toArr(v) {
+  return Array.from(v ?? []);
+}
+
 function hexBytes(bytes) {
-  return bytes.map(v => v.toString(16).padStart(2, '0').toUpperCase());
+  // Use Array.from so the result is a plain host-context Array, not a vm Array
+  return Array.from(bytes, v => v.toString(16).padStart(2, '0').toUpperCase());
 }
 function setAddr(doc, addr) {
   doc.getElementById('addrInput').value = addr.toString(16).padStart(4, '0').toUpperCase();
@@ -304,20 +313,20 @@ test('clamp: boundaries and middle', () => {
 
 test('getBytes: LSB first, correct count', () => {
   const { api } = loadSimulator();
-  assert.deepEqual(api.getBytes(0x12345678, 4), [0x78, 0x56, 0x34, 0x12]);
-  assert.deepEqual(api.getBytes(0x12345678, 2), [0x78, 0x56]);
-  assert.deepEqual(api.getBytes(0x12345678, 1), [0x78]);
-  assert.deepEqual(api.getBytes(0x00000000, 4), [0, 0, 0, 0]);
-  assert.deepEqual(api.getBytes(0xFFFFFFFF, 4), [0xFF, 0xFF, 0xFF, 0xFF]);
+  assert.deepEqual(toArr(api.getBytes(0x12345678, 4)), [0x78, 0x56, 0x34, 0x12]);
+  assert.deepEqual(toArr(api.getBytes(0x12345678, 2)), [0x78, 0x56]);
+  assert.deepEqual(toArr(api.getBytes(0x12345678, 1)), [0x78]);
+  assert.deepEqual(toArr(api.getBytes(0x00000000, 4)), [0, 0, 0, 0]);
+  assert.deepEqual(toArr(api.getBytes(0xFFFFFFFF, 4)), [0xFF, 0xFF, 0xFF, 0xFF]);
 });
 
 test('ordered: little-endian = LSB first, big-endian = MSB first', () => {
   const { api } = loadSimulator();
   // Intel Vol.1 §1.3.2: little-endian stores LSB at lowest address
-  assert.deepEqual(api.ordered(0xDEADBEEF, 4, 'little'), [0xEF, 0xBE, 0xAD, 0xDE]);
-  assert.deepEqual(api.ordered(0xDEADBEEF, 4, 'big'),    [0xDE, 0xAD, 0xBE, 0xEF]);
-  assert.deepEqual(api.ordered(0x1234, 2, 'little'),     [0x34, 0x12]);
-  assert.deepEqual(api.ordered(0x1234, 2, 'big'),        [0x12, 0x34]);
+  assert.deepEqual(toArr(api.ordered(0xDEADBEEF, 4, 'little')), [0xEF, 0xBE, 0xAD, 0xDE]);
+  assert.deepEqual(toArr(api.ordered(0xDEADBEEF, 4, 'big')),    [0xDE, 0xAD, 0xBE, 0xEF]);
+  assert.deepEqual(toArr(api.ordered(0x1234, 2, 'little')),     [0x34, 0x12]);
+  assert.deepEqual(toArr(api.ordered(0x1234, 2, 'big')),        [0x12, 0x34]);
 });
 
 test('normalizeStackSizeBytes: clamps to [1, 1MB]', () => {
@@ -395,15 +404,15 @@ test('regBytes IA-32: EAX=0xDEADBEEF → [EF,BE,AD,DE]', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.setReg('EAX', 0xDEADBEEF);
-  assert.deepEqual(api.regBytes('EAX', 4), [0xEF, 0xBE, 0xAD, 0xDE]);
+  assert.deepEqual(toArr(api.regBytes('EAX', 4)), [0xEF, 0xBE, 0xAD, 0xDE]);
 });
 
 test('regBytes: partial width (2 bytes, 1 byte)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.setReg('EAX', 0xDEADBEEF);
-  assert.deepEqual(api.regBytes('EAX', 2), [0xEF, 0xBE]);
-  assert.deepEqual(api.regBytes('EAX', 1), [0xEF]);
+  assert.deepEqual(toArr(api.regBytes('EAX', 2)), [0xEF, 0xBE]);
+  assert.deepEqual(toArr(api.regBytes('EAX', 1)), [0xEF]);
 });
 
 test('regHex: 8 chars for 32-bit, correct value', () => {
@@ -464,13 +473,13 @@ test('isSpReg / isStackTopReg / isStackBaseReg helpers', () => {
 test('gpRegs/extRegs/spRegs return correct sets per arch', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  assert.deepEqual(api.gpRegs(),  ['EAX','EBX','ECX','EDX','ESI','EDI']);
-  assert.deepEqual(api.extRegs(), []);
-  assert.deepEqual(api.spRegs(),  ['ESP','EBP']);
+  assert.deepEqual(toArr(api.gpRegs()),  ['EAX','EBX','ECX','EDX','ESI','EDI']);
+  assert.deepEqual(toArr(api.extRegs()), []);
+  assert.deepEqual(toArr(api.spRegs()),  ['ESP','EBP']);
   api.S.arch = 'x64';
-  assert.deepEqual(api.gpRegs(),  ['RAX','RBX','RCX','RDX','RSI','RDI']);
-  assert.deepEqual(api.extRegs(), ['R8','R9','R10','R11','R12','R13','R14','R15']);
-  assert.deepEqual(api.spRegs(),  ['RSP','RBP']);
+  assert.deepEqual(toArr(api.gpRegs()),  ['RAX','RBX','RCX','RDX','RSI','RDI']);
+  assert.deepEqual(toArr(api.extRegs()), ['R8','R9','R10','R11','R12','R13','R14','R15']);
+  assert.deepEqual(toArr(api.spRegs()),  ['RSP','RBP']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -482,19 +491,19 @@ suite('encoding');
 test('NOP → 0x90 (SDM Vol.2 §NOP)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  assert.deepEqual(api.assemble('NOP', 0), [0x90]);
+  assert.deepEqual(toArr(api.assemble('NOP', 0)), [0x90]);
 });
 
 test('HLT → 0xF4 (SDM Vol.2 §HLT)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  assert.deepEqual(api.assemble('HLT', 0), [0xF4]);
+  assert.deepEqual(toArr(api.assemble('HLT', 0)), [0xF4]);
 });
 
 test('RET → 0xC3 (SDM Vol.2 §RET: near return)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  assert.deepEqual(api.assemble('RET', 0), [0xC3]);
+  assert.deepEqual(toArr(api.assemble('RET', 0)), [0xC3]);
 });
 
 test('MOV EAX, imm32: B8+rd with LE immediate (SDM Vol.2 §MOV B8+rd)', () => {
@@ -519,7 +528,7 @@ test('MOV EDX, imm32: opcode B8+2=BA', () => {
   // EDX index=2 → 0xBA
   const bytes = api.assemble('MOV EDX, 0xABCDEF00', 0);
   assert.equal(bytes[0], 0xBA);
-  assert.deepEqual(bytes.slice(1), [0x00, 0xEF, 0xCD, 0xAB]);
+  assert.deepEqual(toArr(bytes.slice(1)), [0x00, 0xEF, 0xCD, 0xAB]);
 });
 
 test('MOV EBX, imm32: opcode B8+3=BB', () => {
@@ -544,8 +553,8 @@ test('MOV r64, imm32 in x64: REX.W(0x48) + B8+rd + 4-byte imm', () => {
   const bytes = api.assemble('MOV RAX, 0x12345678', 0);
   assert.equal(bytes[0], 0x48);   // REX.W
   assert.equal(bytes[1], 0xB8);   // MOV r64 opcode for RAX
-  assert.deepEqual(bytes.slice(2, 6), [0x78, 0x56, 0x34, 0x12]);   // imm32 LE
-  assert.deepEqual(bytes.slice(6, 10), [0, 0, 0, 0]);              // hi32=0
+  assert.deepEqual(toArr(bytes.slice(2, 6)), [0x78, 0x56, 0x34, 0x12]);   // imm32 LE
+  assert.deepEqual(toArr(bytes.slice(6, 10)), [0, 0, 0, 0]);              // hi32=0
 });
 
 test('MOV RAX, imm64: REX.W + B8 + 8-byte immediate LE', () => {
@@ -555,7 +564,7 @@ test('MOV RAX, imm64: REX.W + B8 + 8-byte immediate LE', () => {
   const bytes = api.assemble('MOV RAX, 0x0102030405060708', 0);
   assert.equal(bytes[0], 0x48);
   assert.equal(bytes[1], 0xB8);
-  assert.deepEqual(bytes.slice(2, 10), [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01]);
+  assert.deepEqual(toArr(bytes.slice(2, 10)), [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01]);
 });
 
 test('MOV R8, imm: REX.B set (R8 extends opcode reg field)', () => {
@@ -639,7 +648,7 @@ test('JMP SHORT forward: 0xEB rel8 positive', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   // JMP to address 0x000A from base 0x0000: rel = 0x000A - (0x0000 + 2) = 0x08
-  const bytes = api.assemble('JMP 0x000A', 0x0000);
+  const bytes = toArr(api.assemble('JMP 0x000A', 0x0000));
   assert.equal(bytes[0], 0xEB);
   assert.equal(bytes[1], 0x08);
 });
@@ -648,7 +657,7 @@ test('JMP SHORT backward: 0xEB with negative rel8 (two-complement)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   // JMP to address 0x0000 from base 0x000A: rel = 0 - (0xA + 2) = -12 = 0xF4
-  const bytes = api.assemble('JMP 0x0000', 0x000A);
+  const bytes = toArr(api.assemble('JMP 0x0000', 0x000A));
   assert.equal(bytes[0], 0xEB);
   assert.equal(bytes[1], 0xF4);   // -12 as signed byte
 });
@@ -659,7 +668,7 @@ test('CALL rel32: 0xE8 + 4-byte signed offset LE', () => {
   // CALL to 0x000A from base 0x0000: rel = 0x000A - (0x0000 + 5) = 0x05
   const bytes = api.assemble('CALL 0x000A', 0x0000);
   assert.equal(bytes[0], 0xE8);
-  assert.deepEqual(bytes.slice(1, 5), [0x05, 0x00, 0x00, 0x00]);
+  assert.deepEqual(toArr(bytes.slice(1, 5)), [0x05, 0x00, 0x00, 0x00]);
 });
 
 test('assemble returns null for unrecognized mnemonic', () => {
@@ -1355,8 +1364,8 @@ test('S.endian=big does NOT change PUSH byte order', async () => {
 
 test('ordered() utility: little returns [LSB..MSB], big returns [MSB..LSB]', () => {
   const { api } = loadSimulator();
-  const le = api.ordered(0xAABBCCDD, 4, 'little');
-  const be = api.ordered(0xAABBCCDD, 4, 'big');
+  const le = toArr(api.ordered(0xAABBCCDD, 4, 'little'));
+  const be = toArr(api.ordered(0xAABBCCDD, 4, 'big'));
   assert.deepEqual(le, [0xDD, 0xCC, 0xBB, 0xAA]);
   assert.deepEqual(be, [0xAA, 0xBB, 0xCC, 0xDD]);
   // big-endian order is exactly the reverse of little-endian
@@ -1381,7 +1390,7 @@ test('validateAssembly: NOP → ok, [0x90]', () => {
   resetSim(api, document, 'ia32');
   const r = api.validateAssembly('NOP', 0);
   assert.equal(r.ok, true);
-  assert.deepEqual(r.bytes, [0x90]);
+  assert.deepEqual(toArr(r.bytes), [0x90]);
 });
 
 test('validateAssembly: empty input → ok=false', () => {
@@ -1488,7 +1497,7 @@ test('Invalid ModRM for PUSH (0xFF /1): decodeError, halt, faulted', async () =>
   await api._executeOne();
   assert.equal(api.S.halt,    true);
   assert.equal(api.S.faulted, true);
-  assert.deepEqual(api.S.memState.slice(0, 2), ['mc-error', 'mc-error']);
+  assert.deepEqual(toArr(api.S.memState.slice(0, 2)), ['mc-error', 'mc-error']);
 });
 
 test('MOV [mem] overflow: write past 64-byte boundary → fault', async () => {
@@ -1676,11 +1685,11 @@ test('Multiple CALL/RET pairs maintain correct callFrame nesting', async () => {
 
 test('getBytes produces correct LSB-first order for edge values', () => {
   const { api } = loadSimulator();
-  assert.deepEqual(api.getBytes(0x00000000, 4), [0,0,0,0]);
-  assert.deepEqual(api.getBytes(0xFFFFFFFF, 4), [0xFF,0xFF,0xFF,0xFF]);
-  assert.deepEqual(api.getBytes(0x00000001, 4), [0x01,0,0,0]);
-  assert.deepEqual(api.getBytes(0x80000000, 4), [0,0,0,0x80]);
-  assert.deepEqual(api.getBytes(0x000000FF, 1), [0xFF]);
+  assert.deepEqual(toArr(api.getBytes(0x00000000, 4)), [0,0,0,0]);
+  assert.deepEqual(toArr(api.getBytes(0xFFFFFFFF, 4)), [0xFF,0xFF,0xFF,0xFF]);
+  assert.deepEqual(toArr(api.getBytes(0x00000001, 4)), [0x01,0,0,0]);
+  assert.deepEqual(toArr(api.getBytes(0x80000000, 4)), [0,0,0,0x80]);
+  assert.deepEqual(toArr(api.getBytes(0x000000FF, 1)), [0xFF]);
 });
 
 test('CALL encodes return address as address AFTER the CALL instruction (not its own address)', async () => {
@@ -1705,9 +1714,9 @@ suite('arch');
 test('ia32 → x64 switch: gpRegs changes from E-prefix to R-prefix', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  assert.deepEqual(api.gpRegs(), ['EAX','EBX','ECX','EDX','ESI','EDI']);
+  assert.deepEqual(toArr(api.gpRegs()), ['EAX','EBX','ECX','EDX','ESI','EDI']);
   api.S.arch = 'x64';
-  assert.deepEqual(api.gpRegs(), ['RAX','RBX','RCX','RDX','RSI','RDI']);
+  assert.deepEqual(toArr(api.gpRegs()), ['RAX','RBX','RCX','RDX','RSI','RDI']);
 });
 
 test('ia32 → x64: extRegs gains R8-R15', () => {
@@ -1716,7 +1725,7 @@ test('ia32 → x64: extRegs gains R8-R15', () => {
   assert.equal(api.extRegs().length, 0);
   api.S.arch = 'x64';
   assert.equal(api.extRegs().length, 8);
-  assert.deepEqual(api.extRegs(), ['R8','R9','R10','R11','R12','R13','R14','R15']);
+  assert.deepEqual(toArr(api.extRegs()), ['R8','R9','R10','R11','R12','R13','R14','R15']);
 });
 
 test('ia32 → x64: ptrSize changes from 4 to 8', () => {

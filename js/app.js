@@ -16,6 +16,7 @@ const S = {
   reg:    'EAX',
   stackMode: 'full',
   stackSize: DEFAULT_STACK_SIZE,
+  changedRegs: [],
   sidebarPanelWidth: 240,
   sidebarPanelManual: false,
   stackPanelWidth: 280,
@@ -23,6 +24,8 @@ const S = {
   centerPaneHeights: {},
   collapsedSections: {},
   speed:  2500,
+  memViewBase: 0,
+  memSelectedAddr: 0,
   busy:   false,
   logIndent: 0,
   arch:   'ia32',   // 'ia32' | 'x64'
@@ -47,6 +50,7 @@ const S = {
     EBP: DEFAULT_STACK_SIZE - 4,
   },
   stackMem: new Uint8Array(DEFAULT_STACK_SIZE),
+  stackState: new Map(),
   mem:      new Uint8Array(64),
   memState: new Array(64).fill(''),
   stats: {
@@ -207,9 +211,11 @@ function regParts(name) {
   return {lo:(S.regs[name]||0)>>>0, hi:0};
 }
 
-function setRegParts(name, lo, hi=0) {
+function setRegParts(name, lo, hi=0, opts={}) {
   lo >>>= 0;
   hi >>>= 0;
+  const track = opts.track !== false;
+  const stackLo = clamp(lo, 0, Math.max(S.stackSize, 0));
   if(is64()) {
     const map = {
       RAX:{lo:'EAX', hi:'RAX_hi'},
@@ -227,16 +233,18 @@ function setRegParts(name, lo, hi=0) {
       R14:{lo:'R14', hi:'R14_hi'},
       R15:{lo:'R15', hi:'R15_hi'},
     };
-    if(name==='RSP') { S.regs.ESP=lo; return; }
-    if(name==='RBP') { S.regs.EBP=lo; return; }
+    if(name==='RSP') { S.regs.ESP=stackLo; if(track) markRegistersChanged(name); return; }
+    if(name==='RBP') { S.regs.EBP=stackLo; if(track) markRegistersChanged(name); return; }
     const meta = map[name];
     if(meta) {
       S.regs[meta.lo]=lo;
       S.regs[meta.hi]=hi;
+      if(track) markRegistersChanged(name);
       return;
     }
   }
-  S.regs[name]=lo;
+  S.regs[name]=(name==='ESP' || name==='EBP') ? stackLo : lo;
+  if(track) markRegistersChanged(name);
 }
 
 function regHex(name) {
@@ -252,13 +260,13 @@ function regBytes(name, count=transferWidth(name)) {
   return bytes.slice(0, count);
 }
 
-function setRegFromBytes(name, littleBytes) {
+function setRegFromBytes(name, littleBytes, opts={}) {
   let lo = 0;
   let hi = 0;
   const limit = Math.min(littleBytes.length, regWidthBytes(name));
   for(let i=0;i<Math.min(limit,4);i++) lo |= (littleBytes[i]&0xFF)<<(i*8);
   for(let i=4;i<Math.min(limit,8);i++) hi |= (littleBytes[i]&0xFF)<<((i-4)*8);
-  setRegParts(name, lo>>>0, hi>>>0);
+  setRegParts(name, lo>>>0, hi>>>0, opts);
 }
 
 function displayTransferStart(name=S.reg, count=transferWidth(name)) {
@@ -291,17 +299,20 @@ function getReg(name) {
   }
   return S.regs[name]||0;
 }
-function setReg(name, val32) {
+function setReg(name, val32, opts={}) {
   val32 = val32>>>0;
+  const track = opts.track !== false;
+  const stackVal = clamp(val32, 0, Math.max(S.stackSize, 0));
   if(is64()) {
     const lo32Map = {RAX:'EAX',RBX:'EBX',RCX:'ECX',RDX:'EDX',RSI:'ESI',RDI:'EDI',RSP:'ESP',RBP:'EBP'};
-    if(name==='RSP'){ S.regs.ESP=val32; return; }
-    if(name==='RBP'){ S.regs.EBP=val32; return; }
+    if(name==='RSP'){ S.regs.ESP=stackVal; if(track) markRegistersChanged(name); return; }
+    if(name==='RBP'){ S.regs.EBP=stackVal; if(track) markRegistersChanged(name); return; }
     const lo = lo32Map[name];
-    if(lo){ setRegParts(name, val32, 0); return; }
-    if(name.match(/^R\d+$/)) { setRegParts(name, val32, 0); return; }
+    if(lo){ setRegParts(name, val32, 0, opts); return; }
+    if(name.match(/^R\d+$/)) { setRegParts(name, val32, 0, opts); return; }
   }
-  S.regs[name]=val32;
+  S.regs[name]=(name==='ESP' || name==='EBP') ? stackVal : val32;
+  if(track) markRegistersChanged(name);
 }
 
 function getBytes(v32, n) {
@@ -338,13 +349,17 @@ function stackHexWidth() {
   return Math.max(4, Math.max(S.stackSize - 1, 0).toString(16).length);
 }
 
-function fmtStackA(n) {
+function fmtMemA(n) {
   const safe = Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0));
-  return safe.toString(16).padStart(stackHexWidth(), '0').toUpperCase();
+  return safe.toString(16).padStart(Math.max(4, stackHexWidth()), '0').toUpperCase();
+}
+
+function fmtStackA(n) {
+  return fmtMemA(n);
 }
 
 function stackTopInit() {
-  return Math.max(S.stackSize - ptrSize(), 0);
+  return Math.max(S.stackSize, 0);
 }
 
 function ensureStackMem() {
@@ -352,15 +367,85 @@ function ensureStackMem() {
   if(!(S.stackMem instanceof Uint8Array) || S.stackMem.length !== nextSize) {
     S.stackMem = new Uint8Array(nextSize);
   }
+  if(!(S.stackState instanceof Map)) S.stackState = new Map();
   S.stackSize = nextSize;
+}
+
+function syncLowMemoryToStack() {
+  const limit = Math.min(64, S.stackSize);
+  for(let i=0;i<limit;i++) S.stackMem[i] = S.mem[i] & 0xFF;
 }
 
 function resetStackState() {
   ensureStackMem();
   S.stackMem.fill(0);
+  S.stackState.clear();
+  syncLowMemoryToStack();
   S.regs.ESP = stackTopInit();
   S.regs.EBP = stackTopInit();
   S.callFrames = [];
+}
+
+function memSpaceSize() {
+  return Math.max(64, S.stackSize);
+}
+
+function normalizeMemViewBase(base) {
+  const maxBase = Math.max(memSpaceSize() - 64, 0);
+  const clamped = clamp(Math.trunc(Number.isFinite(base) ? base : 0), 0, maxBase);
+  return Math.floor(clamped / 8) * 8;
+}
+
+function memViewContains(addr) {
+  return addr >= S.memViewBase && addr < (S.memViewBase + 64);
+}
+
+function memByteAt(addr) {
+  if(addr < 0 || addr >= memSpaceSize()) return 0;
+  if(addr < 64) return S.mem[addr] & 0xFF;
+  return S.stackMem[addr] & 0xFF;
+}
+
+function memStateAt(addr) {
+  if(addr < 0 || addr >= memSpaceSize()) return '';
+  if(addr < 64) return S.memState[addr] || '';
+  return S.stackState.get(addr) || '';
+}
+
+function setByteState(addr, st='') {
+  if(addr < 0 || addr >= memSpaceSize()) return;
+  if(addr < 64) S.memState[addr] = st || '';
+  if(addr >= 64) {
+    if(st) S.stackState.set(addr, st);
+    else S.stackState.delete(addr);
+  }
+}
+
+function revealMemAddr(addr, opts={}) {
+  const target = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
+  if(!memViewContains(target)) {
+    S.memViewBase = normalizeMemViewBase(target);
+    buildMemGrid();
+  }
+  if(opts.select) {
+    clearSel({ keepState:true });
+    S.memSelectedAddr = target;
+    memEl(target)?.classList.add('mc-selected');
+  }
+}
+
+function revealMemRange(addr, width=1, opts={}) {
+  const first = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
+  const last = clamp(first + Math.max(width, 1) - 1, 0, Math.max(memSpaceSize() - 1, 0));
+  if(!memViewContains(first) || !memViewContains(last)) {
+    S.memViewBase = normalizeMemViewBase(first);
+    buildMemGrid();
+  }
+  if(opts.select) {
+    clearSel({ keepState:true });
+    S.memSelectedAddr = first;
+    memEl(first)?.classList.add('mc-selected');
+  }
 }
 
 function stackAccessFits(addr, width) {
@@ -372,10 +457,10 @@ function readStackBytes(addr, width) {
   return Array.from(S.stackMem.slice(addr, addr + width));
 }
 
-function writeStackBytes(addr, bytes) {
+function writeStackBytes(addr, bytes, st='mc-written') {
   if(!stackAccessFits(addr, bytes.length)) return;
   bytes.forEach((byte, idx) => {
-    S.stackMem[addr + idx] = byte & 0xFF;
+    writeMem(addr + idx, byte & 0xFF, st);
   });
 }
 
@@ -473,15 +558,32 @@ function syncStackSizeUI() {
   if(input && document.activeElement!==input) input.value = String(stackSizeKb());
 }
 
+function setRunButtonMode(mode='run') {
+  const runBtn = $('opRun');
+  if(!runBtn) return;
+  if(mode==='stop') {
+    runBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg><span>STOP</span>';
+    runBtn.disabled = false;
+    runBtn.onclick = () => { S.halt = true; };
+    return;
+  }
+  runBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg><span>RUN</span>';
+  runBtn.onclick = doRun;
+}
+
 function applyStackSize() {
   const input = $('stackSizeInput');
   const requestedKb = parseInt(input?.value || '', 10);
   const nextSize = normalizeStackSizeBytes((Number.isFinite(requestedKb) ? requestedKb : stackSizeKb()) * 1024);
   S.stackSize = nextSize;
   resetStackState();
+  S.memViewBase = normalizeMemViewBase(S.memViewBase);
+  S.memSelectedAddr = clamp(S.memSelectedAddr, 0, Math.max(memSpaceSize() - 1, 0));
+  markRegistersChanged(spRegs());
   buildRegCards();
   buildRegPicker();
   syncPicker();
+  if(isSpReg(S.reg)) $('valInput').value = fmtA(getReg(S.reg));
   buildStackView();
   refreshPreview();
   refreshBreakdown();
@@ -539,11 +641,7 @@ function init() {
   $('pcDisplay').addEventListener('change', e => {
     const addr = parseInt(e.target.value||'0',16)&0x3F;
     e.target.value = fmtA(addr);
-    S.pc = addr;
-    const ai=$('addrInput');
-    if(ai) ai.value = fmtA(addr);
-    clearSel();
-    memEl(addr)?.classList.add('mc-selected');
+    setPC(addr, { revealMem:true });
     refreshBreakdown();
     buildStackView();
     lg('sys',`PC definido manualmente: 0x${fmtA(addr)}`);
@@ -556,24 +654,40 @@ function init() {
     const c = e.target.closest('.mem-cell');
     if(!c) return;
     if(c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
-    const idx = +c.dataset.idx;
+    const addr = +c.dataset.addr;
     if(c.classList.contains('mc-selected') && !S.busy) {
-      editMemCell(idx);
+      editMemCell(addr);
       return;
     }
-    // Set both addrInput and PC
-    S.pc = idx;
-    const pd=$('pcDisplay'); if(pd && document.activeElement!==pd) pd.value=fmtA(idx);
-    $('addrInput').value = fmtA(idx);
-    clearSel();
+    S.memSelectedAddr = addr;
+    clearSel({ keepState:true });
     c.classList.add('mc-selected');
+    if(addr < 64) {
+      S.pc = addr;
+      const pd=$('pcDisplay'); if(pd && document.activeElement!==pd) pd.value=fmtA(addr);
+      $('addrInput').value = fmtA(addr);
+    }
     refreshBreakdown();
     buildStackView();
   });
   $('memGrid').addEventListener('dblclick', e => {
     const c = e.target.closest('.mem-cell');
     if(!c || c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
-    editMemCell(+c.dataset.idx);
+    editMemCell(+c.dataset.addr);
+  });
+  $('stackView')?.addEventListener('click', e => {
+    const row = e.target.closest('.stack-row');
+    if(!row) return;
+    const addr = parseInt(row.dataset.stackAddr || '0', 10);
+    revealMemAddr(addr, { select:true });
+    lg('sys', `Stack 0x${fmtStackA(addr)} localizada no mapa de memoria.`);
+  });
+  $('stackView')?.addEventListener('dblclick', e => {
+    const row = e.target.closest('.stack-row');
+    if(!row) return;
+    const addr = parseInt(row.dataset.stackAddr || '0', 10);
+    revealMemAddr(addr, { select:true });
+    editMemCell(addr);
   });
   $('asmTrace')?.addEventListener('click', e => {
     if(e.target.closest('.asm-edit-input')) return;
@@ -583,7 +697,7 @@ function init() {
     if(asmTraceClickTimer) clearTimeout(asmTraceClickTimer);
     asmTraceClickTimer = setTimeout(() => {
       asmTraceClickTimer = 0;
-      setPC(addr);
+      setPC(addr, { revealMem:true });
       buildStackView();
       lg('sys', `PC movido para a listagem de codigo 0x${fmtA(addr)}`);
     }, 220);
@@ -858,6 +972,7 @@ function resetCoreRegisters() {
   S.regs.RSI_hi=0; S.regs.RDI_hi=0;
   ['R8','R9','R10','R11','R12','R13','R14','R15'].forEach(r=>{ S.regs[r]=0; S.regs[r+'_hi']=0; });
   S.regs.ESP=stackTopInit(); S.regs.EBP=stackTopInit();
+  S.changedRegs = [];
 }
 
 function resetStatsState() {
@@ -875,13 +990,41 @@ function loadDefaultProgram(announce=true, arch=S.arch) {
   S.faulted = false;
   program.bytes.forEach((byte, idx) => {
     S.mem[idx] = byte;
+    if(idx < S.stackSize) S.stackMem[idx] = byte;
     S.memState[idx] = 'mc-written';
   });
+  S.memViewBase = 0;
+  S.memSelectedAddr = program.entry & 0x3F;
   setPC(program.entry);
   if(announce) {
     lg('sys', `Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado em 0x0000: main + 2 funcoes com uso de stack.`);
     lg('sys', program.listing.join(' | '));
   }
+}
+
+function changedRegisterSet() {
+  return new Set(Array.isArray(S.changedRegs) ? S.changedRegs : []);
+}
+
+function updateChangedRegisterClasses() {
+  const changed = changedRegisterSet();
+  [...gpRegs(), ...extRegs(), ...spRegs()].forEach(name => {
+    $('rc-'+name)?.classList.toggle('reg-changed', changed.has(name));
+    $('r'+name)?.classList.toggle('reg-changed', changed.has(name));
+  });
+}
+
+function markRegistersChanged(names, opts={}) {
+  const incoming = [...new Set((Array.isArray(names) ? names : [names]).filter(Boolean))];
+  const replace = opts.replace !== false;
+  const next = replace ? incoming : [...new Set([...(Array.isArray(S.changedRegs) ? S.changedRegs : []), ...incoming])];
+  S.changedRegs = next;
+  updateChangedRegisterClasses();
+}
+
+function clearChangedRegisters() {
+  S.changedRegs = [];
+  updateChangedRegisterClasses();
 }
 
 function traceBlock(startAddr, maxLines=20) {
@@ -1232,7 +1375,6 @@ function commitRegisterValue(name, raw) {
     refreshBreakdown();
   }
   buildStackView();
-  pulseRegister(name);
   lg('sys', `${name} ← 0x${isSpReg(name) ? fmtA(getReg(name)) : regHex(name)}`);
 }
 
@@ -1352,6 +1494,7 @@ function buildRegCards() {
     });
     sg.appendChild(d);
   }
+  updateChangedRegisterClasses();
   scheduleCenterPaneLayout();
 }
 
@@ -1462,6 +1605,21 @@ function renderByteStrip(name, opts={}) {
   const lastPos = memoryOrder ? Math.max(transferCount-1, 0) : displayPosForTransferByte(name, Math.max(transferCount-1, 0), transferCount);
   const transferStart = memoryOrder ? 0 : displayTransferStart(name, transferCount);
 
+  function byteMemoryOffset(idx) {
+    if(memoryOrder) return idx < Math.min(transferCount, byteCount) ? idx : null;
+    if(idx < transferStart) return null;
+    return S.endian==='little' ? (byteCount - 1 - idx) : (idx - transferStart);
+  }
+
+  function byteHoverTitle(sigIdx, idx) {
+    const role = sigIdx===byteCount-1 ? 'MSB' : sigIdx===0 ? 'LSB' : `byte ${sigIdx}`;
+    const offset = byteMemoryOffset(idx);
+    const memInfo = offset===null
+      ? 'fora da largura/operacao atual'
+      : `ordem de memoria: A+${offset}`;
+    return `${name} · ${role} · ${memInfo}`;
+  }
+
   return displaySigIdxs.map((sigIdx, idx) => {
     const byte = hex8(littleBytes[sigIdx] || 0);
     let cls = byteCls;
@@ -1477,7 +1635,7 @@ function renderByteStrip(name, opts={}) {
     if(transferCount>1 && idx===lastPos && idx>=transferStart) {
       labels.push(`<span class="${labelCls} rc-blbl-mem">A+${transferCount-1}</span>`);
     }
-    return `<span class="${cls}">${byte}${labels.join('')}</span>`;
+    return `<span class="${cls}" title="${byteHoverTitle(sigIdx, idx)}">${byte}${labels.join('')}</span>`;
   }).join('');
 }
 
@@ -1487,7 +1645,7 @@ function updateRegCard(name) {
   if(isSpReg(name)) {
     v.textContent='0x'+fmtA(getReg(name));
     if(s) s.innerHTML=renderRegisterEncapsulation(name);
-    pulseRegister(name);
+    updateChangedRegisterClasses();
     return;
   }
   const valueHex = regHex(name);
@@ -1503,7 +1661,7 @@ function updateRegCard(name) {
   }
   if(s) s.innerHTML=renderRegisterEncapsulation(name);
   if(b) b.innerHTML=renderByteStrip(name);
-  pulseRegister(name);
+  updateChangedRegisterClasses();
 }
 
 function pulseRegister(name) {
@@ -1545,7 +1703,6 @@ function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
 
   const b=$('rcb-'+name);
   if(b) b.innerHTML=renderByteStrip(name, {activePos:hexPos, doneSet:done, transferCount});
-  pulseRegister(name);
 }
 
 // Highlight byte being SENT during STORE
@@ -1632,53 +1789,71 @@ function refreshBreakdown() {
 // ─────────────────────────────────────────────────────────
 function buildMemGrid() {
   const g=$('memGrid'), a=$('memAddrBar');
+  S.memViewBase = normalizeMemViewBase(S.memViewBase);
+  const base = S.memViewBase;
+  const topAddr = base;
+  const bottomAddr = Math.min(base + 63, memSpaceSize() - 1);
   g.innerHTML='';
-  a.innerHTML='<span class="mem-dir-top"><span class="mem-dir-chip">0x0000</span> endereços menores / base</span>';
+  a.innerHTML=`<span class="mem-dir-top"><span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span> base da janela</span>`;
   const tag=$('addrDirTag');
-  if(tag) tag.textContent='0x0000 no topo · endereços crescem ↓ · convenção Intel SDM';
+  if(tag) tag.textContent=`janela 0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · endereços crescem ↓ · stack e mapa sincronizados`;
   for(let r=0;r<8;r++) {
+    const rowBase = base + (r * 8);
     const l=document.createElement('div');
     l.className='addr-lbl';
-    l.textContent='0x'+(r*8).toString(16).padStart(4,'0').toUpperCase();
+    l.textContent='0x'+fmtMemA(rowBase);
     a.appendChild(l);
     for(let c=0;c<8;c++) {
-      const idx=r*8+c, cell=document.createElement('div');
-      cell.className='mem-cell'; cell.dataset.idx=idx;
-      cell.textContent=hex8(S.mem[idx]);
-      if(S.memState[idx]) cell.classList.add(S.memState[idx]);
+      const addr=rowBase+c, cell=document.createElement('div');
+      cell.className='mem-cell'; cell.dataset.addr=addr;
+      cell.title=`Endereco 0x${fmtMemA(addr)}`;
+      cell.textContent=hex8(memByteAt(addr));
+      const st = memStateAt(addr);
+      if(st) cell.classList.add(st);
+      if(addr===S.memSelectedAddr) cell.classList.add('mc-selected');
       g.appendChild(cell);
     }
   }
-  a.innerHTML+='<span class="mem-dir-bottom"><span class="mem-dir-chip">0x003F</span> endereços maiores</span>';
+  a.innerHTML+=`<span class="mem-dir-bottom"><span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span> endereços maiores</span>`;
   scheduleCenterPaneLayout();
 }
 
-const memEl = idx => $('memGrid').querySelector(`.mem-cell[data-idx="${idx}"]`);
+const memEl = addr => $('memGrid').querySelector(`.mem-cell[data-addr="${addr}"]`);
 
-function writeMem(idx, val, st) {
-  if(idx<0||idx>=64) return;
-  S.mem[idx]=val&0xFF; S.memState[idx]=st||'';
-  const el=memEl(idx); if(!el) return;
+function writeMem(addr, val, st) {
+  if(addr<0||addr>=memSpaceSize()) return;
+  const next = val & 0xFF;
+  if(addr<64) S.mem[addr]=next;
+  if(addr<S.stackSize) S.stackMem[addr]=next;
+  setByteState(addr, st || '');
+  const el=memEl(addr); if(!el) return;
   el.textContent=hex8(val);
   el.className='mem-cell mc-flash'+(st?' '+st:'');
+  if(addr===S.memSelectedAddr) el.classList.add('mc-selected');
   setTimeout(()=>{ if(el) el.classList.remove('mc-flash'); },500);
 }
 
-function setMemSt(idx, st) {
-  if(idx<0||idx>=64) return;
-  const el=memEl(idx); if(!el) return;
+function setMemSt(addr, st) {
+  if(addr<0||addr>=memSpaceSize()) return;
+  setByteState(addr, st || '');
+  const el=memEl(addr); if(!el) return;
   el.className='mem-cell'+(st?' '+st:'');
+  if(addr===S.memSelectedAddr) el.classList.add('mc-selected');
 }
 
-function clearSel() { $$('.mc-selected').forEach(c=>c.classList.remove('mc-selected')); }
+function clearSel(opts={}) {
+  $$('.mc-selected').forEach(c=>c.classList.remove('mc-selected'));
+  if(!opts.keepState) S.memSelectedAddr = null;
+}
 
-function editMemCell(idx) {
-  const cell = memEl(idx);
+function editMemCell(addr) {
+  const cell = memEl(addr);
   if(!cell || cell.classList.contains('is-editing')) return;
-  clearSel();
+  clearSel({ keepState:true });
+  S.memSelectedAddr = addr;
   cell.classList.add('mc-selected','is-editing');
-  const prevState = S.memState[idx] || '';
-  const prevVal = hex8(S.mem[idx]);
+  const prevState = memStateAt(addr) || '';
+  const prevVal = hex8(memByteAt(addr));
   const inp = document.createElement('input');
   inp.className = 'mem-edit-input';
   inp.type = 'text';
@@ -1698,13 +1873,12 @@ function editMemCell(idx) {
   function commit() {
     const raw = inp.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
     const val = parseInt(raw || '0', 16) & 0xFF;
-    writeMem(idx, val, 'mc-written');
-    S.memState[idx] = 'mc-written';
-    const updated = memEl(idx);
+    writeMem(addr, val, 'mc-written');
+    const updated = memEl(addr);
     if(updated) updated.classList.add('mc-selected');
-    buildAsmTrace();
+    if(addr < 64) buildAsmTrace();
     buildStackView();
-    lg('sys', `[0x${fmtA(idx)}] ← 0x${hex8(val)} (edição manual)`);
+    lg('sys', `[0x${fmtMemA(addr)}] ← 0x${hex8(val)} (edição manual)`);
   }
 
   inp.addEventListener('keydown', e => {
@@ -1884,6 +2058,7 @@ function buildRegPicker() {
     });
     picker.appendChild(btn);
   }
+  updateChangedRegisterClasses();
 }
 
 function doSetArch(arch) {
@@ -1914,7 +2089,7 @@ function doSetArch(arch) {
   doSelectReg(S.reg);
   $('clockDisplay').textContent='—';
   $('opsDisplay').textContent='0';
-  const runBtn=$('opRun'); if(runBtn){ runBtn.textContent='RUN'; runBtn.onclick=doRun; }
+  setRunButtonMode('run');
   const chip=$('archDisplay'); if(chip) chip.textContent=arch==='x64'?'x86-64':'IA-32';
   const stackLbl=$('stackArchLbl'); if(stackLbl) stackLbl.textContent=`STACK  ${arch==='x64'?'RSP/RBP':'ESP/EBP'}`;
   const asmPh=$('asmInput'); if(asmPh) asmPh.placeholder=arch==='x64'?'MOV RAX, 0x1234':'MOV EAX, 0x1234';
@@ -2167,8 +2342,10 @@ function decodeAt(pc) {
         S.callFrames.pop();
       }
       S.regs[spKey]=S.regs[spKey]+width;
+      revealMemRange(sp, width, { select:true });
       updateRegCard(spName);
       updatePickerVal(spName);
+      markRegistersChanged(spName);
       setPC(target & 0x3F);
     } };
   if(op===0xE8) {
@@ -2207,9 +2384,11 @@ function decodeAt(pc) {
           retBytes.push(byte);
         }
         writeStackBytes(sp, retBytes);
+        revealMemRange(sp, width, { select:true });
         S.callFrames.push({ slot: sp, width, returnTo: nextIp & 0x3F, callSite: pc & 0x3F, target });
         updateRegCard(spName);
         updatePickerVal(spName);
+        markRegistersChanged(spName);
         setPC(target);
       } };
   }
@@ -2299,7 +2478,9 @@ function decodeAt(pc) {
         }
         S.regs[spKey]=nextSp;
         writeStackBytes(S.regs[spKey], regBytes(rn,width));
+        revealMemRange(S.regs[spKey], width, { select:true });
         updateRegCard(spName); updatePickerVal(spName);
+        markRegistersChanged(spName);
       } }; }
     return faultInstr(
       2,
@@ -2326,9 +2507,11 @@ function decodeAt(pc) {
           return;
         }
         const bytes = readStackBytes(sp, width);
+        revealMemRange(sp, width, { select:true });
         setRegFromBytes(rn, bytes);
         S.regs[spKey]=S.regs[spKey]+width;
         updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
+        markRegistersChanged([rn, spName]);
       } }; }
     return faultInstr(
       2,
@@ -2510,7 +2693,7 @@ async function doRun() {
     const b=$(id); if(b) b.disabled=true;
   });
   const runBtn=$('opRun');
-  if(runBtn){ runBtn.textContent='STOP'; runBtn.disabled=false; runBtn.onclick=()=>{ S.halt=true; }; }
+  if(runBtn) setRunButtonMode('stop');
 
   while(!S.halt) {
     await _executeOne({ traceMode:'run' });
@@ -2520,7 +2703,7 @@ async function doRun() {
 
   S.progRunning=false; S.busy=false;
   setBusy(false);
-  if(runBtn){ runBtn.textContent='RUN'; runBtn.onclick=doRun; }
+  if(runBtn) setRunButtonMode('run');
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2540,7 +2723,8 @@ async function doPush() {
   }
   S.regs.ESP=nextSp;
   const sp=S.regs.ESP;
-  setPC(sp, { traceAutoScroll:false });
+  revealMemRange(sp, width, { select:true });
+  buildStackView();
   lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtStackA(sp)}`, `PUSH ${reg}`);
   setStatus(`PUSH: ${reg} → [STACK 0x${fmtStackA(sp)}]`,'lbl-store');
   const bs=regBytes(reg,width);
@@ -2548,15 +2732,15 @@ async function doPush() {
     const ma=sp+i;
     const hexPos=displayPosForTransferByte(reg, i, width);
     storeHighlight(reg, hexPos, width);
-    setPC(ma, { traceAutoScroll:false });
     await animPacket('store', bs[i], ma);
-    S.stackMem[ma] = bs[i] & 0xFF;
+    writeMem(ma, bs[i], 'mc-active');
     await sleep(S.speed*0.12);
+    setMemSt(ma, 'mc-written');
   }
   updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg);
   updateRegCard(spName); updatePickerVal(spName);
+  markRegistersChanged(spName);
   setStatus(`PUSH concluído — ${spName}=0x${fmtStackA(sp)}`,'lbl-done');
-  setPC((sp+width) & 0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2572,14 +2756,13 @@ async function doPop() {
     S.busy=false; setBusy(false);
     return;
   }
-  setPC(sp, { traceAutoScroll:false });
   lg('load',`POP [STACK 0x${fmtStackA(sp)}] → ${reg}`, `POP ${reg}`);
   setStatus(`POP: [STACK 0x${fmtStackA(sp)}] → ${reg}`,'lbl-load');
+  revealMemRange(sp, width, { select:true });
   const partialLittle = new Array(width).fill(0);
   setRegParts(reg,0,0); setLoading(reg,true);
   for(let i=0;i<width;i++) {
     const ma=sp+i;
-    setPC(ma, { traceAutoScroll:false });
     await animPacket('load', S.stackMem[ma], ma);
     partialLittle[i]=S.stackMem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
@@ -2589,10 +2772,10 @@ async function doPop() {
   setLoading(reg,false);
   S.regs.ESP=sp+width;
   updateRegCard(reg); updateRegCard(spName); updatePickerVal(spName);
+  markRegistersChanged([reg, spName]);
   const finalHex=regHex(reg);
   $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
   setStatus(`POP concluído — ${reg}=0x${finalHex}`,'lbl-done');
-  setPC((sp+width) & 0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -3089,7 +3272,7 @@ function doClear() {
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   $('clockDisplay').textContent='—';
   $('opsDisplay').textContent='0';
-  const runBtn=$('opRun'); if(runBtn){runBtn.textContent='RUN'; runBtn.onclick=doRun;}
+  setRunButtonMode('run');
   setStatus('Programa demo restaurado — PC em 0x0000','lbl-done');
   lg('sys','Reiniciado com programa demo.', asmForOp('clear',{}));
   lg('sys', demoProgramForArch().listing.join(' | '));
@@ -3170,7 +3353,7 @@ function buildStackView() {
     const tags = meta.tags.length
       ? meta.tags.map(tag => `<span class="stack-tag stack-tag-${tag.cls}">${tag.text}</span>`).join('')
       : '<span class="stack-row-empty">livre</span>';
-    return `<div class="stack-row stack-row-${meta.primary}" data-stack-addr="${addr}">
+    return `<div class="stack-row stack-row-${meta.primary}" data-stack-addr="${addr}" title="Clique para localizar no mapa de memoria · 2× clique para editar">
       <span class="stack-row-addr">0x${fmtStackA(addr)}</span>
       <span class="stack-row-byte">${hex8(S.stackMem[addr] || 0)}</span>
       <span class="stack-row-tags">${tags}</span>
@@ -3256,13 +3439,18 @@ function setPC(addr, opts={}){
   S.pc=addr&0x3F;
   const syncTrace = opts.trace !== false;
   const traceAutoScroll = opts.traceAutoScroll !== false;
+  const revealMem = opts.revealMem === true;
   const pd=$('pcDisplay');
   if(pd && document.activeElement!==pd) pd.value=fmtA(S.pc);
   const ai=$('addrInput');
   if(ai && document.activeElement!==ai) {
     ai.value=fmtA(S.pc);
-    clearSel();
-    memEl(S.pc)?.classList.add('mc-selected');
+    S.memSelectedAddr = S.pc;
+    if(revealMem) revealMemAddr(S.pc, { select:true });
+    else {
+      clearSel({ keepState:true });
+      memEl(S.pc)?.classList.add('mc-selected');
+    }
     refreshBreakdown();
   }
   if(syncTrace) {
@@ -3401,9 +3589,10 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // SAVE / LOAD
 // ─────────────────────────────────────────────────────────
 function saveSim(){
-  const data={version:9,state:{
+  const data={version:10,state:{
     endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
-    regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],stackMem:Array.from(S.stackMem || []),
+    memViewBase:S.memViewBase,
+    regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],stackMem:Array.from(S.stackMem || []),stackState:Array.from((S.stackState || new Map()).entries()),
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
   }};
   const a=document.createElement('a');
@@ -3435,13 +3624,17 @@ function loadSim(e){
         S.collapsedSections = { ...d.collapsedSections };
       }
       if(Number.isFinite(d.speed)) S.speed = normalizeSpeed(d.speed);
+      if(Number.isFinite(d.memViewBase)) S.memViewBase = normalizeMemViewBase(d.memViewBase);
       if(d.arch) S.arch=d.arch;
       Object.assign(S.regs,d.regs);
       S.mem=new Uint8Array(d.mem); S.memState=d.memState;
       ensureStackMem();
       if(Array.isArray(d.stackMem) && d.stackMem.length===S.stackSize) S.stackMem = new Uint8Array(d.stackMem);
       else S.stackMem.fill(0);
+      S.stackState = Array.isArray(d.stackState) ? new Map(d.stackState) : new Map();
+      syncLowMemoryToStack();
       Object.assign(S.stats,d.stats); S.pc=d.pc;
+      S.memSelectedAddr = clamp(S.pc || 0, 0, Math.max(memSpaceSize() - 1, 0));
       applySidebarPanelWidth();
       persistSidebarPanelWidth();
       applyStackPanelWidth();

@@ -378,6 +378,18 @@ body.pane-resizing {
 }
 .rpbtn.active .rp-name { color: var(--amb); }
 .rpbtn.active .rp-val  { color: #fde68a; }
+.rpbtn.reg-changed {
+  border-color: rgba(34,197,94,.72);
+  background: rgba(34,197,94,.09);
+  box-shadow: inset 0 0 0 1px rgba(34,197,94,.16), 0 0 0 1px rgba(34,197,94,.18), 0 0 18px rgba(34,197,94,.14);
+}
+.rpbtn.reg-changed .rp-name,
+.rpbtn.reg-changed .rp-val {
+  color: #dcfce7;
+}
+.rpbtn.reg-changed.active {
+  box-shadow: inset 0 0 0 1px rgba(34,197,94,.22), 0 0 0 1px rgba(34,197,94,.24), 0 0 22px rgba(34,197,94,.16);
+}
 .rpbtn:not(.active):hover { border-color: var(--bdr-hi); }
 .rpbtn.reg-animating { animation: reg-pulse .4s var(--ease); }
 @keyframes reg-pulse {
@@ -432,7 +444,7 @@ input[type=range]::-webkit-slider-thumb {
 /* Operations */
 .ops-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .ops-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-.ops-grid-cpu { grid-template-columns: 1.4fr 1fr 1fr; }
+.ops-grid-cpu { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cpu-cycle-hint {
   margin-bottom: 6px;
   padding: 5px 7px;
@@ -445,12 +457,22 @@ input[type=range]::-webkit-slider-thumb {
   letter-spacing: .7px;
 }
 .op-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  padding: 9px 4px; border-radius: var(--r2); border: 1px solid;
-  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 68px;
+  padding: 10px 8px; border-radius: var(--r2); border: 1px solid;
+  font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .9px;
+  line-height: 1;
+  text-align: center;
   cursor: pointer; transition: all .15s var(--ease); position: relative; overflow: hidden;
+  box-sizing: border-box;
 }
-.op-btn svg { width: 18px; height: 18px; }
+.op-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.op-btn > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14px;
+}
 .op-btn small {
   font-size: 7px;
   font-weight: 600;
@@ -458,9 +480,7 @@ input[type=range]::-webkit-slider-thumb {
   opacity: .9;
   line-height: 1.2;
 }
-.op-step-main {
-  gap: 0;
-}
+.op-step-main { gap: 6px; }
 .op-btn::before {
   content: ''; position: absolute; inset: 0;
   background: currentColor; opacity: 0; transition: opacity .15s;
@@ -476,7 +496,7 @@ input[type=range]::-webkit-slider-thumb {
 .op-push    { background: rgba(74,222,128,.05);  border-color: #22c55e;   color: #22c55e;    }
 .op-pop     { background: rgba(96,165,250,.05);  border-color: #818cf8;   color: #818cf8;    }
 .op-execute { background: rgba(56,189,248,.07);  border-color: var(--acc); color: var(--acc); }
-.op-run     { background: rgba(56,189,248,.10);  border-color: var(--acc); color: var(--acc); font-size: 11px; }
+.op-run     { background: rgba(56,189,248,.10);  border-color: var(--acc); color: var(--acc); }
 
 /* Stack pointer register buttons */
 .rpbtn-sp { opacity: 0.96; }
@@ -848,6 +868,20 @@ body.pane-resizing .canvas-pane-handle {
   background: rgba(251,191,36,.05);
   border-color: rgba(251,191,36,.38);
   box-shadow: inset 0 0 0 1px rgba(251,191,36,.18);
+}
+.reg-card.reg-changed {
+  border-color: rgba(34,197,94,.72);
+  box-shadow: inset 0 0 0 1px rgba(34,197,94,.16), 0 0 0 1px rgba(34,197,94,.18), 0 0 20px rgba(34,197,94,.12);
+  background: linear-gradient(180deg, rgba(34,197,94,.09), rgba(17,25,34,.90));
+}
+.reg-card.reg-changed .rc-name {
+  color: #bbf7d0;
+}
+.reg-card.reg-changed .rc-value {
+  color: #dcfce7;
+}
+.reg-card.reg-changed.rc-selected {
+  box-shadow: inset 0 0 0 1px rgba(34,197,94,.18), 0 0 0 1px rgba(34,197,94,.22), 0 0 22px rgba(34,197,94,.14);
 }
 .rc-name {
   font-size: 10px;
@@ -1286,8 +1320,8 @@ body.pane-resizing .canvas-pane-handle {
 #memAddrBar {
   display: flex; flex-direction: column; gap: 2px;
   padding-top: 2px;
-  width: 120px;
-  flex: 0 0 120px;
+  width: 138px;
+  flex: 0 0 138px;
 }
 .addr-lbl {
   height: clamp(22px, 2.8vh, 28px); display: flex; align-items: center;
@@ -1861,13 +1895,19 @@ body.pane-resizing .canvas-pane-handle {
 }
 .stack-row {
   display: grid;
-  grid-template-columns: 54px 36px 1fr;
+  grid-template-columns: 64px 40px 1fr;
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
   border-radius: var(--r);
   border: 1px solid var(--bdr);
   background: var(--bg2);
+  cursor: pointer;
+  transition: border-color .15s var(--ease), background .15s var(--ease);
+}
+.stack-row:hover {
+  border-color: var(--bdr-focus);
+  background: var(--bg3);
 }
 .stack-row-addr {
   font-size: 10px;

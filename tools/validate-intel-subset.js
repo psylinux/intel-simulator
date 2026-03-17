@@ -237,17 +237,25 @@ function setAddr(document, addr) {
   document.getElementById('addrInput').value = addr.toString(16).padStart(4, '0').toUpperCase();
 }
 
+function defaultStackTop(api) {
+  return api.S.stackSize;
+}
+
 function resetSim(api, document, arch = 'ia32') {
   api.S.arch = arch;
   api.S.endian = 'little';
   api.S.size = arch === 'x64' ? 'qword' : 'dword';
   api.S.reg = arch === 'x64' ? 'RAX' : 'EAX';
+  api.S.stackSize = 100 * 1024;
   api.S.busy = false;
   api.S.halt = false;
   api.S.faulted = false;
   api.S.progRunning = false;
   api.S.callFrames = [];
   api.resetCoreRegisters();
+  api.S.stackMem = new Uint8Array(api.S.stackSize);
+  api.S.regs.ESP = defaultStackTop(api);
+  api.S.regs.EBP = defaultStackTop(api);
   api.S.mem.fill(0);
   api.S.memState.fill('');
   setAddr(document, 0);
@@ -333,8 +341,8 @@ test('PUSH usa little-endian e decrementa o stack pointer antes da escrita', asy
   api.S.reg = 'EAX';
   api.setReg('EAX', 0xA1B2C3D4);
   await api.doPush();
-  assert.equal(api.S.regs.ESP, 0x0038);
-  assert.deepEqual(Array.from(api.S.mem.slice(0x38, 0x3C)), [0xD4, 0xC3, 0xB2, 0xA1]);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 4);
+  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 4)), [0xD4, 0xC3, 0xB2, 0xA1]);
 });
 
 test('POP usa little-endian e incrementa o stack pointer apos a leitura', async () => {
@@ -342,11 +350,11 @@ test('POP usa little-endian e incrementa o stack pointer apos a leitura', async 
   resetSim(api, document, 'ia32');
   api.S.endian = 'big';
   api.S.reg = 'EAX';
-  api.S.regs.ESP = 0x0038;
-  writeBytes(api, 0x0038, [0xD4, 0xC3, 0xB2, 0xA1]);
+  api.S.regs.ESP = defaultStackTop(api) - 4;
+  api.S.stackMem.set([0xD4, 0xC3, 0xB2, 0xA1], api.S.regs.ESP);
   await api.doPop();
   assert.equal(api.regHex('EAX'), 'A1B2C3D4');
-  assert.equal(api.S.regs.ESP, 0x003C);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api));
 });
 
 test('CALL em IA-32 empilha o proximo EIP e desvia para o alvo', async () => {
@@ -355,8 +363,8 @@ test('CALL em IA-32 empilha o proximo EIP e desvia para o alvo', async () => {
   writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
   await api._executeOne();
   assert.equal(api.S.pc, 0x000A);
-  assert.equal(api.S.regs.ESP, 0x0038);
-  assert.deepEqual(Array.from(api.S.mem.slice(0x38, 0x3C)), [0x05, 0x00, 0x00, 0x00]);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 4);
+  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 4)), [0x05, 0x00, 0x00, 0x00]);
   assert.equal(api.S.callFrames.length, 1);
 });
 
@@ -367,7 +375,7 @@ test('RET em IA-32 restaura o endereco de retorno empilhado por CALL', async () 
   await api._executeOne();
   await api._executeOne();
   assert.equal(api.S.pc, 0x0005);
-  assert.equal(api.S.regs.ESP, 0x003C);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api));
   assert.equal(api.S.callFrames.length, 0);
 });
 
@@ -377,11 +385,11 @@ test('CALL/RET em x86-64 usam largura de ponteiro de 8 bytes', async () => {
   writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
   await api._executeOne();
   assert.equal(api.S.pc, 0x000A);
-  assert.equal(api.S.regs.ESP, 0x0034);
-  assert.deepEqual(Array.from(api.S.mem.slice(0x34, 0x3C)), [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 8);
+  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 8)), [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
   await api._executeOne();
   assert.equal(api.S.pc, 0x0005);
-  assert.equal(api.S.regs.ESP, 0x003C);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api));
 });
 
 test('FETCH avanca o IP/RIP para a proxima instrucao sem executar a instrucao atual', async () => {
@@ -430,12 +438,11 @@ test('RET corrompido e detectado quando o endereco empilhado nao bate com o CALL
   resetSim(api, document, 'ia32');
   writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
   await api._executeOne();
-  api.S.mem[0x0038] = 0x07;
+  api.S.stackMem[api.S.regs.ESP] = 0x07;
   await api._executeOne();
   assert.equal(api.S.halt, true);
   assert.equal(api.S.faulted, true);
   assert.equal(api.S.pc, 0x000A);
-  assert.deepEqual(api.S.memState.slice(0x38, 0x3C), ['mc-error', 'mc-error', 'mc-error', 'mc-error']);
 });
 
 test('Validador aceita MOV imediato suportado e gera opcode correto', async () => {

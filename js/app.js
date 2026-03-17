@@ -3,8 +3,8 @@
    ═══════════════════════════════════════════════════════ */
 'use strict';
 
-const DEFAULT_STACK_SIZE = 64 * 1024;
-const MIN_STACK_SIZE = 1 * 1024;
+const DEFAULT_STACK_SIZE = 100;
+const MIN_STACK_SIZE = 1;
 const MAX_STACK_SIZE = 1024 * 1024;
 
 // ─────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ const S = {
   reg:    'EAX',
   stackMode: 'full',
   stackSize: DEFAULT_STACK_SIZE,
+  stackSizeInputUnit: 'B',
   changedRegs: [],
   sidebarPanelWidth: 240,
   sidebarPanelManual: false,
@@ -48,8 +49,8 @@ const S = {
     R14: 0x00000000, R14_hi: 0,
     R15: 0x00000000, R15_hi: 0,
     // Stack pointers
-    ESP: DEFAULT_STACK_SIZE - 4,
-    EBP: DEFAULT_STACK_SIZE - 4,
+    ESP: DEFAULT_STACK_SIZE,
+    EBP: DEFAULT_STACK_SIZE,
   },
   stackMem: new Uint8Array(DEFAULT_STACK_SIZE),
   stackState: new Map(),
@@ -343,8 +344,40 @@ function normalizeStackSizeBytes(size) {
   return clamp(Math.round(raw), MIN_STACK_SIZE, MAX_STACK_SIZE);
 }
 
-function stackSizeKb() {
-  return Math.round(S.stackSize / 1024);
+function normalizeStackSizeUnit(unit) {
+  return unit === 'KB' ? 'KB' : 'B';
+}
+
+function preferredStackSizeUnit(size=S.stackSize) {
+  const safe = normalizeStackSizeBytes(size);
+  return safe >= 1024 && safe % 1024 === 0 ? 'KB' : 'B';
+}
+
+function stackSizeUnitFactor(unit=S.stackSizeInputUnit) {
+  return normalizeStackSizeUnit(unit) === 'KB' ? 1024 : 1;
+}
+
+function trimNumericText(text) {
+  return String(text).replace(/\.?0+$/,'');
+}
+
+function formatStackSizeInputValue(bytes=S.stackSize, unit=S.stackSizeInputUnit) {
+  const safeBytes = normalizeStackSizeBytes(bytes);
+  const safeUnit = normalizeStackSizeUnit(unit);
+  if(safeUnit === 'KB') {
+    const kb = safeBytes / 1024;
+    if(Number.isInteger(kb)) return String(kb);
+    return trimNumericText(kb.toFixed(kb < 10 ? 3 : 2));
+  }
+  return String(safeBytes);
+}
+
+function formatStackSize(bytes=S.stackSize) {
+  const safeBytes = normalizeStackSizeBytes(bytes);
+  if(safeBytes < 1024) return `${safeBytes} B`;
+  const kb = safeBytes / 1024;
+  if(Number.isInteger(kb)) return `${kb} KB`;
+  return `${trimNumericText(kb.toFixed(kb < 10 ? 3 : 2))} KB`;
 }
 
 function stackHexWidth() {
@@ -565,9 +598,32 @@ function syncSpeedUI() {
   if(label) label.textContent = `${S.speed}ms`;
 }
 
-function syncStackSizeUI() {
+function syncStackSizeUI(displayBytes=S.stackSize) {
   const input = $('stackSizeInput');
-  if(input && document.activeElement!==input) input.value = String(stackSizeKb());
+  const unitSel = $('stackSizeUnitSelect');
+  S.stackSizeInputUnit = normalizeStackSizeUnit(S.stackSizeInputUnit || preferredStackSizeUnit(displayBytes));
+  if(unitSel && document.activeElement!==unitSel) unitSel.value = S.stackSizeInputUnit;
+  if(input) {
+    input.min = S.stackSizeInputUnit === 'KB' ? '0.001' : '1';
+    input.max = S.stackSizeInputUnit === 'KB' ? String(MAX_STACK_SIZE / 1024) : String(MAX_STACK_SIZE);
+    input.step = S.stackSizeInputUnit === 'KB' ? '0.001' : '1';
+    if(document.activeElement!==input) input.value = formatStackSizeInputValue(displayBytes, S.stackSizeInputUnit);
+  }
+}
+
+function doSetStackSizeUnit(nextUnit) {
+  const input = $('stackSizeInput');
+  const prevUnit = normalizeStackSizeUnit(S.stackSizeInputUnit || 'B');
+  const normalized = normalizeStackSizeUnit(nextUnit);
+  let previewBytes = S.stackSize;
+
+  if(input) {
+    const raw = parseFloat(input.value || '');
+    if(Number.isFinite(raw)) previewBytes = normalizeStackSizeBytes(raw * stackSizeUnitFactor(prevUnit));
+  }
+
+  S.stackSizeInputUnit = normalized;
+  syncStackSizeUI(previewBytes);
 }
 
 function setRunButtonMode(mode='run') {
@@ -585,8 +641,11 @@ function setRunButtonMode(mode='run') {
 
 function applyStackSize() {
   const input = $('stackSizeInput');
-  const requestedKb = parseInt(input?.value || '', 10);
-  const nextSize = normalizeStackSizeBytes((Number.isFinite(requestedKb) ? requestedKb : stackSizeKb()) * 1024);
+  const unit = normalizeStackSizeUnit($('stackSizeUnitSelect')?.value || S.stackSizeInputUnit);
+  const requested = parseFloat(input?.value || '');
+  const fallback = S.stackSize / stackSizeUnitFactor(unit);
+  const nextSize = normalizeStackSizeBytes((Number.isFinite(requested) ? requested : fallback) * stackSizeUnitFactor(unit));
+  S.stackSizeInputUnit = unit;
   S.stackSize = nextSize;
   resetStackState();
   const stackViewAddr = clamp(Math.max(S.stackSize - ptrSize(), 0), 0, Math.max(memSpaceSize() - 1, 0));
@@ -602,7 +661,7 @@ function applyStackSize() {
   refreshPreview();
   refreshBreakdown();
   syncStackSizeUI();
-  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria agora cobre 0x0000..0x${fmtMemA(Math.max(memSpaceSize() - 1, 0))}.`);
+  lg('sys', `Tamanho da stack ajustado para ${formatStackSize(nextSize)}. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria agora cobre 0x0000..0x${fmtMemA(Math.max(memSpaceSize() - 1, 0))}.`);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -647,6 +706,9 @@ function init() {
       e.preventDefault();
       applyStackSize();
     }
+  });
+  $('stackSizeUnitSelect')?.addEventListener('change', e => {
+    doSetStackSizeUnit(e.target.value);
   });
 
   // PC input — manual editing
@@ -2042,7 +2104,7 @@ function buildMemGrid() {
   g.innerHTML='';
   a.innerHTML='';
   const tag=$('addrDirTag');
-  if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · total ${stackSizeKb()} KB`;
+  if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · total ${formatStackSize(totalBytes)}`;
   a.style.setProperty('--mem-row-count', String(rowCount));
   a.style.setProperty('--mem-cell-h', `${cellPx}px`);
   a.style.minHeight = `${addrHeightPx}px`;
@@ -2995,15 +3057,15 @@ async function doPush() {
   const sp=S.regs.ESP;
   revealMemRange(sp, width, { select:true });
   buildStackView();
-  lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtStackA(sp)}`, `PUSH ${reg}`);
-  setStatus(`PUSH: ${reg} → [STACK 0x${fmtStackA(sp)}]`,'lbl-store');
+  lg('store',`PUSH ${reg}=0x${regHex(reg)}: ${spName} decrementa para 0x${fmtStackA(sp)} e o dado segue para o topo da pilha [0x${fmtStackA(sp)}].`, `PUSH ${reg}`);
+  setStatus(`PUSH: ${reg} → topo da pilha [0x${fmtStackA(sp)}]`,'lbl-store');
   const bs=regBytes(reg,width);
   for(let i=0;i<width;i++) {
     const ma=sp+i;
     const hexPos=displayPosForTransferByte(reg, i, width);
     storeHighlight(reg, hexPos, width);
     setMemSt(ma,'mc-active');
-    await animPacket('store', bs[i], ma);
+    await animPacket('store', bs[i], ma, { surface:'stack' });
     writeMem(ma, bs[i], 'mc-active');
     await sleep(S.speed*0.12);
     setMemSt(ma, 'mc-written');
@@ -3027,15 +3089,16 @@ async function doPop() {
     S.busy=false; setBusy(false);
     return;
   }
-  lg('load',`POP [STACK 0x${fmtStackA(sp)}] → ${reg}`, `POP ${reg}`);
-  setStatus(`POP: [STACK 0x${fmtStackA(sp)}] → ${reg}`,'lbl-load');
+  lg('load',`POP [0x${fmtStackA(sp)}] → ${reg}: o dado sai do topo da pilha e ${spName} sera incrementado apos a leitura.`, `POP ${reg}`);
+  setStatus(`POP: topo da pilha [0x${fmtStackA(sp)}] → ${reg}`,'lbl-load');
   revealMemRange(sp, width, { select:true });
+  buildStackView();
   const partialLittle = new Array(width).fill(0);
   setRegParts(reg,0,0); setLoading(reg,true);
   for(let i=0;i<width;i++) {
     const ma=sp+i;
     setMemSt(ma,'mc-active');
-    await animPacket('load', S.stackMem[ma], ma);
+    await animPacket('load', S.stackMem[ma], ma, { surface:'stack' });
     partialLittle[i]=S.stackMem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
     liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
@@ -3636,7 +3699,7 @@ function buildStackView() {
   view.innerHTML = `
     <div class="stack-meta">
       <div class="stack-meta-row stack-meta-row-mode"><span class="stack-meta-key">modo</span><span class="stack-meta-pill">${mode}</span></div>
-      <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${stackSizeKb()} KB</span></div>
+      <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${formatStackSize(S.stackSize)}</span></div>
       <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">${ipReg()} (Contador)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
       <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (Topo da Pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
       <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (Base do Frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
@@ -3659,6 +3722,7 @@ function toggleStackMode() {
 }
 
 const stackRowEl = addr => $('stackView')?.querySelector(`.stack-row[data-stack-addr="${addr}"]`);
+const stackByteEl = addr => stackRowEl(addr)?.querySelector('.stack-row-byte') || null;
 
 function activeRegisterAnchor(dir) {
   const bytes = $('rcb-'+S.reg);
@@ -3681,31 +3745,76 @@ function clearMemOpIndicator(addr) {
   cell.classList.remove('mc-op-store','mc-op-load');
 }
 
+function setStackOpIndicator(addr, dir) {
+  const cell = stackByteEl(addr);
+  if(!cell) return;
+  cell.classList.remove('stack-byte-op-store','stack-byte-op-load');
+  cell.classList.add(dir==='load' ? 'stack-byte-op-load' : 'stack-byte-op-store');
+}
+
+function clearStackOpIndicator(addr) {
+  const cell = stackByteEl(addr);
+  if(!cell) return;
+  cell.classList.remove('stack-byte-op-store','stack-byte-op-load');
+}
+
+function animIndicator(surface, addr, dir, active) {
+  if(surface === 'stack') {
+    if(active) setStackOpIndicator(addr, dir);
+    else clearStackOpIndicator(addr);
+    return;
+  }
+  if(active) setMemOpIndicator(addr, dir);
+  else clearMemOpIndicator(addr);
+}
+
+function animTargetAnchor(surface, addr) {
+  if(surface === 'stack') return stackByteEl(addr) || stackRowEl(addr);
+  return memEl(addr);
+}
+
+function rectEdgePoint(fromRect, toRect, stageRect) {
+  const fx = fromRect.left + fromRect.width / 2;
+  const fy = fromRect.top + fromRect.height / 2;
+  const tx = toRect.left + toRect.width / 2;
+  const ty = toRect.top + toRect.height / 2;
+  const dx = tx - fx;
+  const dy = ty - fy;
+  const hw = Math.max(fromRect.width / 2, 1);
+  const hh = Math.max(fromRect.height / 2, 1);
+  const scale = 1 / Math.max(Math.abs(dx) / hw || 0, Math.abs(dy) / hh || 0, 1);
+  const x = fx + dx * scale;
+  const y = fy + dy * scale;
+  return {
+    x: clamp(x - stageRect.left, 6, Math.max(stageRect.width - 6, 6)),
+    y: clamp(y - stageRect.top, 6, Math.max(stageRect.height - 6, 6)),
+  };
+}
+
 // ─────────────────────────────────────────────────────────
 // ANIMATION
 // ─────────────────────────────────────────────────────────
-async function animPacket(dir, bv, memIdx) {
+async function animPacket(dir, bv, targetIdx, opts={}) {
   const stage=$('animStage'), svg=$('animSVG');
+  const surface = opts.surface === 'stack' ? 'stack' : 'mem';
   const regAnchor = activeRegisterAnchor(dir);
-  const memAnchor = memEl(memIdx);
-  if(!stage||!svg||!regAnchor||!memAnchor){ await sleep(Math.max(S.speed*0.4,80)); return; }
+  const targetAnchor = animTargetAnchor(surface, targetIdx);
+  if(!stage||!svg||!regAnchor||!targetAnchor){ await sleep(Math.max(S.speed*0.4,80)); return; }
 
   const sr=stage.getBoundingClientRect();
   const rr=regAnchor.getBoundingClientRect();
-  const mr=memAnchor.getBoundingClientRect();
-
-  const px=r=>Math.max(6,Math.min(sr.width-6,  r.left+r.width/2 -sr.left));
-  const py=r=>Math.max(6, Math.min(sr.height-6,  r.top +r.height/2-sr.top));
-
-  const x1=dir==='store'?px(rr):px(mr), y1=dir==='store'?py(rr):py(mr);
-  const x2=dir==='store'?px(mr):px(rr), y2=dir==='store'?py(mr):py(rr);
+  const tr=targetAnchor.getBoundingClientRect();
+  const sourceRect = dir==='store' ? rr : tr;
+  const destRect = dir==='store' ? tr : rr;
+  const start = rectEdgePoint(sourceRect, destRect, sr);
+  const end = rectEdgePoint(destRect, sourceRect, sr);
 
   const col=dir==='store'?'#4ade80':'#60a5fa';
   const mk =dir==='store'?'url(#arrowG)':'url(#arrowB)';
-  setMemOpIndicator(memIdx, dir);
+  animIndicator(surface, targetIdx, dir, true);
 
   const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
-  [['x1',x1],['y1',y1],['x2',x2],['y2',y2],
+  [['x1',start.x],['y1',start.y],['x2',end.x],['y2',end.y],
    ['stroke',col],['stroke-width','1.8'],['stroke-dasharray','5 4'],
    ['stroke-linecap','round'],['opacity','0.52'],['marker-end',mk]].forEach(([k,v])=>ln.setAttribute(k,v));
   svg.appendChild(ln);
@@ -3713,16 +3822,16 @@ async function animPacket(dir, bv, memIdx) {
   const pkt=document.createElement('div');
   pkt.className=`anim-packet pkt-${dir}`;
   pkt.textContent=hex8(bv);
-  pkt.style.cssText=`left:${x1}px;top:${y1}px;`;
+  pkt.style.cssText=`left:${start.x}px;top:${start.y}px;`;
   stage.appendChild(pkt);
 
   const dur=Math.max(S.speed*0.58,110), t0=performance.now();
   await new Promise(res=>{
     function step(now){
       const t=Math.min((now-t0)/dur,1), e=ease(t);
-      pkt.style.left=(x1+(x2-x1)*e)+'px';
-      pkt.style.top =(y1+(y2-y1)*e)+'px';
-      t<1 ? requestAnimationFrame(step) : (pkt.remove(),ln.remove(),clearMemOpIndicator(memIdx),res());
+      pkt.style.left=(start.x+(end.x-start.x)*e)+'px';
+      pkt.style.top =(start.y+(end.y-start.y)*e)+'px';
+      t<1 ? requestAnimationFrame(step) : (pkt.remove(),ln.remove(),animIndicator(surface, targetIdx, dir, false),res());
     }
     requestAnimationFrame(step);
   });
@@ -3886,7 +3995,7 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // ─────────────────────────────────────────────────────────
 function saveSim(){
   const data={version:10,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,codeMemSplitWidth:S.codeMemSplitWidth,codeMemSplitManual:S.codeMemSplitManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,stackSizeInputUnit:S.stackSizeInputUnit,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,codeMemSplitWidth:S.codeMemSplitWidth,codeMemSplitManual:S.codeMemSplitManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
     memViewBase:S.memViewBase,
     regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],stackMem:Array.from(S.stackMem || []),stackState:Array.from((S.stackState || new Map()).entries()),
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
@@ -3906,6 +4015,7 @@ function loadSim(e){
       S.endian=d.endian; S.size=d.size; S.reg=d.reg;
       if(d.stackMode) S.stackMode=d.stackMode;
       if(Number.isFinite(d.stackSize)) S.stackSize = normalizeStackSizeBytes(d.stackSize);
+      S.stackSizeInputUnit = normalizeStackSizeUnit(d.stackSizeInputUnit || preferredStackSizeUnit(S.stackSize));
       S.sidebarPanelManual = !!d.sidebarPanelManual;
       S.stackPanelManual = !!d.stackPanelManual;
       S.codeMemSplitManual = !!d.codeMemSplitManual;

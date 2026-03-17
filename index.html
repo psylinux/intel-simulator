@@ -133,7 +133,7 @@
     <section class="ctrl-section">
       <div class="ctrl-label ctrl-label-stacked">
         <span>VELOCIDADE</span>
-        <span class="ctrl-label-subvalue">↔ <span id="speedVal">2500ms</span></span>
+        <span class="ctrl-label-subvalue"><span id="speedVal">2500ms</span></span>
       </div>
       <div class="speed-wrap">
         <span class="sp-fast">RÁPIDO</span>
@@ -299,8 +299,11 @@
       <div class="stack-size-row">
         <label class="stack-size-label" for="stackSizeInput">Tamanho da stack</label>
         <div class="stack-size-ctrl">
-          <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1024" step="1" value="64"/>
-          <span class="stack-size-unit">KB</span>
+          <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1048576" step="1" value="100"/>
+          <select class="stack-size-unit-select" id="stackSizeUnitSelect">
+            <option value="B" selected>Bytes</option>
+            <option value="KB">KB</option>
+          </select>
           <button class="stack-size-apply" type="button" onclick="App.applyStackSize()">Aplicar</button>
         </div>
       </div>

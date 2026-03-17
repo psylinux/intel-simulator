@@ -268,18 +268,20 @@ body.code-mem-resizing {
   margin-bottom: 0;
 }
 .ctrl-label-stacked {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
 }
 .ctrl-label-subvalue {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   color: var(--acc);
   font-size: var(--fs-ui-sm);
   letter-spacing: .5px;
   font-weight: 700;
+  margin-left: auto;
 }
 .ctrl-label-subvalue #speedVal {
   color: inherit;
@@ -1094,9 +1096,9 @@ body.pane-resizing .canvas-pane-handle {
 
 /* ── Anim Stage ── */
 #animStage {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
+  position: fixed;
+  inset: 52px 0 0 0;
+  z-index: 40;
   pointer-events: none;
   background: transparent;
   overflow: hidden;
@@ -1835,11 +1837,22 @@ body.code-mem-resizing #codeMemSplitHandle {
   border-color: var(--acc);
   box-shadow: 0 0 0 1px rgba(56,189,248,.18);
 }
-.stack-size-unit {
+.stack-size-unit-select {
+  min-width: 74px;
+  padding: 5px 7px;
+  border: 1px solid var(--bdr-hi);
+  border-radius: 6px;
+  background: var(--bg0);
+  color: var(--acc);
+  font-family: var(--mono);
   font-size: var(--fs-ui-xs);
   font-weight: 700;
-  letter-spacing: .8px;
-  color: var(--acc);
+  letter-spacing: .4px;
+  outline: none;
+}
+.stack-size-unit-select:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 1px rgba(56,189,248,.18);
 }
 .stack-size-apply {
   margin-left: auto;
@@ -2098,6 +2111,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   font-weight: 700;
 }
 .stack-row-byte {
+  position: relative;
   text-align: center;
   font-size: var(--fs-ui-sm);
   font-weight: 700;
@@ -2106,6 +2120,27 @@ body.code-mem-resizing #codeMemSplitHandle {
   border: 1px solid var(--bdr);
   border-radius: 4px;
   padding: 3px 0;
+}
+.stack-row-byte.stack-byte-op-store::after,
+.stack-row-byte.stack-byte-op-load::after {
+  position: absolute;
+  left: 50%;
+  top: -11px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 0 10px currentColor;
+  pointer-events: none;
+  z-index: 2;
+}
+.stack-row-byte.stack-byte-op-store::after {
+  content: '↓';
+  color: var(--grn);
+}
+.stack-row-byte.stack-byte-op-load::after {
+  content: '↑';
+  color: var(--blu);
 }
 .stack-row-tags {
   display: flex;

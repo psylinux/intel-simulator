@@ -1262,39 +1262,108 @@ function callSiteForReturn(retAddr) {
   };
 }
 
-function stackTraceFrames() {
-  const items = [{
-    kind: 'pc',
-    depth: 0,
-    addr: S.pc & 0x3F,
-    asm: codeLabelAt(S.pc),
-    extra: `${ipReg()} ativo`,
-  }];
+function normalizeStackTraceCall(frame) {
+  if(!frame) return null;
+  const callSite = frame.callSite & 0x3F;
+  const decoded = decodeAt(callSite);
+  return {
+    slot: frame.slot >>> 0,
+    width: frame.width || ptrSize(),
+    returnTo: frame.returnTo & 0x3F,
+    callSite,
+    callAsm: decoded.asm || frame.callAsm || `CALL @ 0x${fmtA(callSite)}`,
+  };
+}
 
+function currentReturnInfo() {
+  const top = normalizeStackTraceCall(S.callFrames[S.callFrames.length - 1]);
+  if(top) return top;
+
+  const bp = S.regs.EBP >>> 0;
+  if(!stackAccessFits(bp, ptrSize())) return null;
+  const retSlot = bp + ptrSize();
+  if(!stackAccessFits(retSlot, ptrSize())) return null;
+  const retAddr = readStackPtrLE(retSlot, ptrSize()) & 0x3F;
+  const callSite = callSiteForReturn(retAddr);
+  if(!callSite) return null;
+
+  return {
+    slot: retSlot,
+    width: ptrSize(),
+    returnTo: retAddr,
+    callSite: callSite.addr & 0x3F,
+    callAsm: callSite.asm || `CALL 0x${fmtA(retAddr)}`,
+  };
+}
+
+function stackTraceExtra(frameCall) {
+  if(!frameCall) return 'Frame raiz: nenhuma chamada ativa e nenhum endereco de retorno pendente.';
+  return `RET 0x${fmtA(frameCall.returnTo)} · slot [0x${fmtStackA(frameCall.slot)}] · entrou via ${frameCall.callAsm} @ 0x${fmtA(frameCall.callSite)}`;
+}
+
+function stackTraceFrames() {
+  const calls = (S.callFrames || []).map(normalizeStackTraceCall).filter(Boolean);
+  if(calls.length) {
+    const items = [];
+    const total = Math.min(calls.length + 1, 9);
+    for(let depth = 0; depth < total; depth++) {
+      const addr = depth===0
+        ? (S.pc & 0x3F)
+        : (calls[calls.length - depth].returnTo & 0x3F);
+      const frameCall = (calls.length - 1 - depth) >= 0
+        ? calls[calls.length - 1 - depth]
+        : null;
+      items.push({
+        kind: depth===0 ? 'current' : (frameCall ? 'caller' : 'root'),
+        label: depth===0 ? 'ATUAL' : (frameCall ? 'CHAMADOR' : 'RAIZ'),
+        depth,
+        addr,
+        asm: codeLabelAt(addr),
+        extra: stackTraceExtra(frameCall),
+      });
+    }
+    return items;
+  }
+
+  const items = [];
   const visitedBp = new Set();
   let bp = S.regs.EBP >>> 0;
-  let depth = 1;
+  let currentAddr = S.pc & 0x3F;
 
-  while(depth <= 8 && !visitedBp.has(bp) && stackAccessFits(bp, ptrSize())) {
-    visitedBp.add(bp);
-    const retSlot = bp + ptrSize();
-    if(!stackAccessFits(retSlot, ptrSize())) break;
-    const retAddr = readStackPtrLE(retSlot, ptrSize()) & 0x3F;
-    const callSite = callSiteForReturn(retAddr);
-    if(!callSite) break;
+  for(let depth = 0; depth <= 8; depth++) {
+    let frameCall = null;
+    if(stackAccessFits(bp, ptrSize())) {
+      const retSlot = bp + ptrSize();
+      if(stackAccessFits(retSlot, ptrSize())) {
+        const retAddr = readStackPtrLE(retSlot, ptrSize()) & 0x3F;
+        const callSite = callSiteForReturn(retAddr);
+        if(callSite) {
+          frameCall = {
+            slot: retSlot,
+            width: ptrSize(),
+            returnTo: retAddr,
+            callSite: callSite.addr & 0x3F,
+            callAsm: callSite.asm || `CALL 0x${fmtA(retAddr)}`,
+          };
+        }
+      }
+    }
 
     items.push({
-      kind: 'ret',
+      kind: depth===0 ? 'current' : (frameCall ? 'caller' : 'root'),
+      label: depth===0 ? 'ATUAL' : (frameCall ? 'CHAMADOR' : 'RAIZ'),
       depth,
-      addr: retAddr,
-      asm: codeLabelAt(retAddr),
-      extra: `via ${callSite.asm} @ 0x${fmtA(callSite.addr)}`,
+      addr: currentAddr,
+      asm: codeLabelAt(currentAddr),
+      extra: stackTraceExtra(frameCall),
     });
 
+    if(!frameCall || !stackAccessFits(bp, ptrSize()) || visitedBp.has(bp)) break;
     const prevBp = readStackPtrLE(bp, ptrSize()) >>> 0;
     if(prevBp===bp) break;
+    visitedBp.add(bp);
+    currentAddr = frameCall.returnTo & 0x3F;
     bp = prevBp;
-    depth++;
   }
 
   return items;
@@ -1305,7 +1374,7 @@ function buildStackTrace() {
   const rows = items.map(item => `
     <div class="stack-trace-row stack-trace-row-${item.kind}">
       <span class="stack-trace-depth">#${item.depth}</span>
-      <span class="stack-trace-kind">${item.kind==='pc' ? 'PC' : 'RET'}</span>
+      <span class="stack-trace-kind">${item.label}</span>
       <span class="stack-trace-addr">0x${fmtA(item.addr)}</span>
       <span class="stack-trace-asm">${item.asm}</span>
       <span class="stack-trace-extra">${item.extra}</span>
@@ -1316,17 +1385,17 @@ function buildStackTrace() {
     <div class="stack-trace">
       <div class="stack-trace-hd">
         <span>STACK TRACE</span>
-        <span class="stack-trace-hint">cadeia de retorno a partir de ${is64() ? 'RBP' : 'EBP'}</span>
+        <span class="stack-trace-hint">ordem das chamadas ativas e seus enderecos de retorno</span>
       </div>
       <div class="stack-trace-list">${rows}</div>
-      ${items.length===1 ? '<div class="stack-trace-empty">Nenhum endereco de retorno rastreavel no frame atual.</div>' : ''}
+      ${items.length===1 && items[0].kind==='root' ? '<div class="stack-trace-empty">Nenhuma chamada ativa no momento. O programa esta no frame raiz.</div>' : ''}
     </div>`;
 }
 
 function buildAsmTrace(opts={}) {
   const root = $('asmTrace');
   if(!root) return;
-  const autoScroll = opts.autoScroll !== false;
+  const autoScroll = opts.autoScroll === true;
 
   const primary = traceProgram(demoProgramForArch());
   const currentShown = primary.some(line => line.addr===S.pc);
@@ -1937,9 +2006,9 @@ function buildMemGrid() {
   const topAddr = base;
   const bottomAddr = Math.min(base + 63, memSpaceSize() - 1);
   g.innerHTML='';
-  a.innerHTML=`<span class="mem-dir-top"><span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span> base da janela</span>`;
+  a.innerHTML=`<span class="mem-dir-top"><span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span></span>`;
   const tag=$('addrDirTag');
-  if(tag) tag.textContent=`janela 0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · endereços crescem ↓ · stack e mapa sincronizados`;
+  if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · cresce ↓`;
   for(let r=0;r<8;r++) {
     const rowBase = base + (r * 8);
     const l=document.createElement('div');
@@ -1957,7 +2026,7 @@ function buildMemGrid() {
       g.appendChild(cell);
     }
   }
-  a.innerHTML+=`<span class="mem-dir-bottom"><span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span> endereços maiores</span>`;
+  a.innerHTML+=`<span class="mem-dir-bottom"><span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span></span>`;
   scheduleCenterPaneLayout();
 }
 
@@ -3488,7 +3557,7 @@ function buildStackView() {
   const bpName = is64() ? 'RBP' : 'EBP';
   const sp = S.regs.ESP >>> 0;
   const bp = S.regs.EBP >>> 0;
-  const ret = bp + ptrSize();
+  const retInfo = currentReturnInfo();
   const mode = S.stackMode === 'frame' ? 'FRAME' : 'FULL';
   const list = S.stackMode === 'frame'
     ? frameAddressesDesc()
@@ -3512,7 +3581,7 @@ function buildStackView() {
       <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${stackSizeKb()} KB</span></div>
       <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (topo da pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
       <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (base do frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${sp===bp ? '—' : `0x${fmtStackA(ret)}`}</span></div>
+      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${retInfo ? `0x${fmtA(retInfo.returnTo)}` : '—'}</span></div>
       <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">PC (Contador do Programa)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
     </div>
     ${buildStackTrace()}
@@ -3607,7 +3676,7 @@ async function animPacket(dir, bv, memIdx) {
 function setPC(addr, opts={}){
   S.pc=addr&0x3F;
   const syncTrace = opts.trace !== false;
-  const traceAutoScroll = opts.traceAutoScroll !== false;
+  const traceAutoScroll = opts.traceAutoScroll === true;
   const revealMem = opts.revealMem === true;
   const pd=$('pcDisplay');
   if(pd && document.activeElement!==pd) pd.value=fmtA(S.pc);

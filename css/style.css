@@ -1417,40 +1417,41 @@ body.code-mem-resizing #codeMemSplitHandle {
   overflow: auto;
 }
 #memAddrBar {
-  display: flex; flex-direction: column; gap: 2px;
-  padding-top: 2px;
-  width: 138px;
-  flex: 0 0 138px;
+  display: grid;
+  grid-template-rows: 24px repeat(8, clamp(22px, 2.8vh, 28px)) 24px;
+  gap: 2px;
+  width: 112px;
+  flex: 0 0 112px;
+  align-content: start;
 }
 .addr-lbl {
-  height: clamp(22px, 2.8vh, 28px); display: flex; align-items: center;
+  height: clamp(22px, 2.8vh, 28px); display: flex; align-items: center; justify-content: flex-end;
   font-size: var(--fs-ui-xs); color: var(--ui-address); letter-spacing: .2px;
   font-weight: 700;
   white-space: nowrap; font-family: var(--mono);
   width: 100%;
   box-sizing: border-box;
+  padding-right: 6px;
 }
 .mem-dir-top,
 .mem-dir-bottom {
   font-size: var(--fs-ui-xs); color: var(--tx1); letter-spacing: .6px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
   width: 100%;
   box-sizing: border-box;
-  text-align: left;
+  text-align: right;
   line-height: 1.2;
 }
-.mem-dir-top { margin-bottom: 6px; }
-.mem-dir-bottom { margin-top: 6px; }
 .mem-dir-chip {
   color: var(--acc);
   border: 1px solid var(--acc-dim);
   background: rgba(56,189,248,.06);
   border-radius: 999px;
   padding: 2px 6px;
-  align-self: flex-start;
+  min-width: 92px;
+  text-align: center;
 }
 
 #memGrid {
@@ -1976,27 +1977,43 @@ body.code-mem-resizing #codeMemSplitHandle {
   color: var(--tx1);
   letter-spacing: .3px;
 }
-.stack-trace-row-pc {
+.stack-trace-row-pc,
+.stack-trace-row-current {
   background: var(--role-pc-bg);
   border-color: rgba(0,229,255,.34);
   box-shadow: inset 0 0 16px rgba(0,229,255,.05);
 }
 .stack-trace-row-pc .stack-trace-kind,
-.stack-trace-row-pc .stack-trace-addr {
+.stack-trace-row-pc .stack-trace-addr,
+.stack-trace-row-current .stack-trace-kind,
+.stack-trace-row-current .stack-trace-addr {
   color: var(--role-pc);
   background: rgba(0,229,255,.14);
   border-color: rgba(0,229,255,.34);
 }
-.stack-trace-row-ret {
+.stack-trace-row-ret,
+.stack-trace-row-caller {
   background: var(--role-ret-bg);
   border-color: rgba(192,38,255,.34);
   box-shadow: inset 0 0 16px rgba(192,38,255,.05);
 }
 .stack-trace-row-ret .stack-trace-kind,
-.stack-trace-row-ret .stack-trace-addr {
+.stack-trace-row-ret .stack-trace-addr,
+.stack-trace-row-caller .stack-trace-kind,
+.stack-trace-row-caller .stack-trace-addr {
   color: var(--role-ret);
   background: rgba(192,38,255,.14);
   border-color: rgba(192,38,255,.34);
+}
+.stack-trace-row-root {
+  background: rgba(148,163,184,.08);
+  border-color: rgba(148,163,184,.22);
+}
+.stack-trace-row-root .stack-trace-kind,
+.stack-trace-row-root .stack-trace-addr {
+  color: var(--tx1);
+  background: rgba(148,163,184,.10);
+  border-color: rgba(148,163,184,.20);
 }
 .stack-trace-empty {
   font-size: var(--fs-ui-sm);

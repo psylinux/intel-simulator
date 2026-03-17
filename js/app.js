@@ -809,6 +809,7 @@ function init() {
   if(typeof window !== 'undefined') window.addEventListener('resize', () => {
     applyCenterPaneHeights();
     applyCodeMemSplit();
+    syncAsmTraceHeight();
   });
 }
 
@@ -1293,29 +1294,11 @@ function cForInstr(instr, addr) {
 function ensureCurrentTraceVisible() {
   const root = $('asmTrace');
   if(!root) return;
-
   const currentRow = root.querySelector('.trace-row-current');
   if(!currentRow) return;
-
-  const padTop = 10;
-  const padBottom = 12;
-  const rootStyle = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
-    ? window.getComputedStyle(root)
-    : { overflowY: '' };
-  const canScrollRoot = (rootStyle.overflowY === 'auto' || rootStyle.overflowY === 'scroll') && root.scrollHeight > (root.clientHeight + 2);
-  const container = canScrollRoot ? root : ($('canvas') || root);
-  const rootRect = container.getBoundingClientRect();
-  const rowRect = currentRow.getBoundingClientRect();
-  const overTop = rowRect.top - rootRect.top - padTop;
-  const overBottom = rowRect.bottom - rootRect.bottom + padBottom;
-
-  if(overTop < 0) {
-    container.scrollTop += overTop;
-    return;
-  }
-  if(overBottom > 0) {
-    container.scrollTop += overBottom;
-  }
+  // scrollIntoView with block:'nearest' moves the scroll only if the element
+  // is outside the visible area — it never steals keyboard focus.
+  currentRow.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
 }
 
 function codeLabelAt(addr) {
@@ -2155,6 +2138,27 @@ function buildMemGrid() {
   a.appendChild(addrFrag);
   g.appendChild(gridFrag);
   scheduleCenterPaneLayout();
+  syncAsmTraceHeight();
+}
+
+// Set #asmTraceSection height = #memSection's natural height so the grid row
+// is always dictated by the memory map, never by the (taller) listing content.
+function syncAsmTraceHeight() {
+  const mem = $('memSection');
+  const asm = $('asmTraceSection');
+  if(!mem || !asm) return;
+  // Remove height override so mem can express its natural size
+  asm.style.height = '';
+  asm.style.alignSelf = 'start';
+  mem.style.alignSelf = 'start';
+  // After the browser reflows mem at its natural height, pin asm to match
+  requestAnimationFrame(() => {
+    const h = mem.getBoundingClientRect().height;
+    if(h > 0) {
+      asm.style.height = h + 'px';
+      asm.style.alignSelf = 'start';
+    }
+  });
 }
 
 const memEl = addr => memCellRefs[addr] || null;
@@ -2885,7 +2889,7 @@ async function doFetch() {
   await sleep(S.speed * 0.4);
 
   // IP avança durante o fetch (antes do decode/execute)
-  setPC(np);
+  setPC(np, { traceAutoScroll: true });
   setStatus(`FETCH: IP atualizado → 0x${fmtA(np)}  (instrução no IR)`,'lbl-fetch');
   lg('info',`FETCH  IP ← 0x${fmtA(np)}  (incrementado durante o fetch, Intel SDM Vol.1 §6.3)`);
   await sleep(S.speed * 0.25);
@@ -2938,7 +2942,7 @@ async function _executeOne(opts={}) {
   await sleep(S.speed * 0.25);
 
   // IP avança durante o fetch
-  setPC(np_seq);
+  setPC(np_seq, { traceAutoScroll: true });
   if(isStepTrace) {
     lg('info', `${ipReg()} avança para 0x${fmtA(np_seq)} após o FETCH, antes do efeito da instrução.`, null, { indent:1, kindLabel:'FETCH' });
   }
@@ -2988,7 +2992,7 @@ async function _executeOne(opts={}) {
   }
 
   // JMP sobrescreve o IP que foi incrementado durante o fetch
-  if(instr.jmpTarget !== undefined) setPC(instr.jmpTarget);
+  if(instr.jmpTarget !== undefined) setPC(instr.jmpTarget, { traceAutoScroll: true });
 
   await sleep(S.speed * 0.2);
 

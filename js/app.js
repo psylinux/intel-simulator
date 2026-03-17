@@ -1936,6 +1936,15 @@ function renderByteStrip(name, opts={}) {
   }).join('');
 }
 
+function registerByteAnchor(name, byteIdx, transferCount=transferWidth(name)) {
+  const strip = $('rcb-'+name);
+  if(!strip || !Number.isInteger(byteIdx)) return null;
+  const displayPos = displayPosForTransferByte(name, byteIdx, transferCount);
+  if(displayPos < 0) return null;
+  const bytes = strip.querySelectorAll('.rc-byte');
+  return bytes[displayPos] || null;
+}
+
 function updateRegCard(name) {
   const v=$('rcv-'+name), b=$('rcb-'+name), s=$('rcs-'+name);
   if(!v) return;
@@ -2457,7 +2466,7 @@ async function doStore() {
     storeHighlight(reg, hexPos, n);
     setPC(ma, { traceAutoScroll:false });
     setMemSt(ma,'mc-active');
-    await animPacket('store', ord[i], ma);
+    await animPacket('store', ord[i], ma, { regName: reg, byteIdx: i, transferCount: n });
     writeMem(ma, ord[i], 'mc-active');
     lg('store',`  [0x${fmtA(ma)}] ← 0x${hex8(ord[i])}  (byte ${i+1}/${n})`,
        asmForOp('store-byte',{byteAddr:ma,byteVal:ord[i],byteIdx:i,byteCount:n}));
@@ -2503,7 +2512,7 @@ async function doLoad() {
   for(let i=0;i<n;i++) {
     const ma=addr+i; if(ma>=64) break;
     setPC(ma, { traceAutoScroll:false }); setMemSt(ma,'mc-active');
-    await animPacket('load', raw[i], ma);
+    await animPacket('load', raw[i], ma, { regName: reg, byteIdx: i, transferCount: n });
 
     partialLittle[i] = raw[i] & 0xFF;
     setRegFromBytes(reg, partialLittle);
@@ -3065,7 +3074,7 @@ async function doPush() {
     const hexPos=displayPosForTransferByte(reg, i, width);
     storeHighlight(reg, hexPos, width);
     setMemSt(ma,'mc-active');
-    await animPacket('store', bs[i], ma, { surface:'stack' });
+    await animPacket('store', bs[i], ma, { surface:'stack', regName: reg, byteIdx: i, transferCount: width });
     writeMem(ma, bs[i], 'mc-active');
     await sleep(S.speed*0.12);
     setMemSt(ma, 'mc-written');
@@ -3098,7 +3107,7 @@ async function doPop() {
   for(let i=0;i<width;i++) {
     const ma=sp+i;
     setMemSt(ma,'mc-active');
-    await animPacket('load', S.stackMem[ma], ma, { surface:'stack' });
+    await animPacket('load', S.stackMem[ma], ma, { surface:'stack', regName: reg, byteIdx: i, transferCount: width });
     partialLittle[i]=S.stackMem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
     liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
@@ -3724,12 +3733,15 @@ function toggleStackMode() {
 const stackRowEl = addr => $('stackView')?.querySelector(`.stack-row[data-stack-addr="${addr}"]`);
 const stackByteEl = addr => stackRowEl(addr)?.querySelector('.stack-row-byte') || null;
 
-function activeRegisterAnchor(dir) {
-  const bytes = $('rcb-'+S.reg);
+function activeRegisterAnchor(dir, opts={}) {
+  const regName = opts.regName || S.reg;
+  const transferCount = opts.transferCount || transferWidth(regName);
+  const exactByte = registerByteAnchor(regName, opts.byteIdx, transferCount);
+  const bytes = $('rcb-'+regName);
   if(dir==='store') {
-    return bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-'+S.reg) || $('rc-'+S.reg);
+    return exactByte || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-'+regName) || $('rc-'+regName);
   }
-  return $('rcv-'+S.reg) || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rc-'+S.reg);
+  return exactByte || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-'+regName) || $('rc-'+regName);
 }
 
 function setMemOpIndicator(addr, dir) {
@@ -3797,7 +3809,7 @@ function rectEdgePoint(fromRect, toRect, stageRect) {
 async function animPacket(dir, bv, targetIdx, opts={}) {
   const stage=$('animStage'), svg=$('animSVG');
   const surface = opts.surface === 'stack' ? 'stack' : 'mem';
-  const regAnchor = activeRegisterAnchor(dir);
+  const regAnchor = activeRegisterAnchor(dir, opts);
   const targetAnchor = animTargetAnchor(surface, targetIdx);
   if(!stage||!svg||!regAnchor||!targetAnchor){ await sleep(Math.max(S.speed*0.4,80)); return; }
 

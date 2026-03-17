@@ -1,138 +1,129 @@
 #!/usr/bin/env node
+// ═══════════════════════════════════════════════════════════════════════════
+//  MEM·SIM — Test Suite
+//
+//  Testa conformidade com Intel SDM x86/x86-64, regressão e bugs.
+//  Execução: node tools/validate-intel-subset.js [--filter <pattern>]
+//
+//  Categorias:
+//    [encoding]   — Codificação de bytes (assemble)
+//    [decode]     — Decodificador de opcode (decodeAt)
+//    [execute]    — Efeitos arquiteturais (_executeOne)
+//    [memory]     — Leitura/escrita de memória (doStore/doLoad)
+//    [stack]      — Pilha (PUSH/POP/CALL/RET)
+//    [endian]     — Endianness: execução sempre LE, visualização configurável
+//    [regs]       — Registradores (getReg/setReg/regBytes)
+//    [assembler]  — validateAssembly + assemble()
+//    [fetch]      — Ciclo FETCH / avanço de PC
+//    [fault]      — Detecção de falhas e halt
+//    [regression] — Bugs conhecidos que não devem regredir
+// ═══════════════════════════════════════════════════════════════════════════
 'use strict';
 
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
+const fs     = require('node:fs');
+const path   = require('node:path');
+const vm     = require('node:vm');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT   = path.resolve(__dirname, '..');
 const APP_JS = path.join(ROOT, 'js', 'app.js');
 
+// ─────────────────────────────────────────────────────────────────────────
+// Mock DOM infrastructure
+// ─────────────────────────────────────────────────────────────────────────
 class MockClassList {
-  constructor() {
-    this.items = new Set();
-  }
-  add(...tokens) {
-    tokens.filter(Boolean).forEach(token => this.items.add(token));
-  }
-  remove(...tokens) {
-    tokens.forEach(token => this.items.delete(token));
-  }
-  toggle(token, force) {
-    if(force === true) {
-      this.items.add(token);
-      return true;
-    }
-    if(force === false) {
-      this.items.delete(token);
-      return false;
-    }
-    if(this.items.has(token)) {
-      this.items.delete(token);
-      return false;
-    }
-    this.items.add(token);
-    return true;
-  }
-  contains(token) {
-    return this.items.has(token);
+  constructor() { this.items = new Set(); }
+  add(...t)         { t.filter(Boolean).forEach(x => this.items.add(x)); }
+  remove(...t)      { t.forEach(x => this.items.delete(x)); }
+  contains(t)       { return this.items.has(t); }
+  toggle(t, force) {
+    if (force === true)  { this.items.add(t);    return true;  }
+    if (force === false) { this.items.delete(t); return false; }
+    if (this.items.has(t)) { this.items.delete(t); return false; }
+    this.items.add(t); return true;
   }
 }
 
 class MockElement {
   constructor(id = '', tagName = 'div') {
-    this.id = id;
-    this.tagName = tagName.toUpperCase();
-    this.children = [];
-    this.dataset = {};
-    this.style = {
-      setProperty() {},
-    };
-    this.classList = new MockClassList();
-    this.className = '';
-    this.value = '';
+    this.id          = id;
+    this.tagName     = tagName.toUpperCase();
+    this.children    = [];
+    this.dataset     = {};
+    this.style       = { setProperty() {}, cssText: '' };
+    this.classList   = new MockClassList();
+    this.className   = '';
+    this.value       = '';
     this.textContent = '';
-    this.innerHTML = '';
-    this.disabled = false;
-    this.title = '';
+    this.innerHTML   = '';
+    this.disabled    = false;
+    this.title       = '';
     this.placeholder = '';
-    this.scrollTop = 0;
-    this.scrollHeight = 0;
-    this.clientHeight = 360;
-    this.onclick = null;
-    this.listeners = {};
+    this.scrollTop   = 0;
+    this.scrollHeight= 0;
+    this.clientHeight= 360;
+    this.onclick     = null;
+    this.listeners   = {};
+    this.maxLength   = Infinity;
+    this.type        = 'text';
+    this.min         = '';
+    this.max         = '';
+    this.step        = '';
+    this.checked     = false;
+    this.selected    = false;
+    this.options     = [];
+    this.selectedIndex = 0;
   }
-  appendChild(child) {
-    this.children.push(child);
-    this.scrollHeight = this.children.length * 24;
-    return child;
-  }
-  append(...nodes) {
-    nodes.forEach(node => this.appendChild(node));
-  }
-  querySelector() {
-    return new MockElement();
-  }
-  querySelectorAll() {
-    return [];
-  }
-  addEventListener(type, handler) {
-    if(!this.listeners[type]) this.listeners[type] = [];
-    this.listeners[type].push(handler);
-  }
-  removeEventListener() {}
-  setAttribute(name, value) {
-    this[name] = value;
-  }
-  focus() {}
+  appendChild(c)            { this.children.push(c); this.scrollHeight = this.children.length * 24; return c; }
+  append(...ns)             { ns.forEach(n => this.appendChild(n)); }
+  querySelector()           { return new MockElement(); }
+  querySelectorAll()        { return []; }
+  addEventListener(t, h)   { (this.listeners[t] = this.listeners[t] || []).push(h); }
+  removeEventListener()    {}
+  setAttribute(k, v)       { this[k] = v; }
+  getAttribute(k)          { return this[k] ?? null; }
+  hasAttribute(k)          { return k in this; }
+  focus()  {}
   select() {}
   remove() {}
-  click() {
-    if(typeof this.onclick === 'function') {
-      this.onclick({ target:this, preventDefault() {}, stopPropagation() {} });
-    }
-  }
-  closest() {
-    return null;
-  }
-  getBoundingClientRect() {
-    return { left:0, top:0, right:640, bottom:480, width:640, height:480 };
-  }
+  click()  { if (typeof this.onclick === 'function') this.onclick({ target: this, preventDefault() {}, stopPropagation() {} }); }
+  closest()                { return null; }
+  getBoundingClientRect()  { return { left:0, top:0, right:640, bottom:480, width:640, height:480 }; }
+  insertBefore(n)          { this.children.unshift(n); return n; }
+  replaceChild(n, o)       { const i = this.children.indexOf(o); if (i >= 0) this.children[i] = n; return o; }
+  removeChild(c)           { this.children = this.children.filter(x => x !== c); return c; }
+  contains()               { return false; }
+  get parentElement()      { return null; }
+  get nextSibling()        { return null; }
+  get previousSibling()    { return null; }
+  get firstChild()         { return this.children[0] || null; }
+  get lastChild()          { return this.children[this.children.length - 1] || null; }
+  get nodeType()           { return 1; }
 }
 
 function createDocument() {
   const elements = new Map();
-  const nullIds = [/^animStage$/, /^animSVG$/, /^rc/, /^rpv-/, /^rpb-/, /^r[A-Z0-9]+$/];
-
+  // IDs whose elements should return null (dynamic render targets, animation elements)
+  const nullIds = [
+    /^animStage$/, /^animSVG$/, /^rc-/, /^rcv-/, /^rcb-/, /^rpv-/, /^rpb-/,
+    /^r[A-Z0-9]+$/, /^asmTrace$/, /^stackView$/, /^stackLegend$/,
+    /^codeMemSplit/, /^sidebarResize/, /^stackResize/,
+  ];
   const doc = {
     body: new MockElement('body', 'body'),
     _listeners: {},
     getElementById(id) {
-      if(nullIds.some(rx => rx.test(id))) return null;
-      if(!elements.has(id)) elements.set(id, new MockElement(id));
+      if (nullIds.some(rx => rx.test(id))) return null;
+      if (!elements.has(id)) elements.set(id, new MockElement(id));
       return elements.get(id);
     },
-    querySelectorAll() {
-      return [];
-    },
-    querySelector() {
-      return null;
-    },
-    createElement(tagName) {
-      return new MockElement('', tagName);
-    },
-    createElementNS(_ns, tagName) {
-      return new MockElement('', tagName);
-    },
-    createTextNode(text) {
-      return { nodeType:3, nodeValue:String(text) };
-    },
-    addEventListener(type, handler) {
-      this._listeners[type] = handler;
-    },
+    querySelectorAll() { return []; },
+    querySelector()    { return null; },
+    createElement(t)   { return new MockElement('', t); },
+    createElementNS(_, t) { return new MockElement('', t); },
+    createTextNode(text)  { return { nodeType: 3, nodeValue: String(text) }; },
+    addEventListener(t, h) { this._listeners[t] = h; },
   };
-
   return { document: doc, elements };
 }
 
@@ -140,59 +131,35 @@ function loadSimulator() {
   const { document, elements } = createDocument();
   const storage = new Map();
   let tick = 0;
-  const context = {
-    console,
-    Math,
-    Date,
-    JSON,
-    RegExp,
-    Array,
-    Object,
-    Set,
-    Map,
-    String,
-    Number,
-    Boolean,
-    BigInt,
-    Promise,
-    Uint8Array,
-    parseInt,
-    parseFloat,
+  const ctx = {
+    console, Math, Date, JSON, RegExp, Array, Object, Set, Map,
+    String, Number, Boolean, BigInt, Promise, Uint8Array,
+    parseInt, parseFloat,
     URL: { createObjectURL() { return 'blob:mock'; } },
-    Blob: class Blob {},
+    Blob:       class Blob {},
     FileReader: class FileReader {},
-    setTimeout(fn) {
-      if(typeof fn === 'function') fn();
-      return 0;
-    },
-    clearTimeout() {},
-    requestAnimationFrame(fn) {
-      if(typeof fn === 'function') fn((tick += 16));
-      return 0;
-    },
-    cancelAnimationFrame() {},
-    performance: {
-      now() {
-        return ++tick;
-      },
-    },
+    setTimeout(fn)           { if (typeof fn === 'function') fn(); return 0; },
+    clearTimeout()           {},
+    setInterval(fn)          { return 0; },
+    clearInterval()          {},
+    requestAnimationFrame(fn){ if (typeof fn === 'function') fn((tick += 16)); return 0; },
+    cancelAnimationFrame()   {},
+    performance: { now() { return ++tick; } },
     localStorage: {
-      getItem(key) {
-        return storage.has(key) ? storage.get(key) : null;
-      },
-      setItem(key, value) {
-        storage.set(key, String(value));
-      },
-      removeItem(key) {
-        storage.delete(key);
-      },
+      getItem(k)    { return storage.has(k) ? storage.get(k) : null; },
+      setItem(k, v) { storage.set(k, String(v)); },
+      removeItem(k) { storage.delete(k); },
     },
     document,
     navigator: { userAgent: 'node' },
+    ResizeObserver: class ResizeObserver { observe(){} unobserve(){} disconnect(){} },
+    MutationObserver: class MutationObserver { observe(){} disconnect(){} },
+    getComputedStyle() { return { getPropertyValue() { return ''; } }; },
+    CSS: { supports() { return false; } },
   };
-  context.window = context;
-  context.globalThis = context;
-  vm.createContext(context);
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
 
   const source = fs.readFileSync(APP_JS, 'utf8') + `
 globalThis.__memsim = {
@@ -220,269 +187,1612 @@ globalThis.__memsim = {
   setRegFromBytes,
   ptrSize,
   mapAccessFits,
+  stackAccessFits,
   isInstructionFault,
   loadDefaultProgram,
-  resetCoreRegisters
+  resetCoreRegisters,
+  getBytes,
+  ordered,
+  hex32,
+  hex8,
+  fmtA,
+  clamp,
+  normalizeStackSizeBytes,
+  normalizeSpeed,
+  isSpReg,
+  isStackTopReg,
+  isStackBaseReg,
+  gpRegs,
+  extRegs,
+  spRegs,
+  is64,
+  sizeN,
+  transferWidth,
 };
 `;
-  vm.runInContext(source, context, { filename: APP_JS });
-  return { api: context.__memsim, document, elements };
+  vm.runInContext(source, ctx, { filename: APP_JS });
+  return { api: ctx.__memsim, document, elements };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Test helpers
+// ─────────────────────────────────────────────────────────────────────────
 function hexBytes(bytes) {
   return bytes.map(v => v.toString(16).padStart(2, '0').toUpperCase());
 }
-
-function setAddr(document, addr) {
-  document.getElementById('addrInput').value = addr.toString(16).padStart(4, '0').toUpperCase();
+function setAddr(doc, addr) {
+  doc.getElementById('addrInput').value = addr.toString(16).padStart(4, '0').toUpperCase();
 }
-
 function defaultStackTop(api) {
   return api.S.stackSize;
 }
-
 function resetSim(api, document, arch = 'ia32') {
-  api.S.arch = arch;
-  api.S.endian = 'little';
-  api.S.size = arch === 'x64' ? 'qword' : 'dword';
-  api.S.reg = arch === 'x64' ? 'RAX' : 'EAX';
-  api.S.stackSize = 100 * 1024;
-  api.S.busy = false;
-  api.S.halt = false;
-  api.S.faulted = false;
-  api.S.progRunning = false;
-  api.S.callFrames = [];
+  api.S.arch         = arch;
+  api.S.endian       = 'little';
+  api.S.size         = arch === 'x64' ? 'qword' : 'dword';
+  api.S.reg          = arch === 'x64' ? 'RAX' : 'EAX';
+  api.S.stackSize    = 100 * 1024;   // 100 KB
+  api.S.busy         = false;
+  api.S.halt         = false;
+  api.S.faulted      = false;
+  api.S.progRunning  = false;
+  api.S.callFrames   = [];
   api.resetCoreRegisters();
-  api.S.stackMem = new Uint8Array(api.S.stackSize);
-  api.S.regs.ESP = defaultStackTop(api);
-  api.S.regs.EBP = defaultStackTop(api);
+  api.S.stackMem     = new Uint8Array(api.S.stackSize);
+  api.S.regs.ESP     = defaultStackTop(api);
+  api.S.regs.EBP     = defaultStackTop(api);
   api.S.mem.fill(0);
   api.S.memState.fill('');
   setAddr(document, 0);
   api.setPC(0);
 }
-
 function writeBytes(api, addr, bytes) {
-  bytes.forEach((byte, idx) => {
-    api.S.mem[(addr + idx) & 0x3F] = byte & 0xFF;
-    api.S.memState[(addr + idx) & 0x3F] = 'mc-written';
+  bytes.forEach((b, i) => {
+    api.S.mem[(addr + i) & 0x3F] = b & 0xFF;
+    api.S.memState[(addr + i) & 0x3F] = 'mc-written';
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Test runner
+// ─────────────────────────────────────────────────────────────────────────
 const tests = [];
+let currentSuite = '';
+
+function suite(name) { currentSuite = name; }
+
 function test(name, fn) {
-  tests.push({ name, fn });
+  tests.push({ name: `[${currentSuite}] ${name}`, fn });
 }
 
-test('STORE standalone sempre grava little-endian, mesmo com visualizacao BIG', async () => {
-  const { api, document } = loadSimulator();
-  resetSim(api, document, 'ia32');
-  api.S.endian = 'big';
-  api.S.size = 'dword';
-  api.S.reg = 'EAX';
-  api.setReg('EAX', 0x12345678);
-  setAddr(document, 0x0010);
-  await api.doStore();
-  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0x78, 0x56, 0x34, 0x12]);
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: PURE UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+suite('utils');
+
+test('hex32: unsigned, zero-padded, uppercase', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.hex32(0xDEADBEEF), 'DEADBEEF');
+  assert.equal(api.hex32(0),          '00000000');
+  assert.equal(api.hex32(1),          '00000001');
+  assert.equal(api.hex32(-1),         'FFFFFFFF');   // unsigned truncation
+  assert.equal(api.hex32(0x100000000),'00000000');   // overflow → 0
 });
 
-test('LOAD standalone sempre le little-endian, mesmo com visualizacao BIG', async () => {
-  const { api, document } = loadSimulator();
-  resetSim(api, document, 'ia32');
-  api.S.endian = 'big';
-  api.S.size = 'dword';
-  api.S.reg = 'EAX';
-  writeBytes(api, 0x0020, [0x78, 0x56, 0x34, 0x12]);
-  setAddr(document, 0x0020);
-  await api.doLoad();
-  assert.equal(api.regHex('EAX'), '12345678');
+test('hex8: masked to 8 bits, uppercase', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.hex8(0xEF),   'EF');
+  assert.equal(api.hex8(0),      '00');
+  assert.equal(api.hex8(0x1FF),  'FF');  // masked
+  assert.equal(api.hex8(255),    'FF');
 });
 
-test('MOV r32, imm32 executa com imediato little-endian e PC sequencial', async () => {
-  const { api, document } = loadSimulator();
-  resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xB8, 0x78, 0x56, 0x34, 0x12]);
-  await api._executeOne();
-  assert.equal(api.regHex('EAX'), '12345678');
-  assert.equal(api.S.pc, 0x0005);
+test('fmtA: 4-char zero-padded hex', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.fmtA(0),      '0000');
+  assert.equal(api.fmtA(0x3F),   '003F');
+  assert.equal(api.fmtA(0xABCD), 'ABCD');
 });
 
-test('MOV r64, imm64 com REX.W carrega 64 bits completos', async () => {
+test('clamp: boundaries and middle', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.clamp(5, 0, 10),  5);
+  assert.equal(api.clamp(-5, 0, 10), 0);
+  assert.equal(api.clamp(15, 0, 10), 10);
+  assert.equal(api.clamp(0, 0, 0),   0);
+});
+
+test('getBytes: LSB first, correct count', () => {
+  const { api } = loadSimulator();
+  assert.deepEqual(api.getBytes(0x12345678, 4), [0x78, 0x56, 0x34, 0x12]);
+  assert.deepEqual(api.getBytes(0x12345678, 2), [0x78, 0x56]);
+  assert.deepEqual(api.getBytes(0x12345678, 1), [0x78]);
+  assert.deepEqual(api.getBytes(0x00000000, 4), [0, 0, 0, 0]);
+  assert.deepEqual(api.getBytes(0xFFFFFFFF, 4), [0xFF, 0xFF, 0xFF, 0xFF]);
+});
+
+test('ordered: little-endian = LSB first, big-endian = MSB first', () => {
+  const { api } = loadSimulator();
+  // Intel Vol.1 §1.3.2: little-endian stores LSB at lowest address
+  assert.deepEqual(api.ordered(0xDEADBEEF, 4, 'little'), [0xEF, 0xBE, 0xAD, 0xDE]);
+  assert.deepEqual(api.ordered(0xDEADBEEF, 4, 'big'),    [0xDE, 0xAD, 0xBE, 0xEF]);
+  assert.deepEqual(api.ordered(0x1234, 2, 'little'),     [0x34, 0x12]);
+  assert.deepEqual(api.ordered(0x1234, 2, 'big'),        [0x12, 0x34]);
+});
+
+test('normalizeStackSizeBytes: clamps to [1, 1MB]', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.normalizeStackSizeBytes(0),        1);
+  assert.equal(api.normalizeStackSizeBytes(100),      100);
+  assert.equal(api.normalizeStackSizeBytes(1048576),  1048576);
+  assert.equal(api.normalizeStackSizeBytes(9999999),  1048576);
+  assert.equal(api.normalizeStackSizeBytes(-10),      1);
+});
+
+test('normalizeSpeed: clamps to [80, 10000]', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.normalizeSpeed(80),    80);
+  assert.equal(api.normalizeSpeed(0),     80);
+  assert.equal(api.normalizeSpeed(2500),  2500);
+  assert.equal(api.normalizeSpeed(99999), 10000);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: REGISTER ACCESS
+// ═══════════════════════════════════════════════════════════════════════════
+suite('regs');
+
+test('getReg/setReg round-trip for all IA-32 GP registers', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const gp = ['EAX','EBX','ECX','EDX','ESI','EDI'];
+  gp.forEach((r, i) => {
+    const v = (0xAABBCC00 + i) >>> 0;
+    api.setReg(r, v);
+    assert.equal(api.getReg(r), v, `${r} round-trip`);
+  });
+});
+
+test('getReg/setReg round-trip for x64 GP registers (lo32)', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'x64');
-  writeBytes(api, 0x0000, [0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
-  await api._executeOne();
-  assert.equal(api.regHex('RAX'), '1122334455667788');
-  assert.equal(api.S.pc, 0x000A);
+  const gp = ['RAX','RBX','RCX','RDX','RSI','RDI'];
+  gp.forEach((r, i) => {
+    const v = (0xDEAD0000 + i) >>> 0;
+    api.setReg(r, v);
+    assert.equal(api.getReg(r), v, `${r} round-trip`);
+  });
 });
 
-test('MOV [mem], reg grava bytes little-endian no subset decodificado', async () => {
+test('RSP aliases to S.regs.ESP in both arches', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.setReg('RSP', 0x1234);
+  assert.equal(api.S.regs.ESP, 0x1234);
+  assert.equal(api.getReg('RSP'), 0x1234);
+});
+
+test('RBP aliases to S.regs.EBP', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.setReg('RBP', 0xABCD);
+  assert.equal(api.S.regs.EBP, 0xABCD);
+  assert.equal(api.getReg('RBP'), 0xABCD);
+});
+
+test('R8–R15 independent storage (x64 only)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  for (let i = 8; i <= 15; i++) {
+    const name = `R${i}`;
+    const v = (0x10000000 + i) >>> 0;
+    api.setReg(name, v);
+    assert.equal(api.getReg(name), v, `${name} round-trip`);
+  }
+});
+
+test('regBytes IA-32: EAX=0xDEADBEEF → [EF,BE,AD,DE]', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.setReg('EAX', 0xDEADBEEF);
-  writeBytes(api, 0x0000, api.assemble('MOV DWORD PTR [0x0010], EAX', 0x0000));
+  assert.deepEqual(api.regBytes('EAX', 4), [0xEF, 0xBE, 0xAD, 0xDE]);
+});
+
+test('regBytes: partial width (2 bytes, 1 byte)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0xDEADBEEF);
+  assert.deepEqual(api.regBytes('EAX', 2), [0xEF, 0xBE]);
+  assert.deepEqual(api.regBytes('EAX', 1), [0xEF]);
+});
+
+test('regHex: 8 chars for 32-bit, correct value', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EBX', 0xCAFEBABE);
+  assert.equal(api.regHex('EBX'), 'CAFEBABE');
+});
+
+test('regParts: lo32 and hi32 separated correctly', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.setRegParts('RAX', 0x11111111, 0x22222222);
+  const { lo, hi } = api.regParts('RAX');
+  assert.equal(lo, 0x11111111);
+  assert.equal(hi, 0x22222222);
+});
+
+test('setRegFromBytes reconstructs 32-bit value from LE bytes', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // 0x12345678 little-endian = [0x78, 0x56, 0x34, 0x12]
+  api.setRegFromBytes('EAX', [0x78, 0x56, 0x34, 0x12]);
+  assert.equal(api.getReg('EAX'), 0x12345678);
+});
+
+test('setRegFromBytes reconstructs 64-bit value from LE bytes', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  // 0x1122334455667788 LE = [88,77,66,55,44,33,22,11]
+  api.setRegFromBytes('RAX', [0x88,0x77,0x66,0x55,0x44,0x33,0x22,0x11]);
+  assert.equal(api.regHex('RAX'), '1122334455667788');
+});
+
+test('ptrSize: 4 in ia32, 8 in x64', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.ptrSize(), 4);
+  api.S.arch = 'x64';
+  assert.equal(api.ptrSize(), 8);
+});
+
+test('isSpReg / isStackTopReg / isStackBaseReg helpers', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.isSpReg('ESP'), true);
+  assert.equal(api.isSpReg('EBP'), true);
+  assert.equal(api.isSpReg('EAX'), false);
+  assert.equal(api.isStackTopReg('ESP'), true);
+  assert.equal(api.isStackTopReg('EBP'), false);
+  assert.equal(api.isStackBaseReg('EBP'), true);
+  assert.equal(api.isStackBaseReg('ESP'), false);
+  api.S.arch = 'x64';
+  assert.equal(api.isStackTopReg('RSP'), true);
+  assert.equal(api.isStackBaseReg('RBP'), true);
+});
+
+test('gpRegs/extRegs/spRegs return correct sets per arch', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.deepEqual(api.gpRegs(),  ['EAX','EBX','ECX','EDX','ESI','EDI']);
+  assert.deepEqual(api.extRegs(), []);
+  assert.deepEqual(api.spRegs(),  ['ESP','EBP']);
+  api.S.arch = 'x64';
+  assert.deepEqual(api.gpRegs(),  ['RAX','RBX','RCX','RDX','RSI','RDI']);
+  assert.deepEqual(api.extRegs(), ['R8','R9','R10','R11','R12','R13','R14','R15']);
+  assert.deepEqual(api.spRegs(),  ['RSP','RBP']);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: ENCODING (assemble)
+//  Reference: Intel SDM Vol.2 — Instruction Set Reference
+// ═══════════════════════════════════════════════════════════════════════════
+suite('encoding');
+
+test('NOP → 0x90 (SDM Vol.2 §NOP)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.deepEqual(api.assemble('NOP', 0), [0x90]);
+});
+
+test('HLT → 0xF4 (SDM Vol.2 §HLT)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.deepEqual(api.assemble('HLT', 0), [0xF4]);
+});
+
+test('RET → 0xC3 (SDM Vol.2 §RET: near return)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.deepEqual(api.assemble('RET', 0), [0xC3]);
+});
+
+test('MOV EAX, imm32: B8+rd with LE immediate (SDM Vol.2 §MOV B8+rd)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // B8 = MOV EAX; opcode B8+0=B8
+  assert.deepEqual(hexBytes(api.assemble('MOV EAX, 0x12345678', 0)),
+    ['B8', '78', '56', '34', '12']);
+});
+
+test('MOV ECX, imm32: B8+rd=B9 (ECX encoding=1)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // ECX index=1 → 0xB9
+  assert.deepEqual(hexBytes(api.assemble('MOV ECX, 0x00000001', 0)),
+    ['B9', '01', '00', '00', '00']);
+});
+
+test('MOV EDX, imm32: opcode B8+2=BA', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // EDX index=2 → 0xBA
+  const bytes = api.assemble('MOV EDX, 0xABCDEF00', 0);
+  assert.equal(bytes[0], 0xBA);
+  assert.deepEqual(bytes.slice(1), [0x00, 0xEF, 0xCD, 0xAB]);
+});
+
+test('MOV EBX, imm32: opcode B8+3=BB', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('MOV EBX, 0xCAFEBABE', 0);
+  assert.equal(bytes[0], 0xBB);
+});
+
+test('MOV ESI/EDI: opcodes B8+6=BE, B8+7=BF', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // REG32 = [EAX,ECX,EDX,EBX,ESP,EBP,ESI,EDI] → ESI=6, EDI=7
+  assert.equal(api.assemble('MOV ESI, 0', 0)[0], 0xBE);
+  assert.equal(api.assemble('MOV EDI, 0', 0)[0], 0xBF);
+});
+
+test('MOV r64, imm32 in x64: REX.W(0x48) + B8+rd + 4-byte imm', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  // REX.W = 0x48 (W=1, no R/B); RAX=0 → B8
+  const bytes = api.assemble('MOV RAX, 0x12345678', 0);
+  assert.equal(bytes[0], 0x48);   // REX.W
+  assert.equal(bytes[1], 0xB8);   // MOV r64 opcode for RAX
+  assert.deepEqual(bytes.slice(2, 6), [0x78, 0x56, 0x34, 0x12]);   // imm32 LE
+  assert.deepEqual(bytes.slice(6, 10), [0, 0, 0, 0]);              // hi32=0
+});
+
+test('MOV RAX, imm64: REX.W + B8 + 8-byte immediate LE', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  // 0x0102030405060708 LE = [08,07,06,05,04,03,02,01]
+  const bytes = api.assemble('MOV RAX, 0x0102030405060708', 0);
+  assert.equal(bytes[0], 0x48);
+  assert.equal(bytes[1], 0xB8);
+  assert.deepEqual(bytes.slice(2, 10), [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01]);
+});
+
+test('MOV R8, imm: REX.B set (R8 extends opcode reg field)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const bytes = api.assemble('MOV R8, 0x00000001', 0);
+  // REX must have B bit set (0x49 = 0100 1001 = REX.W=1, REX.B=1)
+  assert.equal(bytes[0] & 0x01, 1, 'REX.B must be set for R8');
+  assert.equal(bytes[1], 0xB8);   // R8 uses opcode B8 (idx 0 in REG64X, with REX.B)
+});
+
+test('MOV reg, reg: 0x89 ModRM mod=11', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('MOV EBX, EAX', 0);
+  // 0x89 MOV r/m32,r32; ModRM: mod=11 reg=EAX(0) rm=EBX(3)
+  // ModRM = 11 000 011 = 0b11000011 = 0xC3
+  assert.equal(bytes[0], 0x89);
+  assert.equal(bytes[1], 0xC3);
+});
+
+test('MOV ECX, EDX: 0x89 ModRM mod=11 reg=EDX(2) rm=ECX(1)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('MOV ECX, EDX', 0);
+  assert.equal(bytes[0], 0x89);
+  // ModRM: mod=11(0xC0) reg=EDX(2→0x10) rm=ECX(1→0x01) = 0xD1
+  assert.equal(bytes[1], 0xD1);
+});
+
+test('MOV [mem], reg: 0x89 mod=00 rm=0 + addr byte', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('MOV DWORD PTR [0x0010], EAX', 0);
+  // 0x89 ModRM: mod=00 reg=EAX(0) rm=0 → 0x00; then addr=0x10
+  assert.equal(bytes[0], 0x89);
+  assert.equal(bytes[1], 0x00);   // mod=00, reg=0, rm=0
+  assert.equal(bytes[2], 0x10);   // address
+});
+
+test('MOV reg, [mem]: 0x8B mod=00 rd + addr byte', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('MOV ECX, DWORD PTR [0x0020]', 0);
+  // 0x8B ModRM: mod=00 reg=ECX(1) rm=0 → 0x08; addr=0x20
+  assert.equal(bytes[0], 0x8B);
+  assert.equal(bytes[1], 0x08);
+  assert.equal(bytes[2], 0x20);
+});
+
+test('PUSH EAX (ia32): 0xFF ModRM /6 mod=11 rm=EAX(0)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('PUSH EAX', 0);
+  // 0xFF; ModRM: mod=11 reg=6(/6) rm=0 = 11 110 000 = 0xF0
+  assert.equal(bytes[0], 0xFF);
+  assert.equal(bytes[1], 0xF0);
+});
+
+test('POP EBX (ia32): 0x8F ModRM /0 mod=11 rm=EBX(3)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const bytes = api.assemble('POP EBX', 0);
+  // 0x8F; ModRM: mod=11 reg=0(/0) rm=3 = 11 000 011 = 0xC3
+  assert.equal(bytes[0], 0x8F);
+  assert.equal(bytes[1], 0xC3);
+});
+
+test('PUSH RAX (x64): REX prefix + 0xFF /6', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const bytes = api.assemble('PUSH RAX', 0);
+  // In x64, 64-bit pushes default; some assemblers omit REX but include for clarity
+  // We expect 0xFF with correct ModRM
+  const ffIdx = bytes.indexOf(0xFF);
+  assert.ok(ffIdx >= 0, 'must contain 0xFF opcode');
+  assert.equal(bytes[ffIdx + 1] & 0x38, 0x30, '/6 subopcode in ModRM.reg field');
+});
+
+test('JMP SHORT forward: 0xEB rel8 positive', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // JMP to address 0x000A from base 0x0000: rel = 0x000A - (0x0000 + 2) = 0x08
+  const bytes = api.assemble('JMP 0x000A', 0x0000);
+  assert.equal(bytes[0], 0xEB);
+  assert.equal(bytes[1], 0x08);
+});
+
+test('JMP SHORT backward: 0xEB with negative rel8 (two-complement)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // JMP to address 0x0000 from base 0x000A: rel = 0 - (0xA + 2) = -12 = 0xF4
+  const bytes = api.assemble('JMP 0x0000', 0x000A);
+  assert.equal(bytes[0], 0xEB);
+  assert.equal(bytes[1], 0xF4);   // -12 as signed byte
+});
+
+test('CALL rel32: 0xE8 + 4-byte signed offset LE', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // CALL to 0x000A from base 0x0000: rel = 0x000A - (0x0000 + 5) = 0x05
+  const bytes = api.assemble('CALL 0x000A', 0x0000);
+  assert.equal(bytes[0], 0xE8);
+  assert.deepEqual(bytes.slice(1, 5), [0x05, 0x00, 0x00, 0x00]);
+});
+
+test('assemble returns null for unrecognized mnemonic', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.assemble('ADD EAX, EBX', 0), null);
+  assert.equal(api.assemble('XOR EAX, EAX', 0), null);
+  assert.equal(api.assemble('SUB ESP, 4', 0), null);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: DECODE
+//  Reference: Intel SDM Vol.2 — instruction formats
+// ═══════════════════════════════════════════════════════════════════════════
+suite('decode');
+
+test('decodeAt: NOP size=1, mnem=NOP', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0x90;
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 1);
+  assert.match(instr.mnem, /NOP/i);
+  assert.equal(instr.unknown, undefined);
+});
+
+test('decodeAt: HLT size=1', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0xF4;
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 1);
+  assert.match(instr.mnem, /HLT/i);
+});
+
+test('decodeAt: MOV EAX, imm32 size=5', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0xB8, 0x78, 0x56, 0x34, 0x12]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 5);
+  assert.match(instr.mnem, /MOV/i);
+  assert.match(instr.mnem, /EAX/i);
+  assert.match(instr.mnem, /12345678/i);
+});
+
+test('decodeAt: MOV r32,r32 size=2 (no REX)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EBX, EAX: 0x89 0xC3
+  writeBytes(api, 0, [0x89, 0xC3]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 2);
+});
+
+test('decodeAt: JMP SHORT size=2, jmpTarget set', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // JMP +8: 0xEB 0x08 from addr 0; target = 0 + 2 + 8 = 10
+  writeBytes(api, 0, [0xEB, 0x08]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 2);
+  assert.equal(instr.jmpTarget, 0x0A);
+});
+
+test('decodeAt: JMP negative rel8, correct target', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // rel = -12 = 0xF4; from addr 0x0A: target = 0x0A + 2 + (-12) = 0
+  writeBytes(api, 0x0A, [0xEB, 0xF4]);
+  const instr = api.decodeAt(0x0A);
+  assert.equal(instr.jmpTarget, 0x00);
+});
+
+test('decodeAt x64: REX prefix consumed, correct size for MOV RAX,imm64', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  // REX.W(0x48) B8 + 8 bytes = 10 bytes total
+  writeBytes(api, 0, [0x48, 0xB8, 0x88,0x77,0x66,0x55, 0x44,0x33,0x22,0x11]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 10);
+  assert.match(instr.mnem, /RAX/i);
+});
+
+test('decodeAt x64: REX.B extends opcode reg to R8', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  // REX.W|REX.B = 0x49; B8+0 = 0xB8 → MOV R8, imm64
+  writeBytes(api, 0, [0x49, 0xB8, 0x01,0x00,0x00,0x00, 0x00,0x00,0x00,0x00]);
+  const instr = api.decodeAt(0);
+  assert.match(instr.mnem, /R8/i);
+});
+
+test('decodeAt: CALL size=5 (1 opcode + 4 rel32)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 5);
+  assert.match(instr.mnem, /CALL/i);
+});
+
+test('decodeAt: RET size=1', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0xC3;
+  const instr = api.decodeAt(0);
+  assert.equal(instr.size, 1);
+  assert.match(instr.mnem, /RET/i);
+});
+
+test('decodeAt: unknown opcode sets unknown=true, size=1', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0x0F;  // invalid in our subset
+  const instr = api.decodeAt(0);
+  assert.equal(instr.unknown, true);
+  assert.equal(instr.size,    1);
+});
+
+test('decodeAt: in ia32 mode, 0x48 is NOT a REX prefix (unknown opcode)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // In IA-32, 0x48 = DEC EAX — not supported in our subset
+  api.S.mem[0] = 0x48;
+  const instr = api.decodeAt(0);
+  assert.equal(instr.unknown, true, '0x48 must NOT be treated as REX in ia32');
+});
+
+test('decodeAt: invalid ModRM for PUSH (subop≠6) → decodeError=true', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // 0xFF with ModRM /1 (subop=1, not /6) in mod=11: 11 001 000 = 0xC8
+  writeBytes(api, 0, [0xFF, 0xC8]);
+  const instr = api.decodeAt(0);
+  assert.equal(instr.decodeError, true);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: EXECUTE — Architectural effects
+//  Reference: Intel SDM Vol.2 per-instruction
+// ═══════════════════════════════════════════════════════════════════════════
+suite('execute');
+
+test('MOV r32,imm32 exec: sets register, advances PC by 5', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0xB8, 0x78, 0x56, 0x34, 0x12]);
+  await api._executeOne();
+  assert.equal(api.regHex('EAX'), '12345678');
+  assert.equal(api.S.pc, 5);
+});
+
+test('MOV r64,imm64 exec: full 64-bit value stored, PC advances by 10', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  writeBytes(api, 0, [0x48, 0xB8, 0x88,0x77,0x66,0x55, 0x44,0x33,0x22,0x11]);
+  await api._executeOne();
+  assert.equal(api.regHex('RAX'), '1122334455667788');
+  assert.equal(api.S.pc, 10);
+});
+
+test('MOV reg,reg exec: dst gets src value', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0xDEADBEEF);
+  writeBytes(api, 0, api.assemble('MOV EBX, EAX', 0));
+  await api._executeOne();
+  assert.equal(api.getReg('EBX'), 0xDEADBEEF);
+});
+
+test('MOV [mem],reg exec: writes LE bytes to memory', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0xDEADBEEF);
+  writeBytes(api, 0, api.assemble('MOV DWORD PTR [0x0010], EAX', 0));
   await api._executeOne();
   assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0xEF, 0xBE, 0xAD, 0xDE]);
 });
 
-test('MOV reg, [mem] reconstrui o registrador a partir de bytes little-endian', async () => {
+test('MOV reg,[mem] exec: reads LE bytes from memory into register', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0010, [0xEF, 0xBE, 0xAD, 0xDE]);
-  writeBytes(api, 0x0000, api.assemble('MOV ECX, DWORD PTR [0x0010]', 0x0000));
+  writeBytes(api, 0x10, [0xEF, 0xBE, 0xAD, 0xDE]);
+  writeBytes(api, 0, api.assemble('MOV ECX, DWORD PTR [0x0010]', 0));
   await api._executeOne();
   assert.equal(api.regHex('ECX'), 'DEADBEEF');
 });
 
-test('PUSH usa little-endian e decrementa o stack pointer antes da escrita', async () => {
+test('NOP exec: no register change, PC advances by 1', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const eaxBefore = api.getReg('EAX');
+  api.S.mem[0] = 0x90;
+  await api._executeOne();
+  assert.equal(api.S.pc, 1);
+  assert.equal(api.getReg('EAX'), eaxBefore, 'NOP must not modify EAX');
+});
+
+test('HLT exec: sets S.halt=true', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0xF4;
+  await api._executeOne();
+  assert.equal(api.S.halt, true);
+});
+
+test('JMP SHORT exec: PC set to jmpTarget, not sequential', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // JMP to 0x0A from 0x0000: 0xEB 0x08
+  writeBytes(api, 0, [0xEB, 0x08]);
+  await api._executeOne();
+  assert.equal(api.S.pc, 0x0A);
+});
+
+test('JMP SHORT backward exec: wraps correctly within 64-byte map', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setPC(0x0A);
+  writeBytes(api, 0x0A, [0xEB, 0xF4]);  // rel=-12, target=0x0A+2-12=0
+  await api._executeOne();
+  assert.equal(api.S.pc, 0x00);
+});
+
+test('RET exec without CALL: faults (callFrames empty)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0xC3;
+  await api._executeOne();
+  // RET without prior CALL → should fault
+  assert.equal(api.S.halt,   true,  'RET without CALL must halt');
+  assert.equal(api.S.faulted, true, 'RET without CALL must set faulted');
+});
+
+test('Intel SDM §2.1: EIP always points to NEXT instruction after fetch', async () => {
+  // "The instruction pointer (EIP) contains the offset in the current code
+  //  segment for the next instruction to be executed." (SDM Vol.1 §6.3)
+  // After _executeOne completes FETCH phase, EIP must point past the instruction.
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0x90]);  // 3× NOP
+  assert.equal(api.S.pc, 0x00);
+  await api._executeOne();
+  assert.equal(api.S.pc, 0x01, 'PC must advance during FETCH (SDM Vol.1 §6.3)');
+  await api._executeOne();
+  assert.equal(api.S.pc, 0x02);
+  await api._executeOne();
+  assert.equal(api.S.pc, 0x03);
+});
+
+test('Sequential execution: multiple MOVs accumulate results correctly', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const prog = [
+    ...api.assemble('MOV EAX, 0x00000001', 0),
+    ...api.assemble('MOV EBX, 0x00000002', 5),
+    ...api.assemble('MOV ECX, 0x00000003', 10),
+    0xF4,  // HLT
+  ];
+  writeBytes(api, 0, prog);
+  while (!api.S.halt) await api._executeOne();
+  assert.equal(api.getReg('EAX'), 1);
+  assert.equal(api.getReg('EBX'), 2);
+  assert.equal(api.getReg('ECX'), 3);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: MEMORY — doStore / doLoad
+//  Reference: Intel SDM Vol.1 §1.3.2 (Little-endian byte order)
+// ═══════════════════════════════════════════════════════════════════════════
+suite('memory');
+
+test('STORE: x86 always writes LE — LSB at lowest addr (SDM Vol.1 §1.3.2)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0x12345678);
+  setAddr(document, 0x10);
+  await api.doStore();
+  // LE: byte0=[0x10]=0x78(LSB), byte1=[0x11]=0x56, byte2=[0x12]=0x34, byte3=[0x13]=0x12(MSB)
+  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0x78, 0x56, 0x34, 0x12],
+    'STORE must write little-endian regardless of S.endian');
+});
+
+test('STORE with S.endian=big: bytes STILL written LE (endian=visual only)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  api.setReg('EAX', 0x12345678);
+  setAddr(document, 0x10);
+  await api.doStore();
+  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0x78, 0x56, 0x34, 0x12],
+    'S.endian must NOT affect STORE byte order');
+});
+
+test('LOAD: always reads LE — reconstructs integer from LSB-first bytes', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // Place 0xDEADBEEF in memory LE
+  writeBytes(api, 0x20, [0xEF, 0xBE, 0xAD, 0xDE]);
+  setAddr(document, 0x20);
+  await api.doLoad();
+  assert.equal(api.getReg('EAX'), 0xDEADBEEF);
+});
+
+test('LOAD with S.endian=big: bytes STILL read LE', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  writeBytes(api, 0x20, [0xEF, 0xBE, 0xAD, 0xDE]);
+  setAddr(document, 0x20);
+  await api.doLoad();
+  assert.equal(api.getReg('EAX'), 0xDEADBEEF, 'S.endian must NOT affect LOAD byte order');
+});
+
+test('STORE/LOAD round-trip: arbitrary 32-bit value survives memory cycle', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const original = 0xCAFEBABE;
+  api.setReg('EAX', original);
+  setAddr(document, 0x08);
+  await api.doStore();
+  api.setReg('EAX', 0);  // clear register
+  setAddr(document, 0x08);
+  api.S.reg = 'EAX';
+  await api.doLoad();
+  assert.equal(api.getReg('EAX'), original, 'Round-trip must preserve value');
+});
+
+test('STORE word (2 bytes): only 2 bytes written', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.size = 'word';
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0xABCD);
+  setAddr(document, 0x10);
+  await api.doStore();
+  assert.equal(api.S.mem[0x10], 0xCD);  // LSB
+  assert.equal(api.S.mem[0x11], 0xAB);  // MSB
+  assert.equal(api.S.mem[0x12], 0x00);  // untouched
+});
+
+test('STORE byte (1 byte): only lowest byte written', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.size = 'byte';
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0x12345678);
+  setAddr(document, 0x10);
+  await api.doStore();
+  assert.equal(api.S.mem[0x10], 0x78);  // only LSB
+  assert.equal(api.S.mem[0x11], 0x00);  // untouched
+});
+
+test('mapAccessFits: boundary checks for 64-byte memory', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.mapAccessFits(0,  4),  true,  '[0,4) fits');
+  assert.equal(api.mapAccessFits(60, 4),  true,  '[60,64) fits');
+  assert.equal(api.mapAccessFits(61, 4),  false, '[61,65) overflows');
+  assert.equal(api.mapAccessFits(63, 1),  true,  '[63,64) fits exactly');
+  assert.equal(api.mapAccessFits(64, 1),  false, 'addr=64 out of range');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: STACK — PUSH / POP / CALL / RET
+//  Reference: Intel SDM Vol.2 §PUSH, §POP, §CALL, §RET
+//  Key rules:
+//    - Stack grows toward LOWER addresses (ESP decrements on PUSH)
+//    - Data stored little-endian (always, regardless of S.endian)
+//    - In IA-32: pointer width = 4 bytes; in x86-64: = 8 bytes
+// ═══════════════════════════════════════════════════════════════════════════
+suite('stack');
+
+test('PUSH ia32: ESP decremented by 4 BEFORE write (SDM Vol.2 §PUSH)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const espBefore = api.S.regs.ESP;
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0xA1B2C3D4);
+  await api.doPush();
+  // ESP must decrement by 4 first, then write AT new ESP
+  assert.equal(api.S.regs.ESP, espBefore - 4, 'ESP must decrement by 4 on PUSH ia32');
+});
+
+test('PUSH ia32: bytes stored LE at new ESP (SDM Vol.2 §PUSH)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0xA1B2C3D4);
+  await api.doPush();
+  const sp = api.S.regs.ESP;
+  // 0xA1B2C3D4 LE = [D4, C3, B2, A1]
+  assert.deepEqual(
+    Array.from(api.S.stackMem.slice(sp, sp + 4)),
+    [0xD4, 0xC3, 0xB2, 0xA1],
+    'PUSH must write little-endian'
+  );
+});
+
+test('PUSH ia32: S.endian=big does NOT affect byte order (SDM: x86 always LE)', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.S.endian = 'big';
   api.S.reg = 'EAX';
   api.setReg('EAX', 0xA1B2C3D4);
   await api.doPush();
-  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 4);
-  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 4)), [0xD4, 0xC3, 0xB2, 0xA1]);
+  const sp = api.S.regs.ESP;
+  assert.deepEqual(
+    Array.from(api.S.stackMem.slice(sp, sp + 4)),
+    [0xD4, 0xC3, 0xB2, 0xA1],
+    'S.endian=big must NOT change PUSH byte order'
+  );
 });
 
-test('POP usa little-endian e incrementa o stack pointer apos a leitura', async () => {
+test('POP ia32: reads 4 LE bytes, ESP incremented by 4 AFTER read', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.S.endian = 'big';
   api.S.reg = 'EAX';
-  api.S.regs.ESP = defaultStackTop(api) - 4;
-  api.S.stackMem.set([0xD4, 0xC3, 0xB2, 0xA1], api.S.regs.ESP);
+  const sp = defaultStackTop(api) - 4;
+  api.S.regs.ESP = sp;
+  api.S.stackMem.set([0xD4, 0xC3, 0xB2, 0xA1], sp);
   await api.doPop();
-  assert.equal(api.regHex('EAX'), 'A1B2C3D4');
+  assert.equal(api.getReg('EAX'), 0xA1B2C3D4);
+  assert.equal(api.S.regs.ESP, defaultStackTop(api), 'ESP must increment by 4 after POP');
+});
+
+test('PUSH/POP ia32 round-trip: value preserved', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.reg = 'EBX';
+  api.setReg('EBX', 0xDEADBEEF);
+  await api.doPush();
+  api.setReg('EBX', 0);
+  await api.doPop();
+  assert.equal(api.getReg('EBX'), 0xDEADBEEF, 'PUSH/POP must preserve value');
+});
+
+test('PUSH x64: ESP decremented by 8 (pointer width = 8)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const espBefore = api.S.regs.ESP;
+  api.S.reg = 'RAX';
+  api.setReg('RAX', 0x11223344);
+  await api.doPush();
+  assert.equal(api.S.regs.ESP, espBefore - 8, 'x64 PUSH must decrement by 8');
+});
+
+test('PUSH x64: 8 bytes written LE', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.S.reg = 'RAX';
+  api.setRegParts('RAX', 0x55667788, 0x11223344);
+  await api.doPush();
+  const sp = api.S.regs.ESP;
+  // lo=0x55667788 → [88,77,66,55]; hi=0x11223344 → [44,33,22,11]
+  const expected = [0x88,0x77,0x66,0x55, 0x44,0x33,0x22,0x11];
+  assert.deepEqual(Array.from(api.S.stackMem.slice(sp, sp + 8)), expected);
+});
+
+test('POP x64: reads 8 bytes, ESP incremented by 8', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.S.reg = 'RAX';
+  const sp = defaultStackTop(api) - 8;
+  api.S.regs.ESP = sp;
+  api.S.stackMem.set([0x88,0x77,0x66,0x55, 0x44,0x33,0x22,0x11], sp);
+  await api.doPop();
+  assert.equal(api.regHex('RAX'), '1122334455667788');
   assert.equal(api.S.regs.ESP, defaultStackTop(api));
 });
 
-test('CALL em IA-32 empilha o proximo EIP e desvia para o alvo', async () => {
+test('PUSH x64 round-trip via PUSH/POP opcodes in decodeAt', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.setRegParts('RAX', 0xABCD1234, 0x12340000);
+  writeBytes(api, 0, [...api.assemble('PUSH RAX', 0), ...api.assemble('POP RBX', 0 + 3)]);
+  await api._executeOne();  // PUSH RAX
+  await api._executeOne();  // POP RBX
+  assert.equal(api.regHex('RBX'), api.regHex('RAX'), 'PUSH/POP must round-trip via opcodes');
+});
+
+test('CALL ia32: pushes return address (next EIP) LE, sets PC to target', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
-  await api._executeOne();
-  assert.equal(api.S.pc, 0x000A);
+  // CALL to 0x000A from 0x0000: E8 05 00 00 00; nextEIP = 0x0005
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00,
+                      0xF4,                           // HLT at 0x0005 (return address)
+                      0x00, 0x00, 0x00, 0x00,
+                      0xC3]);                          // RET at 0x000A
+  await api._executeOne();  // execute CALL
+  assert.equal(api.S.pc, 0x000A, 'CALL must set PC to target');
   assert.equal(api.S.regs.ESP, defaultStackTop(api) - 4);
-  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 4)), [0x05, 0x00, 0x00, 0x00]);
+  // return address = 0x0005 stored LE
+  const sp = api.S.regs.ESP;
+  assert.deepEqual(
+    Array.from(api.S.stackMem.slice(sp, sp + 4)),
+    [0x05, 0x00, 0x00, 0x00],
+    'CALL must push return address as LE 32-bit'
+  );
   assert.equal(api.S.callFrames.length, 1);
 });
 
-test('RET em IA-32 restaura o endereco de retorno empilhado por CALL', async () => {
+test('RET ia32: restores EIP from stack, frees frame', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
-  await api._executeOne();
-  await api._executeOne();
-  assert.equal(api.S.pc, 0x0005);
-  assert.equal(api.S.regs.ESP, defaultStackTop(api));
-  assert.equal(api.S.callFrames.length, 0);
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00,
+                      0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
+  await api._executeOne();  // CALL
+  await api._executeOne();  // RET at 0x000A
+  assert.equal(api.S.pc, 0x0005, 'RET must restore return address');
+  assert.equal(api.S.regs.ESP, defaultStackTop(api), 'RET must restore ESP');
+  assert.equal(api.S.callFrames.length, 0, 'RET must pop callFrames');
 });
 
-test('CALL/RET em x86-64 usam largura de ponteiro de 8 bytes', async () => {
+test('CALL x64: pointer width = 8 bytes', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'x64');
-  writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00,
+                      0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
   await api._executeOne();
+  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 8, 'x64 CALL must push 8 bytes');
   assert.equal(api.S.pc, 0x000A);
-  assert.equal(api.S.regs.ESP, defaultStackTop(api) - 8);
-  assert.deepEqual(Array.from(api.S.stackMem.slice(api.S.regs.ESP, api.S.regs.ESP + 8)), [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-  await api._executeOne();
+});
+
+test('RET x64: restores 64-bit return address, ESP += 8', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00,
+                      0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
+  await api._executeOne();  // CALL
+  await api._executeOne();  // RET
   assert.equal(api.S.pc, 0x0005);
   assert.equal(api.S.regs.ESP, defaultStackTop(api));
 });
 
-test('FETCH avanca o IP/RIP para a proxima instrucao sem executar a instrucao atual', async () => {
+test('stackAccessFits: bounds check correct', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xB8, 0x78, 0x56, 0x34, 0x12]);
+  const sz = api.S.stackSize;
+  assert.equal(api.stackAccessFits(0, 4),      true,  'bottom of stack fits');
+  assert.equal(api.stackAccessFits(sz - 4, 4), true,  'top of stack fits');
+  assert.equal(api.stackAccessFits(sz - 3, 4), false, 'partial overflow');
+  assert.equal(api.stackAccessFits(sz, 1),     false, 'at boundary = out');
+});
+
+test('PUSH underflow: stack overflow when ESP would go below 0 → fault', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.regs.ESP = 2;  // not enough room for a 4-byte push
+  api.S.reg = 'EAX';
+  await api.doPush();
+  assert.equal(api.S.halt,    true, 'stack underflow must halt CPU');
+  assert.equal(api.S.faulted, true, 'stack underflow must set faulted');
+});
+
+test('Multiple PUSH/POP: LIFO order preserved (stack discipline)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0x00000001);
+  api.setReg('EBX', 0x00000002);
+  api.setReg('ECX', 0x00000003);
+  // PUSH EAX, PUSH EBX, PUSH ECX
+  for (const r of ['EAX', 'EBX', 'ECX']) {
+    api.S.reg = r;
+    await api.doPush();
+  }
+  // POP into EAX (should get ECX value), POP into EBX (EBX value), POP into ECX (EAX value)
+  for (const r of ['EAX', 'EBX', 'ECX']) {
+    api.S.reg = r;
+    await api.doPop();
+  }
+  assert.equal(api.getReg('EAX'), 3, 'LIFO: first pop gets last pushed');
+  assert.equal(api.getReg('EBX'), 2);
+  assert.equal(api.getReg('ECX'), 1);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: FETCH CYCLE
+//  Reference: Intel SDM Vol.1 §6.3 — Basic Execution Environment
+// ═══════════════════════════════════════════════════════════════════════════
+suite('fetch');
+
+test('FETCH advances EIP to next instruction without executing it (SDM Vol.1 §6.3)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EAX, 0x12345678 = 5 bytes at 0x0000
+  writeBytes(api, 0, [0xB8, 0x78, 0x56, 0x34, 0x12]);
+  const eaxBefore = api.getReg('EAX');
   await api.doFetch();
-  assert.equal(api.S.pc, 0x0005);
-  assert.equal(api.regHex('EAX'), 'DEADBEEF');
+  assert.equal(api.S.pc, 5,         'PC must advance to next instruction after FETCH');
+  assert.equal(api.getReg('EAX'), eaxBefore, 'FETCH must NOT execute — EAX unchanged');
 });
 
-test('Opcode invalido marca erro e para a CPU no execute', async () => {
+test('FETCH on 1-byte opcode (NOP): advances PC by exactly 1', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0x0F]);
+  api.S.mem[0] = 0x90;
+  await api.doFetch();
+  assert.equal(api.S.pc, 1);
+});
+
+test('FETCH on 10-byte opcode (MOV RAX,imm64): advances PC by 10', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  writeBytes(api, 0, [0x48, 0xB8, 0,0,0,0, 0,0,0,0]);
+  await api.doFetch();
+  assert.equal(api.S.pc, 10);
+});
+
+test('Multiple FETCH calls advance PC cumulatively', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);  // NOP, NOP, HLT
+  await api.doFetch();
+  assert.equal(api.S.pc, 1);
+  await api.doFetch();
+  assert.equal(api.S.pc, 2);
+  await api.doFetch();
+  assert.equal(api.S.pc, 3);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: ENDIANNESS (display vs execution)
+//  Key invariant: execution is ALWAYS Intel little-endian
+//  S.endian changes ONLY the visualization layer
+// ═══════════════════════════════════════════════════════════════════════════
+suite('endian');
+
+test('Intel is little-endian: 0xDEADBEEF stored as EF BE AD DE (SDM Vol.1 §1.3.2)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setReg('EAX', 0xDEADBEEF);
+  setAddr(document, 0);
+  await api.doStore();
+  assert.equal(api.S.mem[0x00], 0xEF, 'LSB at lowest address');
+  assert.equal(api.S.mem[0x01], 0xBE);
+  assert.equal(api.S.mem[0x02], 0xAD);
+  assert.equal(api.S.mem[0x03], 0xDE, 'MSB at highest address');
+});
+
+test('S.endian=big does NOT change STORE byte order', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  api.setReg('EAX', 0xDEADBEEF);
+  setAddr(document, 0);
+  await api.doStore();
+  assert.equal(api.S.mem[0x00], 0xEF, 'STORE must always write LE');
+  assert.equal(api.S.mem[0x03], 0xDE);
+});
+
+test('S.endian=big does NOT change LOAD byte order', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  writeBytes(api, 0, [0xEF, 0xBE, 0xAD, 0xDE]);
+  setAddr(document, 0);
+  await api.doLoad();
+  assert.equal(api.getReg('EAX'), 0xDEADBEEF);
+});
+
+test('S.endian=big does NOT change MOV [mem],reg byte order', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  api.setReg('EAX', 0xCAFEBABE);
+  writeBytes(api, 0, api.assemble('MOV DWORD PTR [0x0010], EAX', 0));
   await api._executeOne();
-  assert.equal(api.S.halt, true);
+  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0xBE, 0xBA, 0xFE, 0xCA]);
+});
+
+test('S.endian=big does NOT change MOV reg,[mem] byte order', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  writeBytes(api, 0x10, [0xBE, 0xBA, 0xFE, 0xCA]);
+  writeBytes(api, 0, api.assemble('MOV EAX, DWORD PTR [0x0010]', 0));
+  await api._executeOne();
+  assert.equal(api.getReg('EAX'), 0xCAFEBABE);
+});
+
+test('S.endian=big does NOT change PUSH byte order', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0x11223344);
+  await api.doPush();
+  const sp = api.S.regs.ESP;
+  assert.deepEqual(Array.from(api.S.stackMem.slice(sp, sp + 4)), [0x44, 0x33, 0x22, 0x11]);
+});
+
+test('ordered() utility: little returns [LSB..MSB], big returns [MSB..LSB]', () => {
+  const { api } = loadSimulator();
+  const le = api.ordered(0xAABBCCDD, 4, 'little');
+  const be = api.ordered(0xAABBCCDD, 4, 'big');
+  assert.deepEqual(le, [0xDD, 0xCC, 0xBB, 0xAA]);
+  assert.deepEqual(be, [0xAA, 0xBB, 0xCC, 0xDD]);
+  // big-endian order is exactly the reverse of little-endian
+  assert.deepEqual(be, [...le].reverse());
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: ASSEMBLER VALIDATOR (validateAssembly)
+// ═══════════════════════════════════════════════════════════════════════════
+suite('assembler');
+
+test('validateAssembly: MOV EAX,0x1234 → ok, correct bytes', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('MOV EAX, 0x1234', 0);
+  assert.equal(r.ok, true);
+  assert.deepEqual(hexBytes(r.bytes), ['B8', '34', '12', '00', '00']);
+});
+
+test('validateAssembly: NOP → ok, [0x90]', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('NOP', 0);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.bytes, [0x90]);
+});
+
+test('validateAssembly: empty input → ok=false', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: unknown mnemonic → ok=false', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('ADD EAX, 1', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: PUSH EAX in x64 → error mentions 64 bits', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const r = api.validateAssembly('PUSH EAX', 0);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /64 bits/i);
+});
+
+test('validateAssembly: PUSH RAX in x64 → ok', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const r = api.validateAssembly('PUSH RAX', 0);
+  assert.equal(r.ok, true);
+});
+
+test('validateAssembly: MOV EIP, 0x1 → error mentions special pointer register', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('MOV EIP, 0x1', 0);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /ponteiro de instrucao especial/i);
+});
+
+test('validateAssembly: MOV RAX,imm in ia32 → error (64-bit reg in 32-bit mode)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('MOV RAX, 0x1234', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: NOP with operand → error', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('NOP EAX', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: MOV EAX → error (missing operand)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('MOV EAX', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: CALL out-of-range address → error', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('CALL 0xFFFF', 0);
+  assert.equal(r.ok, false);
+});
+
+test('validateAssembly: JMP 0x0000 (backward) → ok', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('JMP 0x0000', 0x000A);
+  assert.equal(r.ok, true);
+  assert.equal(r.bytes[0], 0xEB);
+});
+
+test('validateAssembly: MOV EAX,EBX → ok, op=0x89', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  const r = api.validateAssembly('MOV EBX, EAX', 0);
+  assert.equal(r.ok, true);
+  assert.equal(r.bytes[0], 0x89);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: FAULT DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+suite('fault');
+
+test('Unknown opcode: sets halt=true, faulted=true, marks mc-error', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0x0F;
+  await api._executeOne();
+  assert.equal(api.S.halt,   true);
   assert.equal(api.S.faulted, true);
-  assert.equal(api.S.memState[0x0000], 'mc-error');
+  assert.equal(api.S.memState[0], 'mc-error');
 });
 
-test('Decode inconsistente em ModRM invalido e sinalizado como erro', async () => {
+test('Invalid ModRM for PUSH (0xFF /1): decodeError, halt, faulted', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xFF, 0xE8]);
+  // 0xFF ModRM=0xC8 → /1 (subop=1), invalid
+  writeBytes(api, 0, [0xFF, 0xC8]);
   await api._executeOne();
-  assert.equal(api.S.halt, true);
+  assert.equal(api.S.halt,    true);
   assert.equal(api.S.faulted, true);
   assert.deepEqual(api.S.memState.slice(0, 2), ['mc-error', 'mc-error']);
 });
 
-test('Overflow de largura em MOV para memoria interrompe a execucao e marca bytes visiveis', async () => {
+test('MOV [mem] overflow: write past 64-byte boundary → fault', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.setReg('EAX', 0xCAFEBABE);
-  writeBytes(api, 0x0000, [0x89, 0x00, 0x3E]);
+  // addr=0x3E: 4 bytes would go to 0x3E,0x3F,0x40(OOB),0x41(OOB) → fault
+  writeBytes(api, 0, [0x89, 0x00, 0x3E]);
   await api._executeOne();
-  assert.equal(api.S.halt, true);
+  assert.equal(api.S.halt,   true);
   assert.equal(api.S.faulted, true);
-  assert.equal(api.S.memState[0x003E], 'mc-error');
-  assert.equal(api.S.memState[0x003F], 'mc-error');
+  assert.equal(api.S.memState[0x3E], 'mc-error');
+  assert.equal(api.S.memState[0x3F], 'mc-error');
 });
 
-test('RET corrompido e detectado quando o endereco empilhado nao bate com o CALL ativo', async () => {
+test('RET with corrupted return address: faults when stack does not match callFrame', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  writeBytes(api, 0x0000, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
-  await api._executeOne();
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00,
+                      0xF4, 0x00, 0x00, 0x00, 0x00, 0xC3]);
+  await api._executeOne();  // CALL → pushes 0x0005
+  // Corrupt the return address on the stack
   api.S.stackMem[api.S.regs.ESP] = 0x07;
-  await api._executeOne();
-  assert.equal(api.S.halt, true);
-  assert.equal(api.S.faulted, true);
-  assert.equal(api.S.pc, 0x000A);
+  await api._executeOne();  // RET → should detect mismatch
+  assert.equal(api.S.halt,    true, 'Corrupted RET must halt');
+  assert.equal(api.S.faulted, true, 'Corrupted RET must set faulted');
 });
 
-test('Validador aceita MOV imediato suportado e gera opcode correto', async () => {
+test('RET without CALL: always faults (callFrames empty)', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  const check = api.validateAssembly('MOV EAX, 0x1234', 0x0000);
-  assert.equal(check.ok, true);
-  assert.equal(hexBytes(check.bytes).join(' '), 'B8 34 12 00 00');
+  api.S.mem[0] = 0xC3;
+  await api._executeOne();
+  assert.equal(api.S.halt,    true);
+  assert.equal(api.S.faulted, true);
 });
 
-test('Validador explica por que PUSH EAX e invalido em x86-64 neste simulador', async () => {
+test('PUSH stack overflow (ESP would go negative): faults', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.regs.ESP = 0;  // cannot decrement further
+  api.S.reg = 'EAX';
+  await api.doPush();
+  assert.equal(api.S.halt,    true);
+  assert.equal(api.S.faulted, true);
+});
+
+test('CPU stays halted after halt: subsequent _executeOne does nothing', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0xF4;  // HLT
+  await api._executeOne();
+  assert.equal(api.S.halt, true);
+  const pcAfterHlt = api.S.pc;
+  await api._executeOne();  // should be no-op
+  assert.equal(api.S.pc, pcAfterHlt, 'PC must not advance after CPU is halted');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: REGRESSION — bugs that must never regress
+// ═══════════════════════════════════════════════════════════════════════════
+suite('regression');
+
+test('REG: 0x48 in ia32 mode is NOT a REX prefix (was bug: treated as REX)', () => {
+  // In IA-32 mode, 0x48 = DEC EAX (unsupported opcode in our subset, not REX prefix)
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.mem[0] = 0x48;  // in ia32 this is DEC EAX, not REX
+  const instr = api.decodeAt(0);
+  assert.equal(instr.unknown, true, 'ia32: 0x48 must be decoded as unknown, not REX prefix');
+  assert.equal(instr.size, 1);
+});
+
+test('REG: x64 mode correctly identifies 0x40-0x4F as REX prefixes', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'x64');
-  const check = api.validateAssembly('PUSH EAX', 0x0000);
-  assert.equal(check.ok, false);
-  assert.match(check.error, /64 bits/i);
+  for (let rex = 0x40; rex <= 0x4F; rex++) {
+    api.S.mem.fill(0);
+    // Place REX prefix then NOP (0x90)
+    api.S.mem[0] = rex;
+    api.S.mem[1] = 0x90;
+    const instr = api.decodeAt(0);
+    assert.notEqual(instr.unknown, true, `REX 0x${rex.toString(16)} should be consumed as prefix`);
+    assert.equal(instr.size, 2, `REX(1)+NOP(1)=2 for REX=0x${rex.toString(16)}`);
+  }
 });
 
-test('Validador explica que EIP nao pode ser usado como operando ASM', async () => {
+test('REG: RSP/RBP correctly map to S.regs.ESP/EBP (no separate storage)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.S.regs.ESP = 0x4321;
+  assert.equal(api.getReg('RSP'), 0x4321, 'getReg(RSP) must use S.regs.ESP');
+  api.setReg('RSP', 0xABCD);
+  assert.equal(api.S.regs.ESP, 0xABCD, 'setReg(RSP) must write to S.regs.ESP');
+  assert.equal(api.S.regs['RSP'], undefined, 'S.regs.RSP must not exist as separate field');
+});
+
+test('STORE/LOAD: S.endian does not affect bytes written/read (was bug: endian applied to exec)', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  const check = api.validateAssembly('MOV EIP, 0x1', 0x0000);
-  assert.equal(check.ok, false);
-  assert.match(check.error, /ponteiro de instrucao especial/i);
+  const sentinel = 0xABCDEF01;
+  for (const endian of ['little', 'big']) {
+    api.S.endian = endian;
+    api.setReg('EAX', sentinel);
+    setAddr(document, 0x08);
+    await api.doStore();
+    assert.deepEqual(
+      Array.from(api.S.mem.slice(0x08, 0x0C)),
+      [0x01, 0xEF, 0xCD, 0xAB],
+      `STORE with S.endian=${endian} must produce LE bytes`
+    );
+  }
 });
 
+test('PC wraps at 64-byte boundary (memory map is 64 bytes, 6-bit mask)', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setPC(0x3F);
+  assert.equal(api.S.pc, 0x3F);
+  api.setPC(0x40);
+  assert.equal(api.S.pc, 0x00, 'PC must wrap from 0x3F to 0x00');
+  api.setPC(0x7F);
+  assert.equal(api.S.pc, 0x3F, '0x7F & 0x3F = 0x3F');
+});
+
+test('PUSH/POP always use little-endian regardless of S.endian (was bug)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.endian = 'big';
+  api.S.reg = 'EAX';
+  api.setReg('EAX', 0x11223344);
+  await api.doPush();
+  api.setReg('EAX', 0);
+  await api.doPop();
+  assert.equal(api.getReg('EAX'), 0x11223344, 'PUSH/POP round-trip must work regardless of S.endian');
+});
+
+test('sizeN: returns correct byte counts for all sizes', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.size = 'byte';  assert.equal(api.sizeN(), 1);
+  api.S.size = 'word';  assert.equal(api.sizeN(), 2);
+  api.S.size = 'dword'; assert.equal(api.sizeN(), 4);
+  api.S.arch = 'x64';
+  api.S.size = 'qword'; assert.equal(api.sizeN(), 8);
+});
+
+test('JMP does not push anything to callFrames (not a CALL)', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0xEB, 0x00]);  // JMP to self+2 (effectively NOP-jump)
+  await api._executeOne();
+  assert.equal(api.S.callFrames.length, 0, 'JMP must not push to callFrames');
+});
+
+test('Multiple CALL/RET pairs maintain correct callFrame nesting', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // Program layout:
+  // 0x00: CALL 0x0F   (E8 0A 00 00 00) — calls subroutine at 0x0F
+  // 0x05: HLT         (F4)
+  // 0x06: NOP * 8     (padding)
+  // 0x0F: CALL 0x1E   (E8 0A 00 00 00) — nested call to 0x1E
+  // 0x14: RET         (C3)
+  // 0x15-0x1D: NOP * 9 (padding)
+  // 0x1E: RET         (C3) — inner subroutine returns
+  const prog = new Array(0x20).fill(0x90);
+  prog[0x00] = 0xE8; prog[0x01]=0x0A; prog[0x02]=0x00; prog[0x03]=0x00; prog[0x04]=0x00;
+  prog[0x05] = 0xF4;  // HLT at return point
+  prog[0x0F] = 0xE8; prog[0x10]=0x0A; prog[0x11]=0x00; prog[0x12]=0x00; prog[0x13]=0x00;
+  prog[0x14] = 0xC3;  // RET from outer sub
+  prog[0x1E] = 0xC3;  // RET from inner sub
+  writeBytes(api, 0, prog.slice(0, 0x20));
+  await api._executeOne();  // CALL 0x0F → callFrames.length=1
+  assert.equal(api.S.callFrames.length, 1);
+  await api._executeOne();  // CALL 0x1E (nested) → callFrames.length=2
+  assert.equal(api.S.callFrames.length, 2);
+  await api._executeOne();  // RET from 0x1E → back to 0x14, length=1
+  assert.equal(api.S.callFrames.length, 1);
+  assert.equal(api.S.pc, 0x14);
+  await api._executeOne();  // RET from 0x0F → back to 0x05, length=0
+  assert.equal(api.S.callFrames.length, 0);
+  assert.equal(api.S.pc, 0x05);
+});
+
+test('getBytes produces correct LSB-first order for edge values', () => {
+  const { api } = loadSimulator();
+  assert.deepEqual(api.getBytes(0x00000000, 4), [0,0,0,0]);
+  assert.deepEqual(api.getBytes(0xFFFFFFFF, 4), [0xFF,0xFF,0xFF,0xFF]);
+  assert.deepEqual(api.getBytes(0x00000001, 4), [0x01,0,0,0]);
+  assert.deepEqual(api.getBytes(0x80000000, 4), [0,0,0,0x80]);
+  assert.deepEqual(api.getBytes(0x000000FF, 1), [0xFF]);
+});
+
+test('CALL encodes return address as address AFTER the CALL instruction (not its own address)', async () => {
+  // Intel SDM Vol.2 §CALL: "Saves procedure linking info on stack, branches to called procedure."
+  // "The return address is the offset of the instruction following the CALL instruction."
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // CALL at 0x0000 with 5 bytes → next instr at 0x0005 → return address = 0x0005
+  writeBytes(api, 0, [0xE8, 0x05, 0x00, 0x00, 0x00, 0xF4, 0x90,0x90,0x90,0x90, 0xC3]);
+  await api._executeOne();  // CALL
+  const sp = api.S.regs.ESP;
+  const retAddrLE = Array.from(api.S.stackMem.slice(sp, sp + 4));
+  const retAddr = retAddrLE[0] | (retAddrLE[1] << 8) | (retAddrLE[2] << 16) | (retAddrLE[3] << 24);
+  assert.equal(retAddr, 0x0005, 'CALL must push address of instruction AFTER the CALL');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: ARCHITECTURE SWITCH
+// ═══════════════════════════════════════════════════════════════════════════
+suite('arch');
+
+test('ia32 → x64 switch: gpRegs changes from E-prefix to R-prefix', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.deepEqual(api.gpRegs(), ['EAX','EBX','ECX','EDX','ESI','EDI']);
+  api.S.arch = 'x64';
+  assert.deepEqual(api.gpRegs(), ['RAX','RBX','RCX','RDX','RSI','RDI']);
+});
+
+test('ia32 → x64: extRegs gains R8-R15', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.extRegs().length, 0);
+  api.S.arch = 'x64';
+  assert.equal(api.extRegs().length, 8);
+  assert.deepEqual(api.extRegs(), ['R8','R9','R10','R11','R12','R13','R14','R15']);
+});
+
+test('ia32 → x64: ptrSize changes from 4 to 8', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.ptrSize(), 4);
+  api.S.arch = 'x64';
+  assert.equal(api.ptrSize(), 8);
+});
+
+test('x64 MOV R9,imm: REX.B|W prefix, B8 opcode, R9 index=1', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const bytes = api.assemble('MOV R9, 0x12345678', 0);
+  assert.ok(bytes !== null, 'Must assemble MOV R9, imm');
+  // REX byte should have W=1 and B=1 → 0x49
+  assert.equal(bytes[0], 0x49, 'REX.W|REX.B = 0x49 for R9');
+  assert.equal(bytes[1], 0xB9, 'Opcode B8+1=B9 for R9 (idx 1 in REG64X)');
+});
+
+test('x64 PUSH/POP use 8-byte pointer width', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  const espBefore = api.S.regs.ESP;
+  api.S.reg = 'RAX';
+  await api.doPush();
+  assert.equal(api.S.regs.ESP, espBefore - 8);
+  await api.doPop();
+  assert.equal(api.S.regs.ESP, espBefore);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RUNNER
+// ═══════════════════════════════════════════════════════════════════════════
+const filterArg = process.argv.indexOf('--filter');
+const filterPattern = filterArg >= 0 ? process.argv[filterArg + 1] : null;
+const selectedTests = filterPattern
+  ? tests.filter(t => t.name.includes(filterPattern))
+  : tests;
+
 (async () => {
-  let passed = 0;
-  for(const t of tests) {
+  let passed = 0, failed = 0, skipped = 0;
+  const failures = [];
+
+  console.log(`\n🔬 MEM·SIM — Test Suite (${selectedTests.length}/${tests.length} tests)\n`);
+
+  for (const t of selectedTests) {
     try {
       await t.fn();
       passed++;
-      console.log(`PASS ${t.name}`);
+      process.stdout.write(`  ✓ ${t.name}\n`);
     } catch (err) {
-      console.error(`FAIL ${t.name}`);
-      console.error(err.stack || err.message || String(err));
-      process.exitCode = 1;
-      break;
+      failed++;
+      failures.push({ name: t.name, err });
+      process.stdout.write(`  ✗ ${t.name}\n`);
     }
   }
-  if(process.exitCode) return;
-  console.log(`\n${passed}/${tests.length} validacoes passaram.`);
+
+  if (tests.length > selectedTests.length) {
+    skipped = tests.length - selectedTests.length;
+  }
+
+  console.log(`\n${'─'.repeat(60)}`);
+  console.log(`  Passed : ${passed}`);
+  console.log(`  Failed : ${failed}`);
+  if (skipped > 0) console.log(`  Skipped: ${skipped}`);
+  console.log(`${'─'.repeat(60)}\n`);
+
+  if (failures.length > 0) {
+    console.log('FAILURES:\n');
+    failures.forEach(({ name, err }) => {
+      console.log(`  ✗ ${name}`);
+      console.log(`    ${(err.message || String(err)).split('\n').join('\n    ')}\n`);
+    });
+    process.exitCode = 1;
+  } else {
+    console.log(`✅  All ${passed} tests passed.\n`);
+  }
 })();

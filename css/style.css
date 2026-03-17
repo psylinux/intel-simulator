@@ -1235,26 +1235,21 @@ body.code-mem-resizing #codeMemSplitHandle {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
+  align-items: stretch;
 }
 .asm-line,
 .c-line {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  align-items: center;
-  padding: 6px 8px;
+  gap: 8px;
+  align-items: stretch;
+  padding: 8px 10px;
   border: 1px solid var(--bdr);
   border-radius: var(--r);
   background: var(--bg2);
   cursor: pointer;
   transition: all .15s var(--ease);
-}
-.asm-line {
-  grid-template-columns: 50px 108px minmax(0, 1fr);
-  gap: 8px;
-}
-.c-line {
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 8px;
 }
 .asm-line:hover,
 .c-line:hover {
@@ -1272,23 +1267,72 @@ body.code-mem-resizing #codeMemSplitHandle {
   background: rgba(192,38,255,.08);
   box-shadow: inset 0 0 0 1px rgba(192,38,255,.24), 0 0 14px rgba(192,38,255,.08);
 }
+.asm-line-head,
+.c-line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
 .asm-line-addr {
   color: var(--role-pc);
   font-size: var(--fs-ui-xs);
   font-weight: 700;
 }
-.asm-line-bytes {
+.asm-line-size {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(56,189,248,.22);
+  background: rgba(56,189,248,.08);
   color: var(--tx1);
-  font-size: var(--fs-ui-xs);
-  letter-spacing: .45px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  flex-shrink: 0;
+}
+.asm-line-bytes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
 }
 .asm-line-asm {
   color: var(--tx0);
   font-size: var(--fs-ui-sm);
-  line-height: 1.25;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .asm-line-current .asm-line-asm {
   color: #f8fbff;
+}
+.asm-byte {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 20px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(148,163,184,.08);
+  color: var(--tx1);
+  font-size: var(--fs-ui-xs);
+  font-weight: 700;
+  letter-spacing: .35px;
+}
+.asm-line-current .asm-byte {
+  border-color: rgba(0,229,255,.26);
+  background: rgba(0,229,255,.10);
+  color: #f8fbff;
+}
+.asm-byte-empty {
+  color: var(--tx2);
 }
 .c-line-addr {
   color: var(--role-pc);
@@ -1297,9 +1341,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .c-line-main {
   min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: block;
 }
 .c-line-kind {
   display: inline-flex;
@@ -1329,8 +1371,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   min-width: 0;
   color: var(--tx0);
   font-size: var(--fs-ui-sm);
-  line-height: 1.25;
-  word-break: break-word;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .c-line-current .c-line-code {
   color: #f8fbff;
@@ -1404,7 +1446,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 #memWrapper {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
+  align-items: stretch;
   min-height: auto;
   padding: 0 14px 10px;
   gap: 10px;
@@ -1418,14 +1460,14 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 #memAddrBar {
   display: grid;
-  grid-template-rows: 24px repeat(8, clamp(22px, 2.8vh, 28px)) 24px;
+  grid-template-rows: 24px repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px)) 24px;
   gap: 2px;
   width: 112px;
   flex: 0 0 112px;
   align-content: start;
 }
 .addr-lbl {
-  height: clamp(22px, 2.8vh, 28px); display: flex; align-items: center; justify-content: flex-end;
+  height: var(--mem-cell-h, 24px); display: flex; align-items: center; justify-content: flex-end;
   font-size: var(--fs-ui-xs); color: var(--ui-address); letter-spacing: .2px;
   font-weight: 700;
   white-space: nowrap; font-family: var(--mono);
@@ -1455,11 +1497,13 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 
 #memGrid {
-  flex: 1; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+  flex: 1; display: grid; grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px));
+  gap: 2px;
   align-content: start;
 }
 .mem-cell {
-  height: clamp(22px, 2.8vh, 28px); display: flex; align-items: center; justify-content: center;
+  height: var(--mem-cell-h, 24px); display: flex; align-items: center; justify-content: center;
   background: var(--bg2); border: 1px solid var(--bdr);
   border-radius: var(--r); font-size: var(--fs-ui-sm); font-weight: 700; color: var(--tx1);
   cursor: pointer; transition: all .15s var(--ease); position: relative;
@@ -1527,6 +1571,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 #memLegend {
   display: flex; flex-direction: column; gap: 4px; padding-top: 2px;
   margin-left: 4px;
+  align-self: flex-start;
 }
 .ml-item { display: flex; align-items: center; gap: 4px; font-size: var(--fs-ui-xs); color: var(--tx1); white-space: nowrap; }
 .ml-dot  { width: 9px; height: 9px; border-radius: 2px; border: 1px solid; display: block; }

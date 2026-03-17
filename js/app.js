@@ -157,6 +157,7 @@ let asmTraceClickTimer = 0;
 let lastStatusLog = '';
 const regPulseTimers = new Map();
 let centerPaneLayoutFrame = 0;
+let memCellRefs = [];
 
 // Current register name set based on arch
 function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX','ESI','EDI']; }
@@ -391,14 +392,31 @@ function memSpaceSize() {
   return Math.max(64, S.stackSize);
 }
 
+function memWindowBytes() {
+  return memSpaceSize();
+}
+
+function memWindowRows() {
+  return Math.max(1, Math.ceil(memWindowBytes() / 8));
+}
+
+function memCellPx() {
+  const total = memSpaceSize();
+  if(total <= 512) return 24;
+  if(total <= 4096) return 20;
+  if(total <= 16384) return 16;
+  if(total <= 65536) return 12;
+  if(total <= 262144) return 9;
+  return 7;
+}
+
 function normalizeMemViewBase(base) {
-  const maxBase = Math.max(memSpaceSize() - 64, 0);
-  const clamped = clamp(Math.trunc(Number.isFinite(base) ? base : 0), 0, maxBase);
-  return Math.floor(clamped / 8) * 8;
+  void base;
+  return 0;
 }
 
 function memViewContains(addr) {
-  return addr >= S.memViewBase && addr < (S.memViewBase + 64);
+  return addr >= 0 && addr < memSpaceSize();
 }
 
 function memByteAt(addr) {
@@ -424,29 +442,22 @@ function setByteState(addr, st='') {
 
 function revealMemAddr(addr, opts={}) {
   const target = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
-  if(!memViewContains(target)) {
-    S.memViewBase = normalizeMemViewBase(target);
-    buildMemGrid();
-  }
   if(opts.select) {
     clearSel({ keepState:true });
     S.memSelectedAddr = target;
     memEl(target)?.classList.add('mc-selected');
   }
+  if(opts.scroll) memEl(target)?.scrollIntoView({ block:'center', inline:'nearest' });
 }
 
 function revealMemRange(addr, width=1, opts={}) {
   const first = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
-  const last = clamp(first + Math.max(width, 1) - 1, 0, Math.max(memSpaceSize() - 1, 0));
-  if(!memViewContains(first) || !memViewContains(last)) {
-    S.memViewBase = normalizeMemViewBase(first);
-    buildMemGrid();
-  }
   if(opts.select) {
     clearSel({ keepState:true });
     S.memSelectedAddr = first;
     memEl(first)?.classList.add('mc-selected');
   }
+  if(opts.scroll) memEl(first)?.scrollIntoView({ block:'center', inline:'nearest' });
 }
 
 function stackAccessFits(addr, width) {
@@ -579,7 +590,7 @@ function applyStackSize() {
   S.stackSize = nextSize;
   resetStackState();
   const stackViewAddr = clamp(Math.max(S.stackSize - ptrSize(), 0), 0, Math.max(memSpaceSize() - 1, 0));
-  S.memViewBase = normalizeMemViewBase(Math.max(stackViewAddr - 56, 0));
+  S.memViewBase = 0;
   S.memSelectedAddr = stackViewAddr;
   markRegistersChanged(spRegs());
   buildRegCards();
@@ -591,7 +602,7 @@ function applyStackSize() {
   refreshPreview();
   refreshBreakdown();
   syncStackSizeUI();
-  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria sincronizado para a faixa superior da stack em 0x${fmtMemA(S.memViewBase)}..0x${fmtMemA(Math.min(S.memViewBase + 63, memSpaceSize() - 1))}.`);
+  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria agora cobre 0x0000..0x${fmtMemA(Math.max(memSpaceSize() - 1, 0))}.`);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -684,14 +695,14 @@ function init() {
     const row = e.target.closest('.stack-row');
     if(!row) return;
     const addr = parseInt(row.dataset.stackAddr || '0', 10);
-    revealMemAddr(addr, { select:true });
+    revealMemAddr(addr, { select:true, scroll:true });
     lg('sys', `Stack 0x${fmtStackA(addr)} localizada no mapa de memoria.`);
   });
   $('stackView')?.addEventListener('dblclick', e => {
     const row = e.target.closest('.stack-row');
     if(!row) return;
     const addr = parseInt(row.dataset.stackAddr || '0', 10);
-    revealMemAddr(addr, { select:true });
+    revealMemAddr(addr, { select:true, scroll:true });
     editMemCell(addr);
   });
   $('asmTrace')?.addEventListener('click', e => {
@@ -1392,6 +1403,12 @@ function buildStackTrace() {
     </div>`;
 }
 
+function renderTraceByteChips(bytesText) {
+  const tokens = String(bytesText || '').trim().split(/\s+/).filter(Boolean);
+  if(!tokens.length) return '<span class="asm-byte asm-byte-empty">--</span>';
+  return tokens.map(tok => `<span class="asm-byte">${tok}</span>`).join('');
+}
+
 function buildAsmTrace(opts={}) {
   const root = $('asmTrace');
   if(!root) return;
@@ -1412,18 +1429,24 @@ function buildAsmTrace(opts={}) {
   root.innerHTML = lines.length
     ? lines.map(line => {
         if(line.separator) return '<div class="trace-separator">PC atual fora do fluxo principal. Abaixo, decode local a partir do PC.</div>';
+        const byteChips = renderTraceByteChips(line.bytes);
         return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}">
           <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="Clique para navegar · 2× clique para editar">
-            <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
-            <span class="asm-line-bytes">${line.bytes}</span>
-            <span class="asm-line-asm">${line.asm}</span>
+            <div class="asm-line-head">
+              <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
+              <span class="asm-line-size">${line.size || 1}B</span>
+            </div>
+            <div class="asm-line-bytes">${byteChips}</div>
+            <div class="asm-line-asm">${line.asm}</div>
           </div>
           <div class="c-line${line.addr===S.pc ? ' c-line-current' : ''}" data-addr="${fmtA(line.addr)}" title="Clique para navegar">
-            <span class="c-line-addr">0x${fmtA(line.addr)}</span>
-            <span class="c-line-main">
+            <div class="c-line-head">
+              <span class="c-line-addr">0x${fmtA(line.addr)}</span>
               <span class="c-line-kind c-line-kind-${line.c.kind}">${line.c.label}</span>
+            </div>
+            <div class="c-line-main">
               <span class="c-line-code">${line.c.code}</span>
-            </span>
+            </div>
           </div>
         </div>`;
       }).join('')
@@ -2001,36 +2024,69 @@ function refreshBreakdown() {
 // ─────────────────────────────────────────────────────────
 function buildMemGrid() {
   const g=$('memGrid'), a=$('memAddrBar');
-  S.memViewBase = normalizeMemViewBase(S.memViewBase);
-  const base = S.memViewBase;
+  S.memViewBase = 0;
+  const base = 0;
+  const rowCount = memWindowRows();
+  const totalBytes = memSpaceSize();
+  const cellPx = memCellPx();
+  const gapPx = 2;
+  const trackTopPx = 24;
+  const trackBottomPx = 24;
+  const gridHeightPx = (rowCount * cellPx) + (Math.max(rowCount - 1, 0) * gapPx);
+  const addrHeightPx = trackTopPx + trackBottomPx + gridHeightPx + (Math.max(rowCount + 1, 0) * gapPx);
   const topAddr = base;
-  const bottomAddr = Math.min(base + 63, memSpaceSize() - 1);
+  const bottomAddr = Math.max(totalBytes - 1, 0);
+  const addrFrag = document.createDocumentFragment();
+  const gridFrag = document.createDocumentFragment();
+  memCellRefs = new Array(totalBytes);
   g.innerHTML='';
-  a.innerHTML=`<span class="mem-dir-top"><span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span></span>`;
+  a.innerHTML='';
   const tag=$('addrDirTag');
-  if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · cresce ↓`;
-  for(let r=0;r<8;r++) {
+  if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · total ${stackSizeKb()} KB`;
+  a.style.setProperty('--mem-row-count', String(rowCount));
+  a.style.setProperty('--mem-cell-h', `${cellPx}px`);
+  a.style.minHeight = `${addrHeightPx}px`;
+  g.style.setProperty('--mem-row-count', String(rowCount));
+  g.style.setProperty('--mem-cell-h', `${cellPx}px`);
+  g.style.minHeight = `${gridHeightPx}px`;
+
+  const topChip = document.createElement('span');
+  topChip.className = 'mem-dir-top';
+  topChip.innerHTML = `<span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span>`;
+  addrFrag.appendChild(topChip);
+
+  for(let r=0;r<rowCount;r++) {
     const rowBase = base + (r * 8);
     const l=document.createElement('div');
     l.className='addr-lbl';
     l.textContent='0x'+fmtMemA(rowBase);
-    a.appendChild(l);
+    addrFrag.appendChild(l);
     for(let c=0;c<8;c++) {
-      const addr=rowBase+c, cell=document.createElement('div');
+      const addr=rowBase+c;
+      if(addr>=totalBytes) break;
+      const cell=document.createElement('div');
       cell.className='mem-cell'; cell.dataset.addr=addr;
       cell.title=`Endereco 0x${fmtMemA(addr)}`;
       cell.textContent=hex8(memByteAt(addr));
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);
       if(addr===S.memSelectedAddr) cell.classList.add('mc-selected');
-      g.appendChild(cell);
+      memCellRefs[addr] = cell;
+      gridFrag.appendChild(cell);
     }
   }
-  a.innerHTML+=`<span class="mem-dir-bottom"><span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span></span>`;
+
+  const bottomChip = document.createElement('span');
+  bottomChip.className = 'mem-dir-bottom';
+  bottomChip.innerHTML = `<span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span>`;
+  addrFrag.appendChild(bottomChip);
+
+  a.appendChild(addrFrag);
+  g.appendChild(gridFrag);
   scheduleCenterPaneLayout();
 }
 
-const memEl = addr => $('memGrid').querySelector(`.mem-cell[data-addr="${addr}"]`);
+const memEl = addr => memCellRefs[addr] || null;
 
 function writeMem(addr, val, st) {
   if(addr<0||addr>=memSpaceSize()) return;
@@ -3579,10 +3635,10 @@ function buildStackView() {
     <div class="stack-meta">
       <div class="stack-meta-row stack-meta-row-mode"><span class="stack-meta-key">modo</span><span class="stack-meta-pill">${mode}</span></div>
       <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${stackSizeKb()} KB</span></div>
-      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (topo da pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (base do frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">${ipReg()} (Contador)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
+      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (Topo da Pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (Base do Frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
       <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${retInfo ? `0x${fmtA(retInfo.returnTo)}` : '—'}</span></div>
-      <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">PC (Contador do Programa)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
     </div>
     ${buildStackTrace()}
     <div class="stack-list">${rows}</div>`;
@@ -3684,7 +3740,7 @@ function setPC(addr, opts={}){
   if(ai && document.activeElement!==ai) {
     ai.value=fmtA(S.pc);
     S.memSelectedAddr = S.pc;
-    if(revealMem) revealMemAddr(S.pc, { select:true });
+    if(revealMem) revealMemAddr(S.pc, { select:true, scroll:true });
     else {
       clearSel({ keepState:true });
       memEl(S.pc)?.classList.add('mc-selected');

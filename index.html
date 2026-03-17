@@ -34,7 +34,8 @@
   <nav class="tb-nav">
     <div class="pc-chip">
       <span class="chip-lbl">PC</span>
-      <span class="chip-val" id="pcDisplay">0x0000</span>
+      <span class="chip-val-prefix">0x</span>
+      <input class="chip-val chip-pc-input" id="pcDisplay" type="text" maxlength="4" value="0000" spellcheck="false" title="Edite o PC manualmente"/>
     </div>
     <div class="clock-chip" id="clockChip">
       <span class="chip-lbl">LAST OP</span>
@@ -43,6 +44,10 @@
     <div class="ops-chip">
       <span class="chip-lbl">OPS</span>
       <span class="chip-val" id="opsDisplay">0</span>
+    </div>
+    <div class="arch-chip">
+      <span class="chip-lbl">ARCH</span>
+      <span class="chip-val chip-arch" id="archDisplay">IA-32</span>
     </div>
   </nav>
 
@@ -68,6 +73,21 @@
   <!-- ─────────── LEFT SIDEBAR ─────────── -->
   <aside id="sidebar">
 
+    <!-- ARQUITETURA -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">ARQUITETURA</div>
+      <div class="arch-toggle">
+        <button class="artbtn active" id="archIA32" onclick="App.setArch('ia32')">
+          <span class="art-name">IA-32</span>
+          <span class="art-sub">32-bit · EAX..EDI</span>
+        </button>
+        <button class="artbtn" id="archX64" onclick="App.setArch('x64')">
+          <span class="art-name">x86-64</span>
+          <span class="art-sub">64-bit · RAX..R15</span>
+        </button>
+      </div>
+    </section>
+
     <!-- ENDIANNESS -->
     <section class="ctrl-section">
       <div class="ctrl-label">FORMATO</div>
@@ -82,7 +102,7 @@
         </button>
       </div>
       <div class="endian-hint" id="endianHint">
-        <span class="eh-arrow">0x0000</span> ← byte menos significativo
+        <span class="eh-arrow">0x0000</span> ← byte menos significativo (LSB)
       </div>
     </section>
 
@@ -93,6 +113,7 @@
         <button class="stbtn" id="sByte" onclick="App.setSize('byte')">BYTE<br><small>8 bit</small></button>
         <button class="stbtn" id="sWord" onclick="App.setSize('word')">WORD<br><small>16 bit</small></button>
         <button class="stbtn active" id="sDword" onclick="App.setSize('dword')">DWORD<br><small>32 bit</small></button>
+        <button class="stbtn stbtn-qword" id="sQword" onclick="App.setSize('qword')" style="display:none">QWORD<br><small>64 bit</small></button>
       </div>
     </section>
 
@@ -100,43 +121,13 @@
     <section class="ctrl-section">
       <div class="ctrl-label">REGISTRADOR</div>
       <div class="reg-picker" id="regPicker">
-        <button class="rpbtn active" id="rEAX" onclick="App.selectReg('EAX')">
-          <span class="rp-name">EAX</span>
-          <span class="rp-val" id="rpv-EAX">DEADBEEF</span>
-        </button>
-        <button class="rpbtn" id="rEBX" onclick="App.selectReg('EBX')">
-          <span class="rp-name">EBX</span>
-          <span class="rp-val" id="rpv-EBX">CAFEBABE</span>
-        </button>
-        <button class="rpbtn" id="rECX" onclick="App.selectReg('ECX')">
-          <span class="rp-name">ECX</span>
-          <span class="rp-val" id="rpv-ECX">12345678</span>
-        </button>
-        <button class="rpbtn" id="rEDX" onclick="App.selectReg('EDX')">
-          <span class="rp-name">EDX</span>
-          <span class="rp-val" id="rpv-EDX">ABCD1234</span>
-        </button>
+        <!-- populated dynamically by buildRegPicker() -->
       </div>
     </section>
 
-    <!-- VALUE INPUT -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">VALOR (HEX)</div>
-      <div class="val-input-wrap">
-        <span class="val-prefix">0x</span>
-        <input class="val-input" id="valInput" type="text" maxlength="8" value="DEADBEEF" spellcheck="false"/>
-      </div>
-      <div class="val-preview" id="valPreview"></div>
-    </section>
-
-    <!-- ADDRESS -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">ENDEREÇO</div>
-      <div class="val-input-wrap">
-        <span class="val-prefix">0x</span>
-        <input class="val-input" id="addrInput" type="text" maxlength="4" value="0000" spellcheck="false"/>
-      </div>
-    </section>
+    <!-- Hidden inputs kept for JS compatibility -->
+    <input type="hidden" id="valInput" value="DEADBEEF"/>
+    <input type="hidden" id="addrInput" value="0000"/>
 
     <!-- SPEED -->
     <section class="ctrl-section">
@@ -150,7 +141,7 @@
 
     <!-- OPERATIONS -->
     <section class="ctrl-section ops-section">
-      <div class="ctrl-label">OPERAÇÕES</div>
+      <div class="ctrl-label">MEMÓRIA</div>
       <div class="ops-grid">
         <button class="op-btn op-store" id="opStore" onclick="App.doStore()">
           <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
@@ -160,15 +151,49 @@
           <svg viewBox="0 0 20 20" fill="none"><path d="M10 17V7M10 7l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="14" height="2" rx="1" fill="currentColor"/></svg>
           LOAD
         </button>
+        <button class="op-btn op-push" id="opPush" onclick="App.doPush()">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          PUSH
+        </button>
+        <button class="op-btn op-pop" id="opPop" onclick="App.doPop()">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          POP
+        </button>
+      </div>
+    </section>
+
+    <!-- CPU CONTROL -->
+    <section class="ctrl-section ops-section">
+      <div class="ctrl-label">CPU</div>
+      <div class="ops-grid ops-grid-3">
         <button class="op-btn op-fetch" id="opFetch" onclick="App.doFetch()">
           <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M10 3v2m0 10v2M3 10h2m10 0h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           FETCH
+        </button>
+        <button class="op-btn op-execute" id="opStep" onclick="App.doStep()">
+          <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          STEP
+        </button>
+        <button class="op-btn op-run" id="opRun" onclick="App.doRun()">
+          <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
+          RUN
         </button>
         <button class="op-btn op-clear" id="opClear" onclick="App.doClear()">
           <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           CLEAR
         </button>
       </div>
+    </section>
+
+    <!-- ASSEMBLER -->
+    <section class="ctrl-section">
+      <div class="ctrl-label">ASSEMBLER</div>
+      <div class="asm-input-row">
+        <input class="asm-input" id="asmInput" type="text" placeholder="MOV EAX, 0x1234" spellcheck="false"
+               onkeydown="if(event.key==='Enter')App.doAssemble()"/>
+        <button class="asm-btn" onclick="App.doAssemble()">ASM</button>
+      </div>
+      <div class="asm-hint">Grava bytes no PC atual. Enter para confirmar.</div>
     </section>
 
   </aside>
@@ -178,10 +203,12 @@
 
     <!-- REGISTERS ROW -->
     <div id="regsRow">
-      <div class="section-badge">REGISTRADORES DE USO GERAL</div>
-      <div id="regCards">
-        <!-- injected by JS -->
-      </div>
+      <div class="section-badge" id="gpBadge">REGISTRADORES DE USO GERAL</div>
+      <div id="regCards"><!-- injected by JS --></div>
+      <div class="section-badge ext-badge" id="extBadge" style="display:none">R8 — R15  (x86-64)</div>
+      <div id="extCards" style="display:none"><!-- injected by JS --></div>
+      <div class="section-badge sp-badge">PONTEIROS DE PILHA</div>
+      <div id="spCards"><!-- injected by JS --></div>
     </div>
 
     <!-- SVG ANIMATION STAGE -->
@@ -211,7 +238,7 @@
     <div id="memSection">
       <div class="section-badge">
         MAPA DE MEMÓRIA
-        <span class="addr-dir-tag" id="addrDirTag">↑ endereços crescem para cima</span>
+        <span class="addr-dir-tag" id="addrDirTag">0x0000 ↓ endereços crescem · Intel SDM Vol.1 §3.3</span>
       </div>
       <div id="memWrapper">
         <div id="memAddrBar"></div>
@@ -221,6 +248,7 @@
           <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
           <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
           <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
+          <span class="ml-item ml-edit-hint">2×clique edita</span>
         </div>
       </div>
     </div>
@@ -236,40 +264,14 @@
   <!-- ─────────── RIGHT PANEL ─────────── -->
   <aside id="rightPanel">
 
-    <!-- BYTE BREAKDOWN -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">BREAKDOWN DE BYTES</div>
-      <div id="byteBreakdown"></div>
-    </section>
-
-    <!-- STATS -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">ESTATÍSTICAS</div>
-      <div class="stats-grid" id="statsGrid">
-        <div class="sg-item"><div class="sg-v" id="st-ops">0</div><div class="sg-l">Total Ops</div></div>
-        <div class="sg-item"><div class="sg-v" id="st-time">0ms</div><div class="sg-l">Tempo Total</div></div>
-        <div class="sg-item"><div class="sg-v" id="st-loads">0</div><div class="sg-l">LOADs</div></div>
-        <div class="sg-item"><div class="sg-v" id="st-stores">0</div><div class="sg-l">STOREs</div></div>
-        <div class="sg-item"><div class="sg-v" id="st-avgl">—</div><div class="sg-l">Avg LOAD</div></div>
-        <div class="sg-item"><div class="sg-v" id="st-avgs">—</div><div class="sg-l">Avg STORE</div></div>
+    <!-- STACK VIEWER -->
+    <section class="ctrl-section stack-section">
+      <div class="ctrl-label stack-hd">
+        <span id="stackArchLbl">STACK  ESP/EBP</span>
+        <button class="stack-toggle-btn" id="stackToggleBtn" onclick="App.toggleStackMode()">FRAME</button>
       </div>
-    </section>
-
-    <!-- PERF COMPARE -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">COMPARATIVO</div>
-      <div class="perf-section" id="perfSection">
-        <div class="perf-row">
-          <span class="perf-lbl">Little</span>
-          <div class="perf-bar-bg"><div class="perf-fill perf-l" id="pfl" style="width:50%"></div></div>
-          <span class="perf-cnt" id="pc-l">0</span>
-        </div>
-        <div class="perf-row">
-          <span class="perf-lbl">Big</span>
-          <div class="perf-bar-bg"><div class="perf-fill perf-b" id="pfb" style="width:50%"></div></div>
-          <span class="perf-cnt" id="pc-b">0</span>
-        </div>
-      </div>
+      <div id="stackView"><!-- injected by JS --></div>
+      <div class="stack-legend" id="stackLegend"><!-- injected by JS --></div>
     </section>
 
   </aside>

@@ -562,30 +562,26 @@ function persistStackPanelWidth() {
 }
 
 function applyCenterPaneHeights() {
-  const canvas = $('canvas');
-  if(!canvas) return;
   Object.entries(CENTER_PANE_CONFIG).forEach(([key, cfg]) => {
     const pane = $(key);
     if(!pane) return;
     if(S.collapsedSections[key]) {
+      pane.classList.remove('pane-manual');
       pane.style.flex = '0 0 auto';
       pane.style.flexBasis = 'auto';
       pane.style.height = 'auto';
       return;
     }
-    const head = pane.querySelector(':scope > .section-badge');
-    const body = pane.querySelector(':scope > .canvas-pane-body');
-    const handle = pane.querySelector(':scope > .canvas-pane-handle');
-    const naturalHeight = Math.ceil(
-      (head?.offsetHeight || 0) +
-      (body?.scrollHeight || 0) +
-      ((handle && !handle.hidden) ? handle.offsetHeight : 0)
-    );
-    const autoHeight = Math.max(cfg.min, naturalHeight || cfg.initial);
-    const maxHeight = Math.max(cfg.max, autoHeight);
-    const stored = Number.isFinite(S.centerPaneHeights[key]) ? S.centerPaneHeights[key] : autoHeight;
-    const next = clamp(stored, cfg.min, maxHeight);
-    pane.style.flex = '1 1 auto';
+    const hasManual = Number.isFinite(S.centerPaneHeights[key]);
+    pane.classList.toggle('pane-manual', hasManual);
+    if(!hasManual) {
+      pane.style.flex = '0 0 auto';
+      pane.style.flexBasis = 'auto';
+      pane.style.height = 'auto';
+      return;
+    }
+    const next = clamp(S.centerPaneHeights[key], cfg.min, cfg.max);
+    pane.style.flex = '0 0 auto';
     pane.style.flexBasis = `${next}px`;
     pane.style.height = `${next}px`;
   });

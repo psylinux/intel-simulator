@@ -781,6 +781,9 @@ body.pane-resizing .canvas-pane-handle {
   overflow: hidden;
 }
 #regsRow .canvas-pane-body {
+  overflow: visible;
+}
+#regsRow.pane-manual .canvas-pane-body {
   overflow: auto;
 }
 #regCards {
@@ -1009,6 +1012,9 @@ body.pane-resizing .canvas-pane-handle {
   overflow: hidden;
 }
 #asmTraceSection .canvas-pane-body {
+  overflow: visible;
+}
+#asmTraceSection.pane-manual .canvas-pane-body {
   overflow: hidden;
 }
 .trace-heads {
@@ -1034,14 +1040,19 @@ body.pane-resizing .canvas-pane-handle {
 #asmTrace {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: auto;
   gap: 4px;
   max-height: none;
-  overflow: auto;
+  overflow: visible;
   padding: 6px 14px 10px;
   scroll-padding-top: 6px;
   scroll-padding-bottom: 10px;
+}
+#asmTraceSection.pane-manual #asmTrace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .trace-row {
   display: grid;
@@ -1214,15 +1225,23 @@ body.pane-resizing .canvas-pane-handle {
   overflow: hidden;
 }
 #memSection .canvas-pane-body {
+  overflow: visible;
+}
+#memSection.pane-manual .canvas-pane-body {
   overflow: hidden;
 }
 #memWrapper {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   align-items: flex-start;
-  min-height: 0;
+  min-height: auto;
   padding: 0 14px 10px;
   gap: 10px;
+  overflow: visible;
+}
+#memSection.pane-manual #memWrapper {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 #memAddrBar {
@@ -1328,17 +1347,24 @@ body.pane-resizing .canvas-pane-handle {
   overflow: hidden;
 }
 #logSection .canvas-pane-body {
+  overflow: visible;
+}
+#logSection.pane-manual .canvas-pane-body {
   overflow: hidden;
 }
 #logOutput {
-  flex: 1 1 auto;
-  overflow-y: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   padding: 10px 16px 12px;
   min-height: 0;
   max-height: none;
   width: 100%;
   display: flex; flex-direction: column; gap: 6px;
   font-size: 10px; line-height: 1.55; color: var(--tx2);
+}
+#logSection.pane-manual #logOutput {
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 .le {
   --log-accent: var(--tx1);

@@ -655,6 +655,21 @@ function createCollapseButton(target, sectionId) {
   return btn;
 }
 
+function setSectionHeaderText(el, text) {
+  if(!el) return;
+  [...el.childNodes].forEach(node => {
+    if(node.nodeType===Node.TEXT_NODE && node.textContent.trim()) node.remove();
+  });
+  let textNode = el.querySelector(':scope > .section-header-text');
+  if(!textNode) {
+    textNode = document.createElement('span');
+    textNode.className = 'section-header-text';
+    const collapseBtn = el.querySelector(':scope > .section-collapse-btn');
+    el.insertBefore(textNode, collapseBtn || el.firstChild);
+  }
+  textNode.textContent = text;
+}
+
 function setToggleVisual(btn, collapsed) {
   if(!btn) return;
   btn.textContent = collapsed ? '+' : '−';
@@ -949,9 +964,10 @@ function buildStackTrace() {
     </div>`;
 }
 
-function buildAsmTrace() {
+function buildAsmTrace(opts={}) {
   const root = $('asmTrace');
   if(!root) return;
+  const autoScroll = opts.autoScroll !== false;
 
   const primary = traceProgram(demoProgramForArch());
   const currentShown = primary.some(line => line.addr===S.pc);
@@ -985,7 +1001,7 @@ function buildAsmTrace() {
       }).join('')
     : '<div class="trace-separator">Nenhuma instrucao disponivel para listar.</div>';
 
-  requestAnimationFrame(() => requestAnimationFrame(ensureCurrentTraceVisible));
+  if(autoScroll) requestAnimationFrame(() => requestAnimationFrame(ensureCurrentTraceVisible));
   scheduleCenterPaneLayout();
 }
 
@@ -1154,7 +1170,7 @@ function buildRegCards() {
 
   // Update section badge
   const gpBadge=$('gpBadge');
-  if(gpBadge) gpBadge.textContent = is64() ? 'REGISTRADORES DE USO GERAL (64-bit)' : 'REGISTRADORES DE USO GERAL';
+  if(gpBadge) setSectionHeaderText(gpBadge, is64() ? 'REGISTRADORES DE USO GERAL (64-bit)' : 'REGISTRADORES DE USO GERAL');
 
   // Main GP reg cards
   const g=$('regCards'); g.innerHTML='';
@@ -1168,7 +1184,7 @@ function buildRegCards() {
     const valueHex = regHex(name);
     if(is64()) {
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span>${valueHex.slice(8)}</div>
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
         <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     } else {
@@ -1195,7 +1211,7 @@ function buildRegCards() {
       d.onclick=(e)=>{ if(!e.target.closest('.rc-edit-input')) App.selectReg(name); };
       const valueHex=regHex(name);
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span>${valueHex.slice(8)}</div>
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
       d.querySelector('.rc-value').addEventListener('click', e => {
         e.stopPropagation();
@@ -1371,11 +1387,10 @@ function updateRegCard(name) {
   const valueHex = regHex(name);
   if(is64()) {
     const hiSpan = v.querySelector('.rc-hi');
-    if(hiSpan) {
+    const loSpan = v.querySelector('.rc-lo');
+    if(hiSpan && loSpan) {
       hiSpan.textContent=valueHex.slice(0,8);
-      let tn=hiSpan.nextSibling;
-      if(tn&&tn.nodeType===3) tn.nodeValue=valueHex.slice(8);
-      else { const t=document.createTextNode(valueHex.slice(8)); v.appendChild(t); }
+      loSpan.textContent=valueHex.slice(8);
     } else v.textContent=valueHex;
   } else {
     v.textContent=valueHex;
@@ -1409,12 +1424,10 @@ function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
   if(v) {
     if(is64()) {
       const hi=v.querySelector('.rc-hi');
-      if(hi) {
+      const lo=v.querySelector('.rc-lo');
+      if(hi && lo) {
         hi.textContent=valueHex.slice(0,8);
-        // Update the text node after the span
-        let tn=hi.nextSibling;
-        if(tn&&tn.nodeType===3) tn.nodeValue=valueHex.slice(8);
-        else { const t=document.createTextNode(valueHex.slice(8)); v.appendChild(t); }
+        lo.textContent=valueHex.slice(8);
       } else v.textContent=valueHex;
     } else v.textContent=valueHex;
   }
@@ -1820,7 +1833,7 @@ async function doStore() {
     S.busy=false; setBusy(false);
     return;
   }
-  setPC(addr);
+  setPC(addr, { traceAutoScroll:false });
   lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
   setStatus(`STORE: gravando ${n} byte(s) em [0x${fmtA(addr)}]...`,'lbl-store');
 
@@ -1829,7 +1842,7 @@ async function doStore() {
     if(ma>=64){lg('error',`Endereço 0x${fmtA(ma)} fora do range`);break;}
     const hexPos=displayPosForTransferByte(reg, i, n);
     storeHighlight(reg, hexPos, n);
-    setPC(ma);
+    setPC(ma, { traceAutoScroll:false });
     setMemSt(ma,'mc-pc');
     await animPacket('store', ord[i], ma);
     writeMem(ma, ord[i], 'mc-active');
@@ -1841,7 +1854,7 @@ async function doStore() {
   updateRegCard(reg);
   const ms=Math.round(performance.now()-t0);
   recOp('store',ms);
-  setPC((addr+n)&0x3F);
+  setPC((addr+n)&0x3F, { traceAutoScroll:false });
   setStatus(`STORE concluído — ${ms}ms`,'lbl-done');
   lg('store',`STORE completo em ${ms}ms`);
   buildStackView();
@@ -1863,7 +1876,7 @@ async function doLoad() {
     S.busy=false; setBusy(false);
     return;
   }
-  setPC(addr);
+  setPC(addr, { traceAutoScroll:false });
   lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
   setStatus(`LOAD: lendo ${n} byte(s) de [0x${fmtA(addr)}]...`,'lbl-load');
 
@@ -1876,7 +1889,7 @@ async function doLoad() {
 
   for(let i=0;i<n;i++) {
     const ma=addr+i; if(ma>=64) break;
-    setPC(ma); setMemSt(ma,'mc-active');
+    setPC(ma, { traceAutoScroll:false }); setMemSt(ma,'mc-active');
     await animPacket('load', raw[i], ma);
 
     partialLittle[i] = raw[i] & 0xFF;
@@ -1900,7 +1913,7 @@ async function doLoad() {
   $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
   const ms=Math.round(performance.now()-t0);
   recOp('load',ms);
-  setPC((addr+n)&0x3F);
+  setPC((addr+n)&0x3F, { traceAutoScroll:false });
   setStatus(`LOAD concluído: ${reg}=0x${finalHex} — ${ms}ms`,'lbl-done');
   lg('load',`LOAD completo: ${reg}=0x${finalHex} em ${ms}ms`);
   buildStackView();
@@ -2422,20 +2435,25 @@ async function doPush() {
   }
   S.regs.ESP=nextSp;
   const sp=S.regs.ESP;
-  setPC(sp);
+  setPC(sp, { traceAutoScroll:false });
   lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtA(sp)}`, `PUSH ${reg}`);
   setStatus(`PUSH: ${reg} → [0x${fmtA(sp)}]`,'lbl-store');
   const bs=regBytes(reg,width);
   for(let i=0;i<width;i++) {
     const ma=(sp+i)&0x3F;
+    const hexPos=displayPosForTransferByte(reg, i, width);
+    storeHighlight(reg, hexPos, width);
+    setPC(ma, { traceAutoScroll:false });
     setMemSt(ma,'mc-pc');
     await animPacket('store', bs[i], ma);
-    writeMem(ma, bs[i], 'mc-written');
+    writeMem(ma, bs[i], 'mc-active');
     await sleep(S.speed*0.12);
+    S.memState[ma]='mc-written'; setMemSt(ma,'mc-written');
   }
+  updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg);
   updateRegCard(spName); updatePickerVal(spName);
   setStatus(`PUSH concluído — ${spName}=0x${fmtA(sp)}`,'lbl-done');
-  setPC((sp+width)&0x3F);
+  setPC((sp+width)&0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2451,14 +2469,14 @@ async function doPop() {
     S.busy=false; setBusy(false);
     return;
   }
-  setPC(sp);
+  setPC(sp, { traceAutoScroll:false });
   lg('load',`POP [0x${fmtA(sp)}] → ${reg}`, `POP ${reg}`);
   setStatus(`POP: [0x${fmtA(sp)}] → ${reg}`,'lbl-load');
   const partialLittle = new Array(width).fill(0);
   setRegParts(reg,0,0); setLoading(reg,true);
   for(let i=0;i<width;i++) {
     const ma=(sp+i)&0x3F;
-    setMemSt(ma,'mc-active');
+    setPC(ma, { traceAutoScroll:false }); setMemSt(ma,'mc-active');
     await animPacket('load', S.mem[ma], ma);
     partialLittle[i]=S.mem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
@@ -2472,7 +2490,7 @@ async function doPop() {
   const finalHex=regHex(reg);
   $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
   setStatus(`POP concluído — ${reg}=0x${finalHex}`,'lbl-done');
-  setPC((sp+width)&0x3F);
+  setPC((sp+width)&0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -3126,8 +3144,10 @@ async function animPacket(dir, bv, memIdx) {
 // ─────────────────────────────────────────────────────────
 // PC / STATUS / LOG / STATS
 // ─────────────────────────────────────────────────────────
-function setPC(addr){
+function setPC(addr, opts={}){
   S.pc=addr&0x3F;
+  const syncTrace = opts.trace !== false;
+  const traceAutoScroll = opts.traceAutoScroll !== false;
   const pd=$('pcDisplay');
   if(pd && document.activeElement!==pd) pd.value=fmtA(S.pc);
   const ai=$('addrInput');
@@ -3137,8 +3157,10 @@ function setPC(addr){
     memEl(S.pc)?.classList.add('mc-selected');
     refreshBreakdown();
   }
-  buildAsmTrace();
-  refreshAsmValidation();
+  if(syncTrace) {
+    buildAsmTrace({ autoScroll: traceAutoScroll });
+    refreshAsmValidation();
+  }
 }
 function statusLogType(cls) {
   if(cls==='lbl-error') return 'error';

@@ -239,8 +239,14 @@ body.pane-resizing {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 9px; letter-spacing: 2.5px; color: var(--tx2);
-  margin-bottom: 8px; font-weight: 600;
+  font-size: 10px; letter-spacing: 1.8px; color: #f8fbff;
+  margin-bottom: 8px; font-weight: 800;
+  padding: 6px 9px;
+  border: 1px solid rgba(56,189,248,.18);
+  border-left: 3px solid var(--acc);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(56,189,248,.12), rgba(56,189,248,.04));
+  box-shadow: inset 0 0 0 1px rgba(56,189,248,.05);
 }
 .ctrl-section-body {
   min-width: 0;
@@ -338,14 +344,14 @@ body.pane-resizing {
 .reg-picker { display: flex; flex-direction: column; gap: 2px; }
 .rpbtn {
   display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-  padding: 7px 9px; background: var(--bg2); border: 1px solid var(--bdr);
+  padding: 8px 10px; background: var(--bg2); border: 1px solid var(--bdr);
   border-radius: var(--r); cursor: pointer; transition: all .15s var(--ease);
 }
 .rp-main {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.rp-name { font-size: 11px; font-weight: 700; color: var(--tx1); letter-spacing: 1px; }
-.rp-val  { font-size: 10px; color: var(--tx2); font-family: var(--mono); letter-spacing: .5px; }
+.rp-name { font-size: 13px; font-weight: 700; color: var(--tx1); letter-spacing: .75px; }
+.rp-val  { font-size: 12px; color: var(--tx2); font-family: var(--mono); letter-spacing: .4px; }
 .rp-val-editable { cursor: text; }
 .rp-val-editable:hover { color: var(--acc); }
 .rp-bytes {
@@ -353,14 +359,14 @@ body.pane-resizing {
 }
 .rp-byte {
   flex: 1; min-width: 0;
-  text-align: center; padding: 2px 1px;
+  text-align: center; padding: 3px 1px;
   background: var(--bg3); border: 1px solid var(--bdr);
   border-radius: 3px; color: var(--tx2);
-  font-size: 8px; line-height: 1.1;
+  font-size: 9px; line-height: 1.15;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .rp-byte-lbl {
-  color: var(--tx3); font-size: 6px; letter-spacing: .4px; line-height: 1;
+  color: var(--tx3); font-size: 8px; font-weight: 700; letter-spacing: .3px; line-height: 1;
 }
 .rp-byte.rc-byte-base,
 .rp-byte.rc-byte-last {
@@ -581,13 +587,17 @@ input[type=range]::-webkit-slider-thumb {
   align-items: stretch;
 }
 #spCards .rc-subrow {
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
 }
 #spCards .rc-subname {
-  font-size: 8px;
+  min-width: 42px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .35px;
 }
 #spCards .rc-subcell {
-  font-size: 8px;
+  height: 20px;
+  font-size: 9px;
 }
 #spCards .rc-edit-input {
   max-width: 112px;
@@ -612,9 +622,26 @@ input[type=range]::-webkit-slider-thumb {
 .rc-ext .rc-name { color: var(--acc); font-size: 9px; }
 .ext-badge { font-size: 8px; color: var(--acc); padding: 6px 16px 4px; border-top: 1px solid var(--bdr); }
 
-/* 64-bit value display: dimmed upper 32 + bright lower 32 */
-.rc-val64 { font-size: 14px !important; letter-spacing: 0.4px !important; }
-.rc-hi { color: var(--tx3); font-size: 12px; margin-right: 1px; }
+/* 64-bit value display: vivid upper/lower halves with distinct colors */
+.rc-val64 {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 15px !important;
+  letter-spacing: 0.45px !important;
+}
+.rc-hi {
+  color: #67e8f9;
+  font-size: inherit;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(103,232,249,.10);
+}
+.rc-lo {
+  color: #86efac;
+  font-size: inherit;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(134,239,172,.10);
+}
 
 /* In x64 mode, GP cards get a slightly wider value font */
 #regCards .rc-value { font-size: 16px; }
@@ -757,11 +784,21 @@ body.pane-resizing .canvas-pane-handle {
 }
 
 .section-badge {
-  font-size: 9px; letter-spacing: 2.5px; color: var(--tx2); font-weight: 600;
-  display: flex; align-items: center; gap: 10px; padding: 7px 14px 5px;
+  font-size: 10px; letter-spacing: 1.8px; color: #f8fbff; font-weight: 800;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  min-height: 0;
+  line-height: 1.35;
+  margin: 8px 14px 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(56,189,248,.18);
+  border-left: 3px solid var(--acc);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(56,189,248,.12), rgba(56,189,248,.04));
+  box-shadow: inset 0 0 0 1px rgba(56,189,248,.05);
+  box-sizing: border-box;
 }
 .canvas-pane.is-collapsed > .section-badge {
-  padding-bottom: 8px;
+  margin-bottom: 10px;
 }
 .addr-dir-tag {
   font-size: 8px; letter-spacing: 1px; color: var(--acc);
@@ -836,13 +873,13 @@ body.pane-resizing .canvas-pane-handle {
 }
 .rc-subrow {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 9px;
   align-items: center;
   min-width: 0;
 }
 .rc-submeta {
-  min-width: 34px;
+  min-width: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -860,7 +897,7 @@ body.pane-resizing .canvas-pane-handle {
 }
 .rc-subcell {
   min-width: 0;
-  height: 18px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -869,7 +906,7 @@ body.pane-resizing .canvas-pane-handle {
   background: rgba(17,24,39,.38);
   color: var(--tx3);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: .25px;
 }
@@ -877,11 +914,11 @@ body.pane-resizing .canvas-pane-handle {
   color: #f8fbff;
 }
 .rc-subname {
-  min-width: 34px;
+  min-width: 42px;
   color: var(--tx1);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .75px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .35px;
   white-space: nowrap;
   text-align: center;
 }
@@ -950,7 +987,7 @@ body.pane-resizing .canvas-pane-handle {
 
 /* LSB/MSB labels inside byte spans */
 .rc-blbl {
-  display: block; font-size: 6px; font-weight: 400; letter-spacing: 0.4px;
+  display: block; font-size: 7px; font-weight: 700; letter-spacing: 0.35px;
   margin-top: 1px; line-height: 1; text-align: center;
 }
 .rc-blbl-lsb { color: var(--grn); }
@@ -1529,6 +1566,9 @@ body.pane-resizing .canvas-pane-handle {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+#stackArchLbl {
+  color: #f8fbff;
 }
 .stack-toggle-btn {
   min-width: 58px;

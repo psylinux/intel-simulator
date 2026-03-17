@@ -577,18 +577,20 @@ function applyStackSize() {
   const nextSize = normalizeStackSizeBytes((Number.isFinite(requestedKb) ? requestedKb : stackSizeKb()) * 1024);
   S.stackSize = nextSize;
   resetStackState();
-  S.memViewBase = normalizeMemViewBase(S.memViewBase);
-  S.memSelectedAddr = clamp(S.memSelectedAddr, 0, Math.max(memSpaceSize() - 1, 0));
+  const stackViewAddr = clamp(Math.max(S.stackSize - ptrSize(), 0), 0, Math.max(memSpaceSize() - 1, 0));
+  S.memViewBase = normalizeMemViewBase(Math.max(stackViewAddr - 56, 0));
+  S.memSelectedAddr = stackViewAddr;
   markRegistersChanged(spRegs());
   buildRegCards();
   buildRegPicker();
+  buildMemGrid();
   syncPicker();
   if(isSpReg(S.reg)) $('valInput').value = fmtA(getReg(S.reg));
   buildStackView();
   refreshPreview();
   refreshBreakdown();
   syncStackSizeUI();
-  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}.`);
+  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria sincronizado para a faixa superior da stack em 0x${fmtMemA(S.memViewBase)}..0x${fmtMemA(Math.min(S.memViewBase + 63, memSpaceSize() - 1))}.`);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2124,7 +2126,7 @@ async function doStore() {
     const hexPos=displayPosForTransferByte(reg, i, n);
     storeHighlight(reg, hexPos, n);
     setPC(ma, { traceAutoScroll:false });
-    setMemSt(ma,'mc-pc');
+    setMemSt(ma,'mc-active');
     await animPacket('store', ord[i], ma);
     writeMem(ma, ord[i], 'mc-active');
     lg('store',`  [0x${fmtA(ma)}] ← 0x${hex8(ord[i])}  (byte ${i+1}/${n})`,
@@ -2732,6 +2734,7 @@ async function doPush() {
     const ma=sp+i;
     const hexPos=displayPosForTransferByte(reg, i, width);
     storeHighlight(reg, hexPos, width);
+    setMemSt(ma,'mc-active');
     await animPacket('store', bs[i], ma);
     writeMem(ma, bs[i], 'mc-active');
     await sleep(S.speed*0.12);
@@ -2763,11 +2766,13 @@ async function doPop() {
   setRegParts(reg,0,0); setLoading(reg,true);
   for(let i=0;i<width;i++) {
     const ma=sp+i;
+    setMemSt(ma,'mc-active');
     await animPacket('load', S.stackMem[ma], ma);
     partialLittle[i]=S.stackMem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
     liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
     await sleep(S.speed*0.12);
+    setMemSt(ma,'mc-written');
   }
   setLoading(reg,false);
   S.regs.ESP=sp+width;
@@ -3387,31 +3392,54 @@ function toggleStackMode() {
 
 const stackRowEl = addr => $('stackView')?.querySelector(`.stack-row[data-stack-addr="${addr}"]`);
 
+function activeRegisterAnchor(dir) {
+  const bytes = $('rcb-'+S.reg);
+  if(dir==='store') {
+    return bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-'+S.reg) || $('rc-'+S.reg);
+  }
+  return $('rcv-'+S.reg) || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rc-'+S.reg);
+}
+
+function setMemOpIndicator(addr, dir) {
+  const cell = memEl(addr);
+  if(!cell) return;
+  cell.classList.remove('mc-op-store','mc-op-load');
+  cell.classList.add(dir==='load' ? 'mc-op-load' : 'mc-op-store');
+}
+
+function clearMemOpIndicator(addr) {
+  const cell = memEl(addr);
+  if(!cell) return;
+  cell.classList.remove('mc-op-store','mc-op-load');
+}
+
 // ─────────────────────────────────────────────────────────
 // ANIMATION
 // ─────────────────────────────────────────────────────────
 async function animPacket(dir, bv, memIdx) {
   const stage=$('animStage'), svg=$('animSVG');
-  const rc=$('rc-'+S.reg), mc=memEl(memIdx) || stackRowEl(memIdx);
-  if(!stage||!svg||!rc||!mc){ await sleep(Math.max(S.speed*0.4,80)); return; }
+  const regAnchor = activeRegisterAnchor(dir);
+  const memAnchor = memEl(memIdx);
+  if(!stage||!svg||!regAnchor||!memAnchor){ await sleep(Math.max(S.speed*0.4,80)); return; }
 
   const sr=stage.getBoundingClientRect();
-  const rr=rc.getBoundingClientRect();
-  const mr=mc.getBoundingClientRect();
+  const rr=regAnchor.getBoundingClientRect();
+  const mr=memAnchor.getBoundingClientRect();
 
-  const px=r=>Math.max(10,Math.min(sr.width-10,  r.left+r.width/2 -sr.left));
-  const py=r=>Math.max(8, Math.min(sr.height-8,  r.top +r.height/2-sr.top));
+  const px=r=>Math.max(6,Math.min(sr.width-6,  r.left+r.width/2 -sr.left));
+  const py=r=>Math.max(6, Math.min(sr.height-6,  r.top +r.height/2-sr.top));
 
   const x1=dir==='store'?px(rr):px(mr), y1=dir==='store'?py(rr):py(mr);
   const x2=dir==='store'?px(mr):px(rr), y2=dir==='store'?py(mr):py(rr);
 
   const col=dir==='store'?'#4ade80':'#60a5fa';
   const mk =dir==='store'?'url(#arrowG)':'url(#arrowB)';
+  setMemOpIndicator(memIdx, dir);
 
   const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
   [['x1',x1],['y1',y1],['x2',x2],['y2',y2],
-   ['stroke',col],['stroke-width','1.5'],['stroke-dasharray','5 4'],
-   ['opacity','0.38'],['marker-end',mk]].forEach(([k,v])=>ln.setAttribute(k,v));
+   ['stroke',col],['stroke-width','1.8'],['stroke-dasharray','5 4'],
+   ['stroke-linecap','round'],['opacity','0.52'],['marker-end',mk]].forEach(([k,v])=>ln.setAttribute(k,v));
   svg.appendChild(ln);
 
   const pkt=document.createElement('div');
@@ -3426,7 +3454,7 @@ async function animPacket(dir, bv, memIdx) {
       const t=Math.min((now-t0)/dur,1), e=ease(t);
       pkt.style.left=(x1+(x2-x1)*e)+'px';
       pkt.style.top =(y1+(y2-y1)*e)+'px';
-      t<1 ? requestAnimationFrame(step) : (pkt.remove(),ln.remove(),res());
+      t<1 ? requestAnimationFrame(step) : (pkt.remove(),ln.remove(),clearMemOpIndicator(memIdx),res());
     }
     requestAnimationFrame(step);
   });

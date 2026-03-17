@@ -1879,6 +1879,148 @@ function parseAsmMemoryOperand(op) {
   };
 }
 
+const SUPPORTED_ASM_MNEMS = ['MOV','PUSH','POP','CALL','RET','JMP','NOP','HLT'];
+
+function editDistance(a, b) {
+  const aa = a.toUpperCase();
+  const bb = b.toUpperCase();
+  const rows = Array.from({length:aa.length + 1}, () => new Array(bb.length + 1).fill(0));
+  for(let i=0;i<=aa.length;i++) rows[i][0] = i;
+  for(let j=0;j<=bb.length;j++) rows[0][j] = j;
+  for(let i=1;i<=aa.length;i++) {
+    for(let j=1;j<=bb.length;j++) {
+      const cost = aa[i-1]===bb[j-1] ? 0 : 1;
+      rows[i][j] = Math.min(
+        rows[i-1][j] + 1,
+        rows[i][j-1] + 1,
+        rows[i-1][j-1] + cost
+      );
+    }
+  }
+  return rows[aa.length][bb.length];
+}
+
+function humanJoin(list) {
+  const uniq = [...new Set(list.filter(Boolean))];
+  if(!uniq.length) return '';
+  if(uniq.length===1) return uniq[0];
+  if(uniq.length===2) return `${uniq[0]} ou ${uniq[1]}`;
+  return `${uniq.slice(0,-1).join(', ')} ou ${uniq[uniq.length-1]}`;
+}
+
+function closestAsmNames(token, names, limit=2, maxDistance=2) {
+  const raw = token.trim().toUpperCase();
+  if(!raw) return [];
+  return [...new Set(names)]
+    .map(name => ({ name, dist: editDistance(raw, name) }))
+    .filter(item => item.dist <= maxDistance)
+    .sort((a,b) => a.dist - b.dist || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map(item => item.name);
+}
+
+function asmValidRegistersForArch(opts={}) {
+  if(is64()) {
+    if(opts.onlyWide) return [...REG64, ...REG64X];
+    return [...REG32, ...REG64, ...REG64X];
+  }
+  return [...REG32];
+}
+
+function asmRegisterExamples(expectedRegs=null) {
+  const regs = expectedRegs?.length ? expectedRegs : asmValidRegistersForArch();
+  const preferred = is64()
+    ? ['RAX','RBX','RCX','RDX','RSP','RBP','R8','R9','R10','EAX','EBX','ECX','EDX','ESP','EBP']
+    : ['EAX','EBX','ECX','EDX','ESP','EBP','ESI','EDI'];
+  const picks = [];
+  for(const name of preferred) {
+    if(regs.includes(name) && !picks.includes(name)) picks.push(name);
+  }
+  return humanJoin(picks.slice(0, is64() ? 5 : 4));
+}
+
+function wideAliasForReg(name) {
+  const idx = REG32.indexOf(name);
+  return idx>=0 ? REG64[idx] : '';
+}
+
+function isAsmIdentifierToken(token) {
+  return /^\$?[A-Z_][A-Z0-9_]*$/.test(token.trim().toUpperCase());
+}
+
+function instructionRuleHint(mnem, expectedRegs=null) {
+  if(mnem==='MOV') {
+    return 'Formas aceitas: MOV REG,IMEDIATO; MOV REG,REG; MOV REG,[END]; MOV [END],REG.';
+  }
+  if(mnem==='PUSH' || mnem==='POP') {
+    const ex = is64() ? 'RAX' : 'EAX';
+    return `${mnem} no assembler deste simulador aceita apenas 1 registrador. Exemplo: ${mnem} ${ex}.`;
+  }
+  if(mnem==='CALL') return 'Use um endereco do mapa, por exemplo CALL 0x0015.';
+  if(mnem==='JMP') return 'Use um endereco do mapa, por exemplo JMP 0x0010 ou JMP SHORT 0x0010.';
+  if(['NOP','HLT','RET'].includes(mnem)) return `Escreva apenas ${mnem}, sem operandos.`;
+  return `Use operandos validos, por exemplo ${asmRegisterExamples(expectedRegs)}.`;
+}
+
+function explainUnsupportedMnemonic(mnem) {
+  if(/^[0-9]+/.test(mnem)) {
+    const stripped = mnem.replace(/^[0-9]+/, '');
+    if(SUPPORTED_ASM_MNEMS.includes(stripped)) {
+      return `Instrucao nao suportada pelo assembler: ${mnem}. O nome da instrucao nao pode comecar com numero. Parece haver um caractere extra antes de ${stripped}.`;
+    }
+  }
+  const suggestions = closestAsmNames(mnem, SUPPORTED_ASM_MNEMS);
+  if(suggestions.length) {
+    return `Instrucao nao suportada pelo assembler: ${mnem}. Esse mnemonico nao existe exatamente assim no subset atual. Talvez voce quis dizer ${humanJoin(suggestions)}.`;
+  }
+  return `Instrucao nao suportada pelo assembler: ${mnem}. O subset atual aceita apenas ${humanJoin(SUPPORTED_ASM_MNEMS)}.`;
+}
+
+function explainInvalidRegisterOperand(token, mnem='', expectedRegs=null) {
+  const raw = token.trim().toUpperCase();
+  const regs = expectedRegs?.length ? expectedRegs : asmValidRegistersForArch();
+  const ruleHint = instructionRuleHint(mnem, regs);
+
+  if(!raw) return `Operando vazio. ${ruleHint}`;
+  if(/^\$[A-Z0-9_]+$/.test(raw)) {
+    const bare = raw.slice(1);
+    if([...REG32, ...REG64, ...REG64X, 'EIP', 'RIP', 'PC'].includes(bare)) {
+      return `Registrador invalido: ${raw}. Na sintaxe Intel usada pelo simulador, registradores nao levam o prefixo "$". Escreva ${bare}.`;
+    }
+    return `Registrador invalido: ${raw}. O prefixo "$" nao faz parte da sintaxe Intel usada aqui. ${ruleHint}`;
+  }
+  if(raw==='PC') {
+    return 'Registrador invalido: PC. "PC" e apenas o nome didatico mostrado na interface. No assembler, altere o fluxo com JMP/CALL ou edite o PC pelos controles visuais.';
+  }
+  if(raw==='EIP' || raw==='RIP') {
+    return `Registrador invalido: ${raw}. ${raw} e um ponteiro de instrucao especial da CPU, mas este assembler didatico nao aceita ${raw} como operando. Para mudar o fluxo, use JMP/CALL; a interface atualiza o PC automaticamente.`;
+  }
+  if(raw==='FP') {
+    return `Registrador invalido: ${raw}. "FP" nao e um registrador Intel x86/x86-64. Para a base do frame, use ${is64() ? 'RBP' : 'EBP'}.`;
+  }
+  if(raw==='SP') {
+    return `Registrador invalido: ${raw}. O nome correto do ponteiro de pilha nesta arquitetura e ${is64() ? 'RSP' : 'ESP'}.`;
+  }
+  if(raw==='BP') {
+    return `Registrador invalido: ${raw}. O nome correto do base pointer nesta arquitetura e ${is64() ? 'RBP' : 'EBP'}.`;
+  }
+  if(/^0X$/.test(raw)) {
+    return `Registrador invalido: ${raw}. Isso parece um hexadecimal incompleto: faltam digitos apos 0x. ${ruleHint}`;
+  }
+  if(/^0X[0-9A-F]+$/.test(raw) || /^[0-9]+$/.test(raw)) {
+    return `Registrador invalido: ${raw}. Isso e um valor imediato, nao um registrador. ${ruleHint}`;
+  }
+  if(/^\[.*\]$/.test(raw) || /\bPTR\b/.test(raw)) {
+    return `Registrador invalido: ${raw}. Isso representa memoria, nao um registrador. ${ruleHint}`;
+  }
+
+  const suggestions = closestAsmNames(raw, regs);
+  if(suggestions.length) {
+    return `Registrador invalido: ${raw}. Esse nome nao existe exatamente como foi escrito. Talvez voce quis dizer ${humanJoin(suggestions)}.`;
+  }
+  return `Registrador invalido: ${raw}. Esse nome nao existe nos registradores aceitos pelo simulador nesta arquitetura. Use, por exemplo, ${asmRegisterExamples(regs)}.`;
+}
+
 function validateAssembly(src, baseAddr=S.pc) {
   const { normalized, mnem, ops } = parseAsmSource(src);
   if(!normalized) return { ok:false, error:'Digite uma instrucao ASM.' };
@@ -1887,15 +2029,15 @@ function validateAssembly(src, baseAddr=S.pc) {
   const isReg = n => allRegs.includes(n);
   const regAllowedInArch = n => is64() || (!REG64.includes(n) && !REG64X.includes(n));
   const requireNoOps = name => {
-    if(ops.length!==0) return { ok:false, error:`${name} nao recebe operandos.` };
+    if(ops.length!==0) return { ok:false, error:`${name} nao recebe operandos. ${instructionRuleHint(name)}` };
     return null;
   };
   const requireOneOp = name => {
-    if(ops.length!==1) return { ok:false, error:`${name} exige exatamente 1 operando.` };
+    if(ops.length!==1) return { ok:false, error:`${name} exige exatamente 1 operando. ${instructionRuleHint(name)}` };
     return null;
   };
   const requireTwoOps = name => {
-    if(ops.length!==2) return { ok:false, error:`${name} exige exatamente 2 operandos.` };
+    if(ops.length!==2) return { ok:false, error:`${name} exige exatamente 2 operandos. ${instructionRuleHint(name)}` };
     return null;
   };
 
@@ -1906,21 +2048,25 @@ function validateAssembly(src, baseAddr=S.pc) {
     const err = requireOneOp(mnem);
     if(err) return err;
     const reg = ops[0];
-    if(!isReg(reg)) return { ok:false, error:`Registrador invalido: ${reg}.` };
+    const expectedRegs = asmValidRegistersForArch({ onlyWide:is64() });
+    if(!isReg(reg)) return { ok:false, error:explainInvalidRegisterOperand(reg, mnem, expectedRegs) };
     if(!regAllowedInArch(reg)) return { ok:false, error:`${reg} nao existe no modo IA-32.` };
-    if(is64() && asmRegWidth(reg)!==64) return { ok:false, error:`Em x86-64, ${mnem} da simulacao aceita apenas registradores de 64 bits.` };
+    if(is64() && asmRegWidth(reg)!==64) {
+      const alias = wideAliasForReg(reg);
+      return { ok:false, error:`Em x86-64, ${mnem} da simulacao aceita apenas registradores de 64 bits. ${reg} tem 32 bits${alias ? `; use ${alias}` : ''}.` };
+    }
   } else if(mnem==='JMP') {
     const err = requireOneOp('JMP');
     if(err) return err;
     const targetTok = ops[0].replace(/^SHORT\s+/,'').trim();
     const target = parseAsmNumber(targetTok);
-    if(!target) return { ok:false, error:'Destino de JMP invalido.' };
+    if(!target) return { ok:false, error:`Destino de JMP invalido: ${ops[0]}. ${instructionRuleHint('JMP')}` };
     if(target.big > 0x3Fn) return { ok:false, error:'Destino de JMP fora do mapa 0x0000..0x003F.' };
   } else if(mnem==='CALL') {
     const err = requireOneOp('CALL');
     if(err) return err;
     const target = parseAsmNumber(ops[0]);
-    if(!target) return { ok:false, error:'Destino de CALL invalido.' };
+    if(!target) return { ok:false, error:`Destino de CALL invalido: ${ops[0]}. ${instructionRuleHint('CALL')}` };
     if(target.big > 0x3Fn) return { ok:false, error:'Destino de CALL fora do mapa 0x0000..0x003F.' };
   } else if(mnem==='MOV') {
     const err = requireTwoOps('MOV');
@@ -1936,6 +2082,27 @@ function validateAssembly(src, baseAddr=S.pc) {
     if(srcReg && !regAllowedInArch(srcReg)) return { ok:false, error:`${srcReg} nao existe no modo IA-32.` };
     if(dstMem?.error) return { ok:false, error:dstMem.error };
     if(srcMem?.error) return { ok:false, error:srcMem.error };
+    if(!dstReg && !dstMem) {
+      const dstRaw = dst.trim().toUpperCase();
+      if(parseAsmNumber(dstRaw) || /^0X$/.test(dstRaw) || /^[0-9]+$/.test(dstRaw)) {
+        return { ok:false, error:`Operando de destino invalido: ${dst}. Em MOV, o destino nao pode ser um valor imediato. ${instructionRuleHint('MOV')}` };
+      }
+      if(/^\[/.test(dstRaw) || /\bPTR\b/.test(dstRaw)) {
+        return { ok:false, error:`Operando de memoria invalido: ${dst}. Use [0x0010], DWORD PTR [0x0010] ou QWORD PTR [0x0010].` };
+      }
+      if(isAsmIdentifierToken(dstRaw)) {
+        return { ok:false, error:explainInvalidRegisterOperand(dstRaw, 'MOV', asmValidRegistersForArch()) };
+      }
+    }
+    if(!srcReg && !srcMem && !imm) {
+      const srcRaw = src2.trim().toUpperCase();
+      if(/^\[/.test(srcRaw) || /\bPTR\b/.test(srcRaw)) {
+        return { ok:false, error:`Operando de memoria invalido: ${src2}. Use [0x0010], DWORD PTR [0x0010] ou QWORD PTR [0x0010].` };
+      }
+      if(isAsmIdentifierToken(srcRaw) || /^\$[A-Z0-9_]+$/.test(srcRaw) || /^0X$/.test(srcRaw) || /^[0-9]+$/.test(srcRaw)) {
+        return { ok:false, error:explainInvalidRegisterOperand(srcRaw, 'MOV', asmValidRegistersForArch()) };
+      }
+    }
 
     if(dstReg && imm) {
       const bits = asmRegWidth(dstReg);
@@ -1974,14 +2141,14 @@ function validateAssembly(src, baseAddr=S.pc) {
         return { ok:false, error:'MOV com registrador de 32 bits requer DWORD PTR.' };
       }
     } else {
-      return { ok:false, error:'Formato de MOV nao suportado neste simulador.' };
+      return { ok:false, error:`Formato de MOV nao suportado neste simulador. ${instructionRuleHint('MOV')}` };
     }
   } else {
-    return { ok:false, error:`Instrucao nao suportada pelo assembler: ${mnem}.` };
+    return { ok:false, error:explainUnsupportedMnemonic(mnem) };
   }
 
   const bytes = assemble(normalized, baseAddr);
-  if(!bytes) return { ok:false, error:'Instrucao reconhecida, mas nao pode ser codificada pelo subset atual.' };
+  if(!bytes) return { ok:false, error:'Instrucao reconhecida, mas nao pode ser codificada pelo subset atual. Revise os operandos e os formatos aceitos por este simulador.' };
   return { ok:true, bytes, normalized };
 }
 

@@ -1,6 +1,8 @@
 # Intel x86/x64 Memory & Stack Lab
 
-Simulador visual interativo de memória, registradores e stack para arquiteturas Intel x86/x64, com animações byte a byte, suporte a Little Endian e Big Endian, e interface de estilo blueprint técnico.
+Simulador visual interativo de memoria, registradores e stack para arquiteturas Intel x86/x64. A execucao do subset Intel implementado segue little-endian; o toggle `BIG/LITTLE` existe como modo comparativo/visual da interface.
+
+Auditoria tecnica e escopo validado: [INTEL_SUBSET_AUDIT.md](INTEL_SUBSET_AUDIT.md)
 
 ---
 ## Opção 1: Use online

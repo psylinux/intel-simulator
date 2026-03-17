@@ -1447,7 +1447,7 @@ async function doStore() {
   clearFaultLatch();
   S.busy=true; setBusy(true);
   const reg=S.reg, addr=readAddr(), n=transferWidth(reg), t0=performance.now();
-  const ord=orderedBytes(regBytes(reg,n), S.endian);
+  const ord=regBytes(reg,n);
   const asm = asmForOp('store-start',{reg,addr,val:regHex(reg)});
   if(!mapAccessFits(addr, n)) {
     reportWidthOverflow(`STORE ${reg}`, addr, n, asm);
@@ -1455,7 +1455,7 @@ async function doStore() {
     return;
   }
   setPC(addr);
-  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, ${S.endian}-endian)`, asm);
+  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
   setStatus(`STORE: gravando ${n} byte(s) em [0x${fmtA(addr)}]...`,'lbl-store');
 
   for(let i=0;i<n;i++) {
@@ -1498,7 +1498,7 @@ async function doLoad() {
     return;
   }
   setPC(addr);
-  lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, ${S.endian}-endian)`, asm);
+  lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
   setStatus(`LOAD: lendo ${n} byte(s) de [0x${fmtA(addr)}]...`,'lbl-load');
 
   const raw=[];
@@ -1513,7 +1513,7 @@ async function doLoad() {
     setPC(ma); setMemSt(ma,'mc-active');
     await animPacket('load', raw[i], ma);
 
-    partialLittle[S.endian==='little' ? i : (n-1-i)] = raw[i] & 0xFF;
+    partialLittle[i] = raw[i] & 0xFF;
     setRegFromBytes(reg, partialLittle);
 
     // Live register update — value builds up byte by byte

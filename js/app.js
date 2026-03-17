@@ -12,7 +12,9 @@ const S = {
   reg:    'EAX',
   stackMode: 'full',
   sidebarPanelWidth: 240,
+  sidebarPanelManual: false,
   stackPanelWidth: 280,
+  stackPanelManual: false,
   centerPaneHeights: {},
   collapsedSections: {},
   speed:  2500,
@@ -503,15 +505,27 @@ function init() {
 
 function loadStackPanelWidth() {
   try {
+    const manual = localStorage.getItem('memsim.stackPanelManual') === '1';
     const saved = parseInt(localStorage.getItem('memsim.stackPanelWidth') || '', 10);
-    if(Number.isFinite(saved)) S.stackPanelWidth = clamp(saved, 220, 520);
+    if(manual && Number.isFinite(saved)) {
+      S.stackPanelManual = true;
+      S.stackPanelWidth = clamp(saved, 220, 520);
+    } else {
+      S.stackPanelManual = false;
+    }
   } catch(_) {}
 }
 
 function loadSidebarPanelWidth() {
   try {
+    const manual = localStorage.getItem('memsim.sidebarPanelManual') === '1';
     const saved = parseInt(localStorage.getItem('memsim.sidebarPanelWidth') || '', 10);
-    if(Number.isFinite(saved)) S.sidebarPanelWidth = clamp(saved, 220, 420);
+    if(manual && Number.isFinite(saved)) {
+      S.sidebarPanelManual = true;
+      S.sidebarPanelWidth = clamp(saved, 220, 420);
+    } else {
+      S.sidebarPanelManual = false;
+    }
   } catch(_) {}
 }
 
@@ -540,24 +554,38 @@ function loadCollapsedSections() {
 function applySidebarPanelWidth() {
   const shell = $('appShell');
   if(!shell) return;
-  shell.style.setProperty('--sidebar-w', `${clamp(S.sidebarPanelWidth, 220, 420)}px`);
+  if(S.sidebarPanelManual) shell.style.setProperty('--sidebar-w', `${clamp(S.sidebarPanelWidth, 220, 420)}px`);
+  else shell.style.removeProperty('--sidebar-w');
 }
 
 function persistSidebarPanelWidth() {
   try {
-    localStorage.setItem('memsim.sidebarPanelWidth', String(clamp(S.sidebarPanelWidth, 220, 420)));
+    if(S.sidebarPanelManual) {
+      localStorage.setItem('memsim.sidebarPanelManual', '1');
+      localStorage.setItem('memsim.sidebarPanelWidth', String(clamp(S.sidebarPanelWidth, 220, 420)));
+    } else {
+      localStorage.removeItem('memsim.sidebarPanelManual');
+      localStorage.removeItem('memsim.sidebarPanelWidth');
+    }
   } catch(_) {}
 }
 
 function applyStackPanelWidth() {
   const shell = $('appShell');
   if(!shell) return;
-  shell.style.setProperty('--stack-panel-w', `${clamp(S.stackPanelWidth, 220, 520)}px`);
+  if(S.stackPanelManual) shell.style.setProperty('--stack-panel-w', `${clamp(S.stackPanelWidth, 220, 520)}px`);
+  else shell.style.removeProperty('--stack-panel-w');
 }
 
 function persistStackPanelWidth() {
   try {
-    localStorage.setItem('memsim.stackPanelWidth', String(clamp(S.stackPanelWidth, 220, 520)));
+    if(S.stackPanelManual) {
+      localStorage.setItem('memsim.stackPanelManual', '1');
+      localStorage.setItem('memsim.stackPanelWidth', String(clamp(S.stackPanelWidth, 220, 520)));
+    } else {
+      localStorage.removeItem('memsim.stackPanelManual');
+      localStorage.removeItem('memsim.stackPanelWidth');
+    }
   } catch(_) {}
 }
 
@@ -974,6 +1002,7 @@ function initStackResize() {
 
     function onMove(ev) {
       const next = clamp(Math.round(shellRect.right - ev.clientX), 220, 520);
+      S.stackPanelManual = true;
       S.stackPanelWidth = next;
       applyStackPanelWidth();
     }
@@ -1003,6 +1032,7 @@ function initSidebarResize() {
 
     function onMove(ev) {
       const next = clamp(Math.round(ev.clientX - shellRect.left), 220, 420);
+      S.sidebarPanelManual = true;
       S.sidebarPanelWidth = next;
       applySidebarPanelWidth();
     }
@@ -3241,8 +3271,8 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // SAVE / LOAD
 // ─────────────────────────────────────────────────────────
 function saveSim(){
-  const data={version:7,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,stackPanelWidth:S.stackPanelWidth,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
+  const data={version:8,state:{
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
     regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
   }};
@@ -3260,8 +3290,10 @@ function loadSim(e){
       const d=JSON.parse(ev.target.result).state;
       S.endian=d.endian; S.size=d.size; S.reg=d.reg;
       if(d.stackMode) S.stackMode=d.stackMode;
-      if(Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
-      if(Number.isFinite(d.stackPanelWidth)) S.stackPanelWidth = clamp(d.stackPanelWidth, 220, 520);
+      S.sidebarPanelManual = !!d.sidebarPanelManual;
+      S.stackPanelManual = !!d.stackPanelManual;
+      if(S.sidebarPanelManual && Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
+      if(S.stackPanelManual && Number.isFinite(d.stackPanelWidth)) S.stackPanelWidth = clamp(d.stackPanelWidth, 220, 520);
       if(d.centerPaneHeights && typeof d.centerPaneHeights==='object') {
         Object.keys(CENTER_PANE_CONFIG).forEach(key => {
           const height = parseInt(d.centerPaneHeights[key], 10);

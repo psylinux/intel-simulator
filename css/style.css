@@ -70,9 +70,9 @@
   --r:          4px;
   --r2:         6px;
   --ease:       cubic-bezier(.4,0,.2,1);
-  --sidebar-w:  240px;
+  --sidebar-w:  clamp(220px, 18vw, 320px);
   --sidebar-resizer-w: 10px;
-  --stack-panel-w: 280px;
+  --stack-panel-w: clamp(240px, 22vw, 360px);
   --stack-resizer-w: 10px;
 }
 

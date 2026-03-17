@@ -74,68 +74,120 @@ const CENTER_PANE_CONFIG = {
 };
 
 const DEMO_PROGRAMS = {
+  // ─── IA-32 — 63 bytes ────────────────────────────────────────────────────
+  // main (0x0000):
+  //   MOV EAX, 0xAABBCCDD  — carrega arg1
+  //   MOV EBX, 0x11223344  — carrega arg2
+  //   CALL sub1            — sub-rotina com prologue/epilogue de frame
+  //   PUSH EAX             — preserva resultado de sub1 na stack
+  //   MOV EAX, EBX         — prepara arg para sub2
+  //   CALL sub2            — sub-rotina com 2× PUSH antes do RET
+  //   POP ECX              — recupera resultado de sub1 da stack
+  //   JMP sub3             — tail-jump: frame final, termina com HLT
   ia32: {
     name: 'demo_stack_calls_ia32',
     entry: 0x0000,
     bytes: new Uint8Array([
-      0xB8, 0x11, 0x11, 0x11, 0x11,       // 0000  MOV EAX, 0x11111111
-      0xBB, 0x22, 0x22, 0x22, 0x22,       // 0005  MOV EBX, 0x22222222
-      0xE8, 0x06, 0x00, 0x00, 0x00,       // 000A  CALL 0x0015
-      0xE8, 0x0C, 0x00, 0x00, 0x00,       // 000F  CALL 0x0020
-      0xF4,                               // 0014  HLT
-      0xFF, 0xF5,                         // 0015  PUSH EBP
-      0x89, 0xE5,                         // 0017  MOV EBP, ESP
-      0xFF, 0xF0,                         // 0019  PUSH EAX
-      0x8F, 0xC1,                         // 001B  POP ECX
-      0x8F, 0xC5,                         // 001D  POP EBP
-      0xC3,                               // 001F  RET
-      0xFF, 0xF5,                         // 0020  PUSH EBP
-      0x89, 0xE5,                         // 0022  MOV EBP, ESP
-      0xFF, 0xF3,                         // 0024  PUSH EBX
-      0x8F, 0xC2,                         // 0026  POP EDX
-      0x8F, 0xC5,                         // 0028  POP EBP
-      0xC3,                               // 002A  RET
+      // ── main ──────────────────────────────────────────────────────
+      0xB8, 0xDD, 0xCC, 0xBB, 0xAA,       // 0000  MOV EAX, 0xAABBCCDD
+      0xBB, 0x44, 0x33, 0x22, 0x11,       // 0005  MOV EBX, 0x11223344
+      0xE8, 0x0D, 0x00, 0x00, 0x00,       // 000A  CALL 0x001C  (off=+0x0D)
+      0xFF, 0xF0,                         // 000F  PUSH EAX
+      0x89, 0xD8,                         // 0011  MOV EAX, EBX
+      0xE8, 0x0F, 0x00, 0x00, 0x00,       // 0013  CALL 0x0027  (off=+0x0F)
+      0x8F, 0xC1,                         // 0018  POP ECX
+      0xEB, 0x1A,                         // 001A  JMP 0x0036   (off=+0x1A)
+      // ── sub1 @ 0x001C ─────────────────────────────────────────────
+      0xFF, 0xF5,                         // 001C  PUSH EBP
+      0x89, 0xE5,                         // 001E  MOV EBP, ESP
+      0xFF, 0xF0,                         // 0020  PUSH EAX
+      0x8F, 0xC1,                         // 0022  POP ECX
+      0x8F, 0xC5,                         // 0024  POP EBP
+      0xC3,                               // 0026  RET
+      // ── sub2 @ 0x0027 ─────────────────────────────────────────────
+      0xFF, 0xF5,                         // 0027  PUSH EBP
+      0x89, 0xE5,                         // 0029  MOV EBP, ESP
+      0xFF, 0xF0,                         // 002B  PUSH EAX
+      0xFF, 0xF3,                         // 002D  PUSH EBX
+      0x8F, 0xC2,                         // 002F  POP EDX
+      0x8F, 0xC1,                         // 0031  POP ECX
+      0x8F, 0xC5,                         // 0033  POP EBP
+      0xC3,                               // 0035  RET
+      // ── sub3 @ 0x0036 (via JMP — sem RET, termina com HLT) ────────
+      0xFF, 0xF5,                         // 0036  PUSH EBP
+      0x89, 0xE5,                         // 0038  MOV EBP, ESP
+      0xFF, 0xF1,                         // 003A  PUSH ECX
+      0x8F, 0xC2,                         // 003C  POP EDX
+      0xF4,                               // 003E  HLT
     ]),
     listing: [
-      '0000: MOV EAX, 0x11111111',
-      '0005: MOV EBX, 0x22222222',
-      '000A: CALL 0x0015',
-      '000F: CALL 0x0020',
-      '0014: HLT',
-      '0015: PUSH EBP / MOV EBP, ESP / PUSH EAX / POP ECX / POP EBP / RET',
-      '0020: PUSH EBP / MOV EBP, ESP / PUSH EBX / POP EDX / POP EBP / RET',
+      '0000: MOV EAX, 0xAABBCCDD',
+      '0005: MOV EBX, 0x11223344',
+      '000A: CALL sub1 (0x001C)',
+      '000F: PUSH EAX',
+      '0011: MOV EAX, EBX',
+      '0013: CALL sub2 (0x0027)',
+      '0018: POP ECX',
+      '001A: JMP sub3 (0x0036)',
+      '001C: [sub1] PUSH EBP / MOV EBP,ESP / PUSH EAX / POP ECX / POP EBP / RET',
+      '0027: [sub2] PUSH EBP / MOV EBP,ESP / PUSH EAX / PUSH EBX / POP EDX / POP ECX / POP EBP / RET',
+      '0036: [sub3] PUSH EBP / MOV EBP,ESP / PUSH ECX / POP EDX / HLT',
     ],
   },
+
+  // ─── x86-64 — 63 bytes ──────────────────────────────────────────────────
+  // main (0x0000):
+  //   MOV RCX, 0xAABBCCDD  — carrega arg (imm64, 10 bytes)
+  //   CALL sub1            — sub-rotina com prologue/epilogue de frame
+  //   PUSH RAX             — preserva resultado de sub1 na stack
+  //   MOV RAX, RCX         — prepara arg para sub2 (REX.W + 89, 3 bytes)
+  //   CALL sub2            — sub-rotina com PUSH/POP dentro do frame
+  //   POP RBX              — recupera resultado de sub1 da stack
+  //   JMP sub3             — tail-jump: frame final, termina com HLT
   x64: {
     name: 'demo_stack_calls_x64',
     entry: 0x0000,
     bytes: new Uint8Array([
-      0x48, 0xB8, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, // 0000 MOV RAX, 0x0000000011111111
-      0x48, 0xBB, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, // 000A MOV RBX, 0x0000000022222222
-      0xE8, 0x06, 0x00, 0x00, 0x00,                               // 0014 CALL 0x001F
-      0xE8, 0x0D, 0x00, 0x00, 0x00,                               // 0019 CALL 0x002B
-      0xF4,                                                       // 001E HLT
-      0xFF, 0xF5,                                                 // 001F PUSH RBP
-      0x48, 0x89, 0xE5,                                           // 0021 MOV RBP, RSP
-      0xFF, 0xF0,                                                 // 0024 PUSH RAX
-      0x8F, 0xC1,                                                 // 0026 POP RCX
-      0x8F, 0xC5,                                                 // 0028 POP RBP
-      0xC3,                                                       // 002A RET
-      0xFF, 0xF5,                                                 // 002B PUSH RBP
-      0x48, 0x89, 0xE5,                                           // 002D MOV RBP, RSP
-      0xFF, 0xF3,                                                 // 0030 PUSH RBX
-      0x8F, 0xC2,                                                 // 0032 POP RDX
-      0x8F, 0xC5,                                                 // 0034 POP RBP
-      0xC3,                                                       // 0036 RET
+      // ── main ──────────────────────────────────────────────────────
+      0x48, 0xB9, 0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x00, 0x00, 0x00, // 0000  MOV RCX, 0xAABBCCDD
+      0xE8, 0x0E, 0x00, 0x00, 0x00,                               // 000A  CALL 0x001D  (off=+0x0E)
+      0xFF, 0xF0,                                                 // 000F  PUSH RAX
+      0x48, 0x89, 0xC8,                                           // 0011  MOV RAX, RCX
+      0xE8, 0x10, 0x00, 0x00, 0x00,                               // 0014  CALL 0x0029  (off=+0x10)
+      0x8F, 0xC3,                                                 // 0019  POP RBX
+      0xEB, 0x18,                                                 // 001B  JMP 0x0035   (off=+0x18)
+      // ── sub1 @ 0x001D ─────────────────────────────────────────────
+      0xFF, 0xF5,                                                 // 001D  PUSH RBP
+      0x48, 0x89, 0xE5,                                           // 001F  MOV RBP, RSP
+      0xFF, 0xF1,                                                 // 0022  PUSH RCX
+      0x8F, 0xC0,                                                 // 0024  POP RAX
+      0x8F, 0xC5,                                                 // 0026  POP RBP
+      0xC3,                                                       // 0028  RET
+      // ── sub2 @ 0x0029 ─────────────────────────────────────────────
+      0xFF, 0xF5,                                                 // 0029  PUSH RBP
+      0x48, 0x89, 0xE5,                                           // 002B  MOV RBP, RSP
+      0xFF, 0xF0,                                                 // 002E  PUSH RAX
+      0x8F, 0xC6,                                                 // 0030  POP RSI
+      0x8F, 0xC5,                                                 // 0032  POP RBP
+      0xC3,                                                       // 0034  RET
+      // ── sub3 @ 0x0035 (via JMP — sem RET, termina com HLT) ────────
+      0xFF, 0xF5,                                                 // 0035  PUSH RBP
+      0x48, 0x89, 0xE5,                                           // 0037  MOV RBP, RSP
+      0xFF, 0xF3,                                                 // 003A  PUSH RBX
+      0x8F, 0xC7,                                                 // 003C  POP RDI
+      0xF4,                                                       // 003E  HLT
     ]),
     listing: [
-      '0000: MOV RAX, 0x0000000011111111',
-      '000A: MOV RBX, 0x0000000022222222',
-      '0014: CALL 0x001F',
-      '0019: CALL 0x002B',
-      '001E: HLT',
-      '001F: PUSH RBP / MOV RBP, RSP / PUSH RAX / POP RCX / POP RBP / RET',
-      '002B: PUSH RBP / MOV RBP, RSP / PUSH RBX / POP RDX / POP RBP / RET',
+      '0000: MOV RCX, 0x00000000AABBCCDD',
+      '000A: CALL sub1 (0x001D)',
+      '000F: PUSH RAX',
+      '0011: MOV RAX, RCX',
+      '0014: CALL sub2 (0x0029)',
+      '0019: POP RBX',
+      '001B: JMP sub3 (0x0035)',
+      '001D: [sub1] PUSH RBP / MOV RBP,RSP / PUSH RCX / POP RAX / POP RBP / RET',
+      '0029: [sub2] PUSH RBP / MOV RBP,RSP / PUSH RAX / POP RSI / POP RBP / RET',
+      '0035: [sub3] PUSH RBP / MOV RBP,RSP / PUSH RBX / POP RDI / HLT',
     ],
   },
 };

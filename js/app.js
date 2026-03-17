@@ -10,7 +10,10 @@ const S = {
   endian: 'little',
   size:   'dword',
   reg:    'EAX',
-  speed:  600,
+  stackMode: 'full',
+  sidebarPanelWidth: 240,
+  stackPanelWidth: 280,
+  speed:  10000,
   busy:   false,
   arch:   'ia32',   // 'ia32' | 'x64'
   regs: {
@@ -44,6 +47,73 @@ const S = {
   progRunning: false,
 };
 
+const DEMO_PROGRAMS = {
+  ia32: {
+    name: 'demo_stack_calls_ia32',
+    entry: 0x0000,
+    bytes: new Uint8Array([
+      0xB8, 0x11, 0x11, 0x11, 0x11,       // 0000  MOV EAX, 0x11111111
+      0xBB, 0x22, 0x22, 0x22, 0x22,       // 0005  MOV EBX, 0x22222222
+      0xE8, 0x06, 0x00, 0x00, 0x00,       // 000A  CALL 0x0015
+      0xE8, 0x0C, 0x00, 0x00, 0x00,       // 000F  CALL 0x0020
+      0xF4,                               // 0014  HLT
+      0xFF, 0xF5,                         // 0015  PUSH EBP
+      0x89, 0xE5,                         // 0017  MOV EBP, ESP
+      0xFF, 0xF0,                         // 0019  PUSH EAX
+      0x8F, 0xC1,                         // 001B  POP ECX
+      0x8F, 0xC5,                         // 001D  POP EBP
+      0xC3,                               // 001F  RET
+      0xFF, 0xF5,                         // 0020  PUSH EBP
+      0x89, 0xE5,                         // 0022  MOV EBP, ESP
+      0xFF, 0xF3,                         // 0024  PUSH EBX
+      0x8F, 0xC2,                         // 0026  POP EDX
+      0x8F, 0xC5,                         // 0028  POP EBP
+      0xC3,                               // 002A  RET
+    ]),
+    listing: [
+      '0000: MOV EAX, 0x11111111',
+      '0005: MOV EBX, 0x22222222',
+      '000A: CALL 0x0015',
+      '000F: CALL 0x0020',
+      '0014: HLT',
+      '0015: PUSH EBP / MOV EBP, ESP / PUSH EAX / POP ECX / POP EBP / RET',
+      '0020: PUSH EBP / MOV EBP, ESP / PUSH EBX / POP EDX / POP EBP / RET',
+    ],
+  },
+  x64: {
+    name: 'demo_stack_calls_x64',
+    entry: 0x0000,
+    bytes: new Uint8Array([
+      0x48, 0xB8, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, // 0000 MOV RAX, 0x0000000011111111
+      0x48, 0xBB, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, // 000A MOV RBX, 0x0000000022222222
+      0xE8, 0x06, 0x00, 0x00, 0x00,                               // 0014 CALL 0x001F
+      0xE8, 0x0D, 0x00, 0x00, 0x00,                               // 0019 CALL 0x002B
+      0xF4,                                                       // 001E HLT
+      0xFF, 0xF5,                                                 // 001F PUSH RBP
+      0x48, 0x89, 0xE5,                                           // 0021 MOV RBP, RSP
+      0xFF, 0xF0,                                                 // 0024 PUSH RAX
+      0x8F, 0xC1,                                                 // 0026 POP RCX
+      0x8F, 0xC5,                                                 // 0028 POP RBP
+      0xC3,                                                       // 002A RET
+      0xFF, 0xF5,                                                 // 002B PUSH RBP
+      0x48, 0x89, 0xE5,                                           // 002D MOV RBP, RSP
+      0xFF, 0xF3,                                                 // 0030 PUSH RBX
+      0x8F, 0xC2,                                                 // 0032 POP RDX
+      0x8F, 0xC5,                                                 // 0034 POP RBP
+      0xC3,                                                       // 0036 RET
+    ]),
+    listing: [
+      '0000: MOV RAX, 0x0000000011111111',
+      '000A: MOV RBX, 0x0000000022222222',
+      '0014: CALL 0x001F',
+      '0019: CALL 0x002B',
+      '001E: HLT',
+      '001F: PUSH RBP / MOV RBP, RSP / PUSH RAX / POP RCX / POP RBP / RET',
+      '002B: PUSH RBP / MOV RBP, RSP / PUSH RBX / POP RDX / POP RBP / RET',
+    ],
+  },
+};
+
 // ─────────────────────────────────────────────────────────
 // UTILITIES
 // ─────────────────────────────────────────────────────────
@@ -57,11 +127,121 @@ const fmtA   = n => n.toString(16).padStart(4,'0').toUpperCase();
 const ease   = t => t<.5 ? 2*t*t : -1+(4-2*t)*t;
 const sizeN  = () => S.size==='byte'?1 : S.size==='word'?2 : S.size==='qword'?8 : 4;
 const is64   = () => S.arch==='x64';
+const demoProgramForArch = (arch=S.arch) => DEMO_PROGRAMS[arch==='x64' ? 'x64' : 'ia32'];
+let asmTraceClickTimer = 0;
 
 // Current register name set based on arch
 function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX']; }
 function extRegs() { return is64() ? ['R8','R9','R10','R11','R12','R13','R14','R15'] : []; }
 function spRegs()  { return is64() ? ['RSP','RBP'] : ['ESP','EBP']; }
+function ptrSize() { return is64() ? 8 : 4; }
+function isSpReg(name) { return spRegs().includes(name); }
+function isStackTopReg(name) { return name==='ESP' || name==='RSP'; }
+function isStackBaseReg(name) { return name==='EBP' || name==='RBP'; }
+function stackRoleClass(name) {
+  if(isStackTopReg(name)) return 'esp';
+  if(isStackBaseReg(name)) return 'ebp';
+  return '';
+}
+function regWidthBytes(name) { return is64() && !isSpReg(name) ? 8 : 4; }
+function transferWidth(name=S.reg) { return Math.min(sizeN(), regWidthBytes(name)); }
+
+function regParts(name) {
+  if(is64()) {
+    const map = {
+      RAX:{lo:'EAX', hi:'RAX_hi'},
+      RBX:{lo:'EBX', hi:'RBX_hi'},
+      RCX:{lo:'ECX', hi:'RCX_hi'},
+      RDX:{lo:'EDX', hi:'RDX_hi'},
+      RSI:{lo:'ESI', hi:'RSI_hi'},
+      RDI:{lo:'EDI', hi:'RDI_hi'},
+      R8: {lo:'R8',  hi:'R8_hi'},
+      R9: {lo:'R9',  hi:'R9_hi'},
+      R10:{lo:'R10', hi:'R10_hi'},
+      R11:{lo:'R11', hi:'R11_hi'},
+      R12:{lo:'R12', hi:'R12_hi'},
+      R13:{lo:'R13', hi:'R13_hi'},
+      R14:{lo:'R14', hi:'R14_hi'},
+      R15:{lo:'R15', hi:'R15_hi'},
+    };
+    if(name==='RSP') return {lo:S.regs.ESP>>>0, hi:0};
+    if(name==='RBP') return {lo:S.regs.EBP>>>0, hi:0};
+    const meta = map[name];
+    if(meta) return {lo:(S.regs[meta.lo]||0)>>>0, hi:(S.regs[meta.hi]||0)>>>0};
+  }
+  return {lo:(S.regs[name]||0)>>>0, hi:0};
+}
+
+function setRegParts(name, lo, hi=0) {
+  lo >>>= 0;
+  hi >>>= 0;
+  if(is64()) {
+    const map = {
+      RAX:{lo:'EAX', hi:'RAX_hi'},
+      RBX:{lo:'EBX', hi:'RBX_hi'},
+      RCX:{lo:'ECX', hi:'RCX_hi'},
+      RDX:{lo:'EDX', hi:'RDX_hi'},
+      RSI:{lo:'ESI', hi:'RSI_hi'},
+      RDI:{lo:'EDI', hi:'RDI_hi'},
+      R8: {lo:'R8',  hi:'R8_hi'},
+      R9: {lo:'R9',  hi:'R9_hi'},
+      R10:{lo:'R10', hi:'R10_hi'},
+      R11:{lo:'R11', hi:'R11_hi'},
+      R12:{lo:'R12', hi:'R12_hi'},
+      R13:{lo:'R13', hi:'R13_hi'},
+      R14:{lo:'R14', hi:'R14_hi'},
+      R15:{lo:'R15', hi:'R15_hi'},
+    };
+    if(name==='RSP') { S.regs.ESP=lo; return; }
+    if(name==='RBP') { S.regs.EBP=lo; return; }
+    const meta = map[name];
+    if(meta) {
+      S.regs[meta.lo]=lo;
+      S.regs[meta.hi]=hi;
+      return;
+    }
+  }
+  S.regs[name]=lo;
+}
+
+function regHex(name) {
+  const {lo,hi} = regParts(name);
+  return regWidthBytes(name)===8 ? hex64(hi,lo) : hex32(lo);
+}
+
+function regBytes(name, count=transferWidth(name)) {
+  const {lo,hi} = regParts(name);
+  const bytes = [];
+  for(let i=0;i<4;i++) bytes.push((lo>>>(i*8))&0xFF);
+  for(let i=0;i<4;i++) bytes.push((hi>>>(i*8))&0xFF);
+  return bytes.slice(0, count);
+}
+
+function setRegFromBytes(name, littleBytes) {
+  let lo = 0;
+  let hi = 0;
+  const limit = Math.min(littleBytes.length, regWidthBytes(name));
+  for(let i=0;i<Math.min(limit,4);i++) lo |= (littleBytes[i]&0xFF)<<(i*8);
+  for(let i=4;i<Math.min(limit,8);i++) hi |= (littleBytes[i]&0xFF)<<((i-4)*8);
+  setRegParts(name, lo>>>0, hi>>>0);
+}
+
+function displayTransferStart(name=S.reg, count=transferWidth(name)) {
+  return regWidthBytes(name) - Math.min(count, regWidthBytes(name));
+}
+
+function displayPosForTransferByte(name, byteIdx, count=transferWidth(name)) {
+  const total = regWidthBytes(name);
+  const start = displayTransferStart(name, count);
+  return S.endian==='little' ? (total-1-byteIdx) : (start+byteIdx);
+}
+
+function displayPosSet(name) {
+  const start = displayTransferStart(name);
+  const set = new Set();
+  for(let i=start;i<regWidthBytes(name);i++) set.add(i);
+  return set;
+}
 
 // Get/set 64-bit value for a register name
 function getReg(name) {
@@ -83,8 +263,8 @@ function setReg(name, val32) {
     if(name==='RSP'){ S.regs.ESP=val32; return; }
     if(name==='RBP'){ S.regs.EBP=val32; return; }
     const lo = lo32Map[name];
-    if(lo){ S.regs[lo]=val32; return; }
-    if(name.match(/^R\d+$/)) { S.regs[name]=val32; return; }
+    if(lo){ setRegParts(name, val32, 0); return; }
+    if(name.match(/^R\d+$/)) { setRegParts(name, val32, 0); return; }
   }
   S.regs[name]=val32;
 }
@@ -98,14 +278,40 @@ function ordered(v32, n, end) {
   const b=getBytes(v32,n);
   return end==='little' ? b : [...b].reverse();
 }
+function orderedBytes(bytes, end) {
+  return end==='little' ? [...bytes] : [...bytes].reverse();
+}
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function normalizeSpeed(speed) {
+  const raw = Number.isFinite(speed) ? speed : 10000;
+  return clamp(Math.round(raw), 80, 10000);
+}
+
+function syncSpeedUI() {
+  S.speed = normalizeSpeed(S.speed);
+  const slider = $('speedSlider');
+  const label = $('speedVal');
+  if(slider) slider.value = String(S.speed);
+  if(label) label.textContent = `${S.speed}ms`;
+}
 
 // ─────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────
 function init() {
+  loadSidebarPanelWidth();
+  loadStackPanelWidth();
+  applySidebarPanelWidth();
+  applyStackPanelWidth();
   buildRegCards();
   buildRegPicker();
   buildMemGrid();
+  buildStackView();
+  initSidebarResize();
+  initStackResize();
   syncPicker();
   refreshPreview();
   refreshBreakdown();
@@ -115,11 +321,14 @@ function init() {
   $('archX64') ?.classList.remove('active');
   // Hide QWORD button initially (IA-32 mode)
   $('sQword')?.setAttribute('style','display:none');
+  syncSpeedUI();
 
   $('speedSlider').addEventListener('input', e => {
-    S.speed = +e.target.value;
-    $('speedVal').textContent = S.speed+'ms';
+    S.speed = normalizeSpeed(+e.target.value);
+    syncSpeedUI();
   });
+  $('asmInput')?.addEventListener('input', refreshAsmValidation);
+  $('asmInput')?.addEventListener('blur', refreshAsmValidation);
 
   // PC input — manual editing
   $('pcDisplay').addEventListener('input', e => {
@@ -135,6 +344,7 @@ function init() {
     clearSel();
     memEl(addr)?.classList.add('mc-selected');
     refreshBreakdown();
+    buildStackView();
     lg('sys',`PC definido manualmente: 0x${fmtA(addr)}`);
   });
   $('pcDisplay').addEventListener('keydown', e => {
@@ -144,7 +354,12 @@ function init() {
   $('memGrid').addEventListener('click', e => {
     const c = e.target.closest('.mem-cell');
     if(!c) return;
+    if(c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
     const idx = +c.dataset.idx;
+    if(c.classList.contains('mc-selected') && !S.busy) {
+      editMemCell(idx);
+      return;
+    }
     // Set both addrInput and PC
     S.pc = idx;
     const pd=$('pcDisplay'); if(pd && document.activeElement!==pd) pd.value=fmtA(idx);
@@ -152,6 +367,34 @@ function init() {
     clearSel();
     c.classList.add('mc-selected');
     refreshBreakdown();
+    buildStackView();
+  });
+  $('memGrid').addEventListener('dblclick', e => {
+    const c = e.target.closest('.mem-cell');
+    if(!c || c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
+    editMemCell(+c.dataset.idx);
+  });
+  $('asmTrace')?.addEventListener('click', e => {
+    if(e.target.closest('.asm-edit-input')) return;
+    const line = e.target.closest('.asm-line, .c-line');
+    if(!line) return;
+    const addr = parseInt(line.dataset.addr || '0', 16) & 0x3F;
+    if(asmTraceClickTimer) clearTimeout(asmTraceClickTimer);
+    asmTraceClickTimer = setTimeout(() => {
+      asmTraceClickTimer = 0;
+      setPC(addr);
+      buildStackView();
+      lg('sys', `PC movido para a listagem de codigo 0x${fmtA(addr)}`);
+    }, 220);
+  });
+  $('asmTrace')?.addEventListener('dblclick', e => {
+    const line = e.target.closest('.asm-line');
+    if(!line || e.target.closest('.asm-edit-input')) return;
+    if(asmTraceClickTimer) {
+      clearTimeout(asmTraceClickTimer);
+      asmTraceClickTimer = 0;
+    }
+    editAsmLine(line);
   });
 
   $('btnHelp').onclick = () => { $('helpBg').classList.add('open'); showHelp('intro', $$('.htab')[0]); };
@@ -159,22 +402,413 @@ function init() {
   $('btnLoad').onclick = () => $('fileInput').click();
   $('fileInput').onchange = loadSim;
 
-  setStatus('Pronto — selecione uma operação','');
-  lg('sys','Simulador iniciado. Registrador padrão: EAX');
+  loadDefaultProgram(false);
+  buildMemGrid();
+  buildStackView();
+  refreshAsmValidation();
+  refreshBreakdown();
+  setStatus('Programa demo carregado — main em 0x0000','lbl-done');
+  lg('sys',`Simulador iniciado com programa demo ${is64() ? 'x86-64' : 'IA-32'}: main + 2 funcoes que usam a stack.`);
+  lg('sys', demoProgramForArch().listing.join(' | '));
+}
+
+function loadStackPanelWidth() {
+  try {
+    const saved = parseInt(localStorage.getItem('memsim.stackPanelWidth') || '', 10);
+    if(Number.isFinite(saved)) S.stackPanelWidth = clamp(saved, 220, 520);
+  } catch(_) {}
+}
+
+function loadSidebarPanelWidth() {
+  try {
+    const saved = parseInt(localStorage.getItem('memsim.sidebarPanelWidth') || '', 10);
+    if(Number.isFinite(saved)) S.sidebarPanelWidth = clamp(saved, 220, 420);
+  } catch(_) {}
+}
+
+function applySidebarPanelWidth() {
+  const shell = $('appShell');
+  if(!shell) return;
+  shell.style.setProperty('--sidebar-w', `${clamp(S.sidebarPanelWidth, 220, 420)}px`);
+}
+
+function persistSidebarPanelWidth() {
+  try {
+    localStorage.setItem('memsim.sidebarPanelWidth', String(clamp(S.sidebarPanelWidth, 220, 420)));
+  } catch(_) {}
+}
+
+function applyStackPanelWidth() {
+  const shell = $('appShell');
+  if(!shell) return;
+  shell.style.setProperty('--stack-panel-w', `${clamp(S.stackPanelWidth, 220, 520)}px`);
+}
+
+function persistStackPanelWidth() {
+  try {
+    localStorage.setItem('memsim.stackPanelWidth', String(clamp(S.stackPanelWidth, 220, 520)));
+  } catch(_) {}
+}
+
+function resetCoreRegisters() {
+  S.regs.EAX=0xDEADBEEF; S.regs.EBX=0xCAFEBABE; S.regs.ECX=0x12345678; S.regs.EDX=0xABCD1234;
+  S.regs.ESI=0; S.regs.EDI=0;
+  S.regs.RAX_hi=0; S.regs.RBX_hi=0; S.regs.RCX_hi=0; S.regs.RDX_hi=0;
+  S.regs.RSI_hi=0; S.regs.RDI_hi=0;
+  ['R8','R9','R10','R11','R12','R13','R14','R15'].forEach(r=>{ S.regs[r]=0; S.regs[r+'_hi']=0; });
+  S.regs.ESP=0x003C; S.regs.EBP=0x003C;
+}
+
+function resetStatsState() {
+  S.stats = {
+    ops:0, totalTime:0, loads:0, stores:0,
+    loadTimes:[], storeTimes:[], littleOps:0, bigOps:0,
+  };
+}
+
+function loadDefaultProgram(announce=true, arch=S.arch) {
+  const program = demoProgramForArch(arch);
+  S.mem.fill(0);
+  S.memState.fill('');
+  program.bytes.forEach((byte, idx) => {
+    S.mem[idx] = byte;
+    S.memState[idx] = 'mc-written';
+  });
+  setPC(program.entry);
+  if(announce) {
+    lg('sys', `Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado em 0x0000: main + 2 funcoes com uso de stack.`);
+    lg('sys', program.listing.join(' | '));
+  }
+}
+
+function traceBlock(startAddr, maxLines=20) {
+  const lines = [];
+  const visited = new Set();
+  let pc = startAddr & 0x3F;
+
+  while(lines.length < maxLines && !visited.has(pc)) {
+    visited.add(pc);
+    const instr = decodeAt(pc);
+    const size = Math.max(instr.size || 1, 1);
+    const bytes = [];
+    for(let i=0;i<size;i++) bytes.push(hex8(S.mem[(pc+i)&0x3F]));
+    lines.push({
+      addr: pc,
+      size,
+      bytes: bytes.join(' '),
+      asm: instr.asm || instr.mnem || `DB 0x${hex8(S.mem[pc])}`,
+      c: cForInstr(instr, pc),
+    });
+    pc = (pc + size) & 0x3F;
+    if(instr.op===0xF4) break;
+  }
+
+  return lines;
+}
+
+function traceProgram(program=demoProgramForArch()) {
+  const lines = [];
+  const visited = new Set();
+  let pc = program.entry & 0x3F;
+  let consumed = 0;
+  const limit = Math.min(program.bytes.length, 64);
+
+  while(consumed < limit && !visited.has(pc)) {
+    visited.add(pc);
+    const instr = decodeAt(pc);
+    const size = Math.max(instr.size || 1, 1);
+    const bytes = [];
+    for(let i=0;i<size;i++) bytes.push(hex8(S.mem[(pc+i)&0x3F]));
+    lines.push({
+      addr: pc,
+      size,
+      bytes: bytes.join(' '),
+      asm: instr.asm || instr.mnem || `DB 0x${hex8(S.mem[pc])}`,
+      c: cForInstr(instr, pc),
+    });
+    pc = (pc + size) & 0x3F;
+    consumed += size;
+  }
+
+  return lines;
+}
+
+function cScalarType(bits) {
+  return bits===64 ? 'uint64_t' : 'uint32_t';
+}
+
+function cForInstr(instr, addr) {
+  const asm = instr.asm || instr.mnem || `DB 0x${hex8(S.mem[addr & 0x3F])}`;
+  let m = null;
+
+  if(instr.unknown) return { kind:'pseudo', label:'PSEUDO', code:`db(0x${hex8(instr.op)});` };
+  if(asm==='NOP') return { kind:'pseudo', label:'PSEUDO', code:'/* no-op */' };
+  if(asm==='HLT') return { kind:'pseudo', label:'PSEUDO', code:'HALT_CPU();' };
+  if(asm==='RET') return { kind:'c', label:'C', code:'return;' };
+  if((m = /^CALL 0X([0-9A-F]+)$/.exec(asm))) return { kind:'c', label:'C', code:`fn_0x${m[1]}();` };
+  if((m = /^JMP SHORT 0X([0-9A-F]+)$/.exec(asm))) return { kind:'c', label:'C', code:`goto loc_0x${m[1]};` };
+  if((m = /^PUSH ([A-Z0-9]+)$/.exec(asm))) return { kind:'pseudo', label:'PSEUDO', code:`STACK.push(${m[1]});` };
+  if((m = /^POP ([A-Z0-9]+)$/.exec(asm))) return { kind:'pseudo', label:'PSEUDO', code:`${m[1]} = STACK.pop();` };
+  if((m = /^MOV ([A-Z0-9]+), 0X([0-9A-F]+)$/.exec(asm))) return { kind:'c', label:'C', code:`${m[1]} = 0x${m[2]};` };
+  if((m = /^MOV ([A-Z0-9]+), ([A-Z0-9]+)$/.exec(asm))) return { kind:'c', label:'C', code:`${m[1]} = ${m[2]};` };
+  if((m = /^MOV (QWORD|DWORD) PTR \[0X([0-9A-F]+)\], ([A-Z0-9]+)$/.exec(asm))) {
+    return { kind:'c', label:'C', code:`*((${cScalarType(m[1]==='QWORD' ? 64 : 32)}*)0x${m[2]}) = ${m[3]};` };
+  }
+  if((m = /^MOV ([A-Z0-9]+), (QWORD|DWORD) PTR \[0X([0-9A-F]+)\]$/.exec(asm))) {
+    return { kind:'c', label:'C', code:`${m[1]} = *((${cScalarType(m[2]==='QWORD' ? 64 : 32)}*)0x${m[3]});` };
+  }
+  if((m = /^DB 0X([0-9A-F]+)$/.exec(asm))) return { kind:'pseudo', label:'PSEUDO', code:`db(0x${m[1]});` };
+  return { kind:'pseudo', label:'PSEUDO', code:`/* ${asm} */` };
+}
+
+function ensureCurrentTraceVisible() {
+  const root = $('asmTrace');
+  if(!root) return;
+
+  const currentRow = root.querySelector('.trace-row-current');
+  if(!currentRow) return;
+
+  const padTop = 10;
+  const padBottom = 12;
+  const rootRect = root.getBoundingClientRect();
+  const rowRect = currentRow.getBoundingClientRect();
+  const overTop = rowRect.top - rootRect.top - padTop;
+  const overBottom = rowRect.bottom - rootRect.bottom + padBottom;
+
+  if(overTop < 0) {
+    root.scrollTop += overTop;
+    return;
+  }
+  if(overBottom > 0) {
+    root.scrollTop += overBottom;
+  }
+}
+
+function readPtrLE(addr, width=ptrSize()) {
+  let value = 0;
+  for(let i=0;i<Math.min(4, width);i++) {
+    value |= (S.mem[(addr+i)&0x3F] & 0xFF) << (i*8);
+  }
+  return value >>> 0;
+}
+
+function codeLabelAt(addr) {
+  const at = addr & 0x3F;
+  const instr = decodeAt(at);
+  return instr.asm || instr.mnem || `DB 0x${hex8(S.mem[at])}`;
+}
+
+function callSiteForReturn(retAddr) {
+  const addr = retAddr & 0x3F;
+  const callAddr = (addr - 5 + 64) & 0x3F;
+  const instr = decodeAt(callAddr);
+  if(instr.op!==0xE8) return null;
+  return {
+    addr: callAddr,
+    asm: instr.asm || instr.mnem || `CALL 0x${fmtA(addr)}`,
+  };
+}
+
+function stackTraceFrames() {
+  const items = [{
+    kind: 'pc',
+    depth: 0,
+    addr: S.pc & 0x3F,
+    asm: codeLabelAt(S.pc),
+    extra: `${ipReg()} ativo`,
+  }];
+
+  const visitedBp = new Set();
+  let bp = S.regs.EBP & 0x3F;
+  let depth = 1;
+
+  while(depth <= 8 && !visitedBp.has(bp)) {
+    visitedBp.add(bp);
+    const retSlot = (bp + ptrSize()) & 0x3F;
+    const retAddr = readPtrLE(retSlot, ptrSize()) & 0x3F;
+    const callSite = callSiteForReturn(retAddr);
+    if(!callSite) break;
+
+    items.push({
+      kind: 'ret',
+      depth,
+      addr: retAddr,
+      asm: codeLabelAt(retAddr),
+      extra: `via ${callSite.asm} @ 0x${fmtA(callSite.addr)}`,
+    });
+
+    const prevBp = readPtrLE(bp, ptrSize()) & 0x3F;
+    if(prevBp===bp) break;
+    bp = prevBp;
+    depth++;
+  }
+
+  return items;
+}
+
+function buildStackTrace() {
+  const items = stackTraceFrames();
+  const rows = items.map(item => `
+    <div class="stack-trace-row stack-trace-row-${item.kind}">
+      <span class="stack-trace-depth">#${item.depth}</span>
+      <span class="stack-trace-kind">${item.kind==='pc' ? 'PC' : 'RET'}</span>
+      <span class="stack-trace-addr">0x${fmtA(item.addr)}</span>
+      <span class="stack-trace-asm">${item.asm}</span>
+      <span class="stack-trace-extra">${item.extra}</span>
+    </div>
+  `).join('');
+
+  return `
+    <div class="stack-trace">
+      <div class="stack-trace-hd">
+        <span>STACK TRACE</span>
+        <span class="stack-trace-hint">cadeia de retorno a partir de ${is64() ? 'RBP' : 'EBP'}</span>
+      </div>
+      <div class="stack-trace-list">${rows}</div>
+      ${items.length===1 ? '<div class="stack-trace-empty">Nenhum endereco de retorno rastreavel no frame atual.</div>' : ''}
+    </div>`;
+}
+
+function buildAsmTrace() {
+  const root = $('asmTrace');
+  if(!root) return;
+
+  const primary = traceProgram(demoProgramForArch());
+  const currentShown = primary.some(line => line.addr===S.pc);
+  let lines = primary;
+
+  if(!currentShown) {
+    lines = [
+      ...primary,
+      {separator:true},
+      ...traceBlock(S.pc, 8),
+    ];
+  }
+
+  root.innerHTML = lines.length
+    ? lines.map(line => {
+        if(line.separator) return '<div class="trace-separator">PC atual fora do fluxo principal. Abaixo, decode local a partir do PC.</div>';
+        return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}">
+          <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="Clique para navegar · 2× clique para editar">
+            <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
+            <span class="asm-line-bytes">${line.bytes}</span>
+            <span class="asm-line-asm">${line.asm}</span>
+          </div>
+          <div class="c-line${line.addr===S.pc ? ' c-line-current' : ''}" data-addr="${fmtA(line.addr)}" title="Clique para navegar">
+            <span class="c-line-addr">0x${fmtA(line.addr)}</span>
+            <span class="c-line-main">
+              <span class="c-line-kind c-line-kind-${line.c.kind}">${line.c.label}</span>
+              <span class="c-line-code">${line.c.code}</span>
+            </span>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="trace-separator">Nenhuma instrucao disponivel para listar.</div>';
+
+  requestAnimationFrame(() => requestAnimationFrame(ensureCurrentTraceVisible));
+}
+
+function initStackResize() {
+  const handle = $('stackResizeHandle');
+  const shell = $('appShell');
+  if(!handle || !shell) return;
+
+  handle.addEventListener('mousedown', e => {
+    if(window.innerWidth <= 1100) return;
+    e.preventDefault();
+    const shellRect = shell.getBoundingClientRect();
+    document.body.classList.add('stack-resizing');
+
+    function onMove(ev) {
+      const next = clamp(Math.round(shellRect.right - ev.clientX), 220, 520);
+      S.stackPanelWidth = next;
+      applyStackPanelWidth();
+    }
+
+    function onUp() {
+      document.body.classList.remove('stack-resizing');
+      persistStackPanelWidth();
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+function initSidebarResize() {
+  const handle = $('sidebarResizeHandle');
+  const shell = $('appShell');
+  if(!handle || !shell) return;
+
+  handle.addEventListener('mousedown', e => {
+    if(window.innerWidth <= 760) return;
+    e.preventDefault();
+    const shellRect = shell.getBoundingClientRect();
+    document.body.classList.add('sidebar-resizing');
+
+    function onMove(ev) {
+      const next = clamp(Math.round(ev.clientX - shellRect.left), 220, 420);
+      S.sidebarPanelWidth = next;
+      applySidebarPanelWidth();
+    }
+
+    function onUp() {
+      document.body.classList.remove('sidebar-resizing');
+      persistSidebarPanelWidth();
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
 }
 
 // ─────────────────────────────────────────────────────────
 // REGISTER CARDS
 // ─────────────────────────────────────────────────────────
+function parseRegisterInput(name, raw) {
+  const clean = raw.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
+  if(isSpReg(name)) return {lo:parseInt(clean||'0',16)>>>0, hi:0};
+  const width = regWidthBytes(name)===8 ? 16 : 8;
+  const hex = clean.padStart(width,'0').slice(-width);
+  if(width===16) {
+    return {
+      hi: parseInt(hex.slice(0,8)||'0',16)>>>0,
+      lo: parseInt(hex.slice(8)||'0',16)>>>0,
+    };
+  }
+  return {lo:parseInt(hex||'0',16)>>>0, hi:0};
+}
+
+function commitRegisterValue(name, raw) {
+  const {lo,hi} = parseRegisterInput(name, raw);
+  setRegParts(name, lo, hi);
+  buildRegCards();
+  buildRegPicker();
+  syncPicker();
+  if(name===S.reg) {
+    const maxHex=Math.min(sizeN()*2, regWidthBytes(name)*2);
+    $('valInput').value = isSpReg(name) ? fmtA(getReg(name)) : regHex(name).slice(-maxHex);
+    refreshPreview();
+    refreshBreakdown();
+  }
+  buildStackView();
+  lg('sys', `${name} ← 0x${isSpReg(name) ? fmtA(getReg(name)) : regHex(name)}`);
+}
+
 // Make a register value element editable on click
-function makeEditable(el, name, isSp) {
+function makeRegisterEditable(el, name) {
   if(el.dataset.editing) return;
   el.dataset.editing = '1';
-  const cur = isSp ? fmtA(getReg(name)) : hex32(getReg(name));
+  const isSp = isSpReg(name);
+  const cur = isSp ? fmtA(getReg(name)) : regHex(name);
   const inp = document.createElement('input');
   inp.className = 'rc-edit-input';
   inp.type = 'text';
-  inp.maxLength = isSp ? 4 : 8;
+  inp.maxLength = isSp ? 4 : regWidthBytes(name)*2;
   inp.value = cur;
   inp.spellcheck = false;
   const prevHTML = el.innerHTML;
@@ -183,23 +817,8 @@ function makeEditable(el, name, isSp) {
   inp.focus(); inp.select();
 
   function commit() {
-    const raw = inp.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
-    const v = parseInt(raw||'0', 16)>>>0;
-    setReg(name, v);
+    commitRegisterValue(name, inp.value);
     delete el.dataset.editing;
-    if(isSp) {
-      el.textContent = '0x'+fmtA(getReg(name));
-    } else {
-      updateRegCard(name);
-    }
-    updatePickerVal(name);
-    // Also sync valInput/preview if this is the selected reg
-    if(name===S.reg) {
-      const maxHex=Math.min(sizeN()*2,8);
-      $('valInput').value = isSp ? fmtA(getReg(name)) : hex32(getReg(name)).slice(8-maxHex);
-      refreshPreview(); refreshBreakdown();
-    }
-    lg('sys', `${name} ← 0x${hex32(v)}`);
   }
   function cancel() {
     delete el.dataset.editing;
@@ -231,19 +850,19 @@ function buildRegCards() {
     d.className='reg-card'+(sel?' rc-selected':'');
     d.id='rc-'+name;
     d.onclick=(e)=>{ if(!e.target.closest('.rc-edit-input')) App.selectReg(name); };
-    const val = getReg(name);
+    const valueHex = regHex(name);
     if(is64()) {
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">00000000</span>${hex32(val)}</div>
-        <div class="rc-bytes" id="rcb-${name}">${byteSpans(val)}</div>`;
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span>${valueHex.slice(8)}</div>
+        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     } else {
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-value-editable" id="rcv-${name}" title="Clique para editar">${hex32(val)}</div>
-        <div class="rc-bytes" id="rcb-${name}">${byteSpans(val)}</div>`;
+        <div class="rc-value rc-value-editable" id="rcv-${name}" title="Clique para editar">${valueHex}</div>
+        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     }
     d.querySelector('.rc-value').addEventListener('click', e => {
       e.stopPropagation();
-      makeEditable(d.querySelector('.rc-value'), name, false);
+      makeRegisterEditable(d.querySelector('.rc-value'), name);
     });
     g.appendChild(d);
   }
@@ -256,13 +875,13 @@ function buildRegCards() {
       d.className='reg-card rc-ext'+(name===S.reg?' rc-selected':'');
       d.id='rc-'+name;
       d.onclick=(e)=>{ if(!e.target.closest('.rc-edit-input')) App.selectReg(name); };
-      const val=getReg(name);
+      const valueHex=regHex(name);
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">00000000</span>${hex32(val)}</div>
-        <div class="rc-bytes" id="rcb-${name}">${byteSpans(val)}</div>`;
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span>${valueHex.slice(8)}</div>
+        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
       d.querySelector('.rc-value').addEventListener('click', e => {
         e.stopPropagation();
-        makeEditable(d.querySelector('.rc-value'), name, false);
+        makeRegisterEditable(d.querySelector('.rc-value'), name);
       });
       eg.appendChild(d);
     }
@@ -275,95 +894,121 @@ function buildRegCards() {
   sg.innerHTML='';
   for(const name of sp) {
     const d=document.createElement('div');
-    d.className='reg-card rc-sp';
+    const role = stackRoleClass(name);
+    const roleLabel = isStackTopReg(name) ? 'TOPO' : 'BASE';
+    d.className='reg-card rc-sp rc-sp-'+role+(name===S.reg?' rc-selected':'');
     d.id='rc-'+name;
-    d.innerHTML=`<div class="rc-name">${name}</div>
+    d.innerHTML=`<div class="rc-sp-meta">
+        <div class="rc-name">${name}</div>
+        <div class="rc-sp-role">${roleLabel}</div>
+      </div>
       <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="Clique para editar">0x${fmtA(getReg(name))}</div>`;
     d.querySelector('.rc-value').addEventListener('click', e => {
       e.stopPropagation();
-      makeEditable(d.querySelector('.rc-value'), name, true);
+      makeRegisterEditable(d.querySelector('.rc-value'), name);
     });
     sg.appendChild(d);
   }
 }
 
-function byteSpans(v32, activePos=-1, doneSet=new Set()) {
-  const h=hex32(v32);
-  const p=[h.slice(0,2),h.slice(2,4),h.slice(4,6),h.slice(6,8)];
-  // Labels: p[0]=MSB (DE), p[3]=LSB (EF) for value 0xDEADBEEF
-  const lbl=['MSB','','','LSB'];
-  return p.map((b,i)=>{
-    let c='rc-byte';
-    if(i===activePos) c+=' byte-arriving';
-    else if(doneSet.has(i)) c+=' byte-done';
-    const lblHtml = lbl[i] ? `<span class="rc-blbl rc-blbl-${lbl[i].toLowerCase()}">${lbl[i]}</span>` : '';
-    return `<span class="${c}">${b}${lblHtml}</span>`;
+function renderByteStrip(name, opts={}) {
+  const {
+    activePos=-1,
+    doneSet=new Set(),
+    compact=false,
+    transferCount=transferWidth(name),
+    byteCount=regWidthBytes(name),
+    memoryOrder=false,
+  } = opts;
+  const littleBytes = regBytes(name, byteCount);
+  const displaySigIdxs = memoryOrder
+    ? (S.endian==='little'
+        ? Array.from({length:byteCount}, (_,i)=>i)
+        : Array.from({length:byteCount}, (_,i)=>byteCount-1-i))
+    : Array.from({length:byteCount}, (_,i)=>byteCount-1-i);
+  const byteCls = compact ? 'rp-byte' : 'rc-byte';
+  const labelCls = compact ? 'rp-byte-lbl' : 'rc-blbl';
+  const basePos = memoryOrder ? 0 : displayPosForTransferByte(name, 0, transferCount);
+  const lastPos = memoryOrder ? Math.max(transferCount-1, 0) : displayPosForTransferByte(name, Math.max(transferCount-1, 0), transferCount);
+  const transferStart = memoryOrder ? 0 : displayTransferStart(name, transferCount);
+
+  return displaySigIdxs.map((sigIdx, idx) => {
+    const byte = hex8(littleBytes[sigIdx] || 0);
+    let cls = byteCls;
+    if(!compact && idx===activePos) cls += ' byte-arriving';
+    else if(!compact && doneSet.has(idx)) cls += ' byte-done';
+    if(idx===basePos && idx>=transferStart) cls += ' rc-byte-base';
+    if(transferCount>1 && idx===lastPos && idx>=transferStart) cls += ' rc-byte-last';
+
+    const labels = [];
+    if(sigIdx===byteCount-1) labels.push(`<span class="${labelCls} rc-blbl-msb">MSB</span>`);
+    if(sigIdx===0) labels.push(`<span class="${labelCls} rc-blbl-lsb">LSB</span>`);
+    if(idx===basePos && idx>=transferStart) labels.push(`<span class="${labelCls} rc-blbl-mem">A+0</span>`);
+    if(transferCount>1 && idx===lastPos && idx>=transferStart) {
+      labels.push(`<span class="${labelCls} rc-blbl-mem">A+${transferCount-1}</span>`);
+    }
+    return `<span class="${cls}">${byte}${labels.join('')}</span>`;
   }).join('');
 }
 
 function updateRegCard(name) {
   const v=$('rcv-'+name), b=$('rcb-'+name);
   if(!v) return;
-  const sp = spRegs();
-  if(sp.includes(name)) { v.textContent='0x'+fmtA(getReg(name)); return; }
-  const val = getReg(name);
+  if(isSpReg(name)) { v.textContent='0x'+fmtA(getReg(name)); return; }
+  const valueHex = regHex(name);
   if(is64()) {
     const hiSpan = v.querySelector('.rc-hi');
     if(hiSpan) {
-      hiSpan.textContent='00000000';
+      hiSpan.textContent=valueHex.slice(0,8);
       let tn=hiSpan.nextSibling;
-      if(tn&&tn.nodeType===3) tn.nodeValue=hex32(val);
-      else { const t=document.createTextNode(hex32(val)); v.appendChild(t); }
-    } else v.textContent=hex32(val);
+      if(tn&&tn.nodeType===3) tn.nodeValue=valueHex.slice(8);
+      else { const t=document.createTextNode(valueHex.slice(8)); v.appendChild(t); }
+    } else v.textContent=valueHex;
   } else {
-    v.textContent=hex32(val);
+    v.textContent=valueHex;
   }
-  if(b) b.innerHTML=byteSpans(val);
+  if(b) b.innerHTML=renderByteStrip(name);
 }
 
 // Live update during LOAD
-function liveUpdate(name, partial, byteIdx) {
+function liveUpdate(name, partial, byteIdx, transferCount=transferWidth(name)) {
   const v=$('rcv-'+name);
+  const valueHex = regHex(name);
   if(v) {
     if(is64()) {
       const hi=v.querySelector('.rc-hi');
       if(hi) {
-        hi.textContent='00000000';
+        hi.textContent=valueHex.slice(0,8);
         // Update the text node after the span
         let tn=hi.nextSibling;
-        if(tn&&tn.nodeType===3) tn.nodeValue=hex32(partial);
-        else { const t=document.createTextNode(hex32(partial)); v.appendChild(t); }
-      } else v.textContent=hex32(partial);
-    } else v.textContent=hex32(partial);
+        if(tn&&tn.nodeType===3) tn.nodeValue=valueHex.slice(8);
+        else { const t=document.createTextNode(valueHex.slice(8)); v.appendChild(t); }
+      } else v.textContent=valueHex;
+    } else v.textContent=valueHex;
   }
 
-  // Which hex display position (0=leftmost/MSB, 3=rightmost/LSB) is arriving?
-  const hexPos = S.endian==='little' ? (3-byteIdx) : byteIdx;
-
-  // Build "done" set — already received positions
+  const hexPos = displayPosForTransferByte(name, byteIdx, transferCount);
   const done=new Set();
-  if(S.endian==='little') {
-    for(let i=hexPos+1;i<=3;i++) done.add(i); // higher index = lower sig = read first
-  } else {
-    for(let i=0;i<hexPos;i++) done.add(i);
-  }
+  for(let i=0;i<byteIdx;i++) done.add(displayPosForTransferByte(name, i, transferCount));
 
   const b=$('rcb-'+name);
-  if(b) b.innerHTML=byteSpans(partial, hexPos, done);
+  if(b) b.innerHTML=renderByteStrip(name, {activePos:hexPos, doneSet:done, transferCount});
 
   const card=$('rc-'+name);
   if(card){ card.classList.add('reg-animating'); setTimeout(()=>card?.classList.remove('reg-animating'),420); }
+  $('r'+name)?.classList.add('reg-animating');
+  setTimeout(()=>$('r'+name)?.classList.remove('reg-animating'),420);
 }
 
 // Highlight byte being SENT during STORE
-function storeHighlight(name, hexPos) {
+function storeHighlight(name, hexPos, transferCount=transferWidth(name)) {
   const b=$('rcb-'+name);
   if(!b) return;
-  const h=hex32(getReg(name));
-  const p=[h.slice(0,2),h.slice(2,4),h.slice(4,6),h.slice(6,8)];
-  b.innerHTML=p.map((bv,i)=>`<span class="rc-byte${i===hexPos?' byte-active':''}">${bv}</span>`).join('');
+  b.innerHTML=renderByteStrip(name, {activePos:hexPos, transferCount});
   const card=$('rc-'+name);
   if(card){ card.classList.add('reg-animating'); setTimeout(()=>card?.classList.remove('reg-animating'),420); }
+  $('r'+name)?.classList.add('reg-animating');
+  setTimeout(()=>$('r'+name)?.classList.remove('reg-animating'),420);
 }
 
 function setLoading(name, on) {
@@ -374,11 +1019,24 @@ function setLoading(name, on) {
 // ─────────────────────────────────────────────────────────
 // SIDEBAR PICKER
 // ─────────────────────────────────────────────────────────
-function syncPicker() { [...gpRegs(),...extRegs(),...spRegs()].forEach(updatePickerVal); }
+function syncPicker() {
+  [...gpRegs(),...extRegs(),...spRegs()].forEach(name => {
+    updatePickerVal(name);
+    updatePickerBytes(name);
+  });
+}
 function updatePickerVal(n) {
   const e=$('rpv-'+n); if(!e) return;
-  const sp = spRegs();
-  e.textContent = sp.includes(n) ? '0x'+fmtA(getReg(n)) : hex32(getReg(n));
+  e.textContent = isSpReg(n) ? '0x'+fmtA(getReg(n)) : regHex(n);
+}
+function updatePickerBytes(n) {
+  const e=$('rpb-'+n); if(!e || isSpReg(n)) return;
+  e.innerHTML = renderByteStrip(n, {
+    compact:true,
+    memoryOrder:true,
+    byteCount:regWidthBytes(n),
+    transferCount:regWidthBytes(n),
+  });
 }
 
 // ─────────────────────────────────────────────────────────
@@ -386,8 +1044,8 @@ function updatePickerVal(n) {
 // ─────────────────────────────────────────────────────────
 function refreshPreview() {
   const c=$('valPreview'); if(!c) return;
-  const n=Math.min(sizeN(),4), bs=getBytes(getReg(S.reg),n);
-  const ord=S.endian==='little' ? bs : [...bs].reverse();
+  const n=transferWidth(S.reg), bs=regBytes(S.reg,n);
+  const ord=orderedBytes(bs,S.endian);
   c.innerHTML=ord.map((b,i)=>{
     const f=i===0, l=i===n-1;
     let cls='vp-byte';
@@ -406,9 +1064,9 @@ function refreshPreview() {
 // ─────────────────────────────────────────────────────────
 function refreshBreakdown() {
   const c=$('byteBreakdown'); if(!c) return;
-  const n=Math.min(sizeN(),4), addr=parseInt($('addrInput').value||'0',16)&0x3F;
-  const bs=getBytes(getReg(S.reg),n);
-  const ord=S.endian==='little' ? bs : [...bs].reverse();
+  const n=transferWidth(S.reg), addr=parseInt($('addrInput').value||'0',16)&0x3F;
+  const bs=regBytes(S.reg,n);
+  const ord=orderedBytes(bs,S.endian);
   c.innerHTML=ord.map((b,i)=>{
     const ma=addr+i, f=i===0, l=i===n-1;
     let cls='', role='—';
@@ -429,7 +1087,10 @@ function refreshBreakdown() {
 // ─────────────────────────────────────────────────────────
 function buildMemGrid() {
   const g=$('memGrid'), a=$('memAddrBar');
-  g.innerHTML=''; a.innerHTML='<span class="mem-dir-hi">▲ ALTO</span>';
+  g.innerHTML='';
+  a.innerHTML='<span class="mem-dir-top"><span class="mem-dir-chip">0x0000</span> endereços menores / base</span>';
+  const tag=$('addrDirTag');
+  if(tag) tag.textContent='0x0000 no topo · endereços crescem ↓ · convenção Intel SDM';
   for(let r=0;r<8;r++) {
     const l=document.createElement('div');
     l.className='addr-lbl';
@@ -443,7 +1104,7 @@ function buildMemGrid() {
       g.appendChild(cell);
     }
   }
-  a.innerHTML+='<span class="mem-dir-lo">▼ BAIXO</span>';
+  a.innerHTML+='<span class="mem-dir-bottom"><span class="mem-dir-chip">0x003F</span> endereços maiores</span>';
 }
 
 const memEl = idx => $('memGrid').querySelector(`.mem-cell[data-idx="${idx}"]`);
@@ -465,6 +1126,143 @@ function setMemSt(idx, st) {
 
 function clearSel() { $$('.mc-selected').forEach(c=>c.classList.remove('mc-selected')); }
 
+function editMemCell(idx) {
+  const cell = memEl(idx);
+  if(!cell || cell.classList.contains('is-editing')) return;
+  clearSel();
+  cell.classList.add('mc-selected','is-editing');
+  const prevState = S.memState[idx] || '';
+  const prevVal = hex8(S.mem[idx]);
+  const inp = document.createElement('input');
+  inp.className = 'mem-edit-input';
+  inp.type = 'text';
+  inp.maxLength = 2;
+  inp.value = prevVal;
+  inp.spellcheck = false;
+  cell.innerHTML = '';
+  cell.appendChild(inp);
+  inp.focus();
+  inp.select();
+
+  function restore() {
+    cell.className = 'mem-cell'+(prevState ? ' '+prevState : '')+' mc-selected';
+    cell.textContent = prevVal;
+  }
+
+  function commit() {
+    const raw = inp.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
+    const val = parseInt(raw || '0', 16) & 0xFF;
+    writeMem(idx, val, 'mc-written');
+    S.memState[idx] = 'mc-written';
+    const updated = memEl(idx);
+    if(updated) updated.classList.add('mc-selected');
+    buildAsmTrace();
+    buildStackView();
+    lg('sys', `[0x${fmtA(idx)}] ← 0x${hex8(val)} (edição manual)`);
+  }
+
+  inp.addEventListener('keydown', e => {
+    if(e.key==='Enter') { e.preventDefault(); commit(); }
+    else if(e.key==='Escape') { e.preventDefault(); restore(); }
+    else if(e.key.length===1 && !/[0-9a-fA-F]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    }
+  });
+  inp.addEventListener('blur', () => {
+    if(cell.classList.contains('is-editing')) commit();
+  });
+}
+
+function writeAssembledBytes(addr, src, oldSizeHint, bytesHint) {
+  const baseAddr = addr & 0x3F;
+  const bytes = bytesHint || assemble(src, baseAddr);
+  if(!bytes) return null;
+
+  const oldSize = Math.max(oldSizeHint || decodeAt(baseAddr).size || 1, 1);
+  for(let i=0;i<bytes.length;i++) writeMem((baseAddr+i)&0x3F, bytes[i], 'mc-written');
+  if(bytes.length < oldSize) {
+    for(let i=bytes.length;i<oldSize;i++) writeMem((baseAddr+i)&0x3F, 0x90, 'mc-written');
+  }
+
+  buildAsmTrace();
+  buildStackView();
+  syncPicker();
+  buildRegCards();
+  refreshPreview();
+  refreshBreakdown();
+
+  return { bytes, oldSize, baseAddr };
+}
+
+function editAsmLine(line) {
+  if(!line || line.dataset.editing) return;
+  const asmEl = line.querySelector('.asm-line-asm');
+  if(!asmEl) return;
+
+  const addr = parseInt(line.dataset.addr || '0', 16) & 0x3F;
+  const oldSize = Math.max(parseInt(line.dataset.size || '1', 10) || 1, 1);
+  const prevAsm = asmEl.textContent.trim();
+  const input = document.createElement('input');
+
+  line.dataset.editing = '1';
+  line.classList.add('asm-line-editing');
+  input.className = 'asm-edit-input';
+  input.type = 'text';
+  input.value = prevAsm;
+  input.spellcheck = false;
+
+  asmEl.textContent = '';
+  asmEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  function updateInlineValidation() {
+    const check = validateAssembly(input.value, addr);
+    input.classList.toggle('is-invalid', !!input.value.trim() && !check.ok);
+    input.title = check.ok ? `Instrucao valida (${check.bytes.length} byte(s))` : check.error;
+    return check;
+  }
+
+  function cancel() {
+    delete line.dataset.editing;
+    line.classList.remove('asm-line-editing');
+    asmEl.textContent = prevAsm;
+  }
+
+  function commit() {
+    const src = input.value.trim();
+    if(!src) { cancel(); return; }
+    const validation = updateInlineValidation();
+    if(!validation.ok) {
+      setStatus(`ASM inválido em 0x${fmtA(addr)} — ${validation.error}`,'lbl-error');
+      lg('error', `ASM inválido na listagem @ 0x${fmtA(addr)} — ${validation.error}`);
+      requestAnimationFrame(() => { input.focus(); input.select(); });
+      return;
+    }
+    const result = writeAssembledBytes(addr, src, oldSize, validation.bytes);
+
+    delete line.dataset.editing;
+    line.classList.remove('asm-line-editing');
+    setPC(addr);
+    lg('sys', `ASM editado em 0x${fmtA(addr)}: "${src}"`);
+    if(result.bytes.length < result.oldSize) {
+      lg('sys', `Bytes restantes em 0x${fmtA(addr)}..0x${fmtA((addr+result.oldSize-1)&0x3F)} preenchidos com NOP.`);
+    } else if(result.bytes.length > result.oldSize) {
+      lg('error', `Instrucao em 0x${fmtA(addr)} cresceu de ${result.oldSize}B para ${result.bytes.length}B e sobrescreveu o fluxo seguinte.`);
+    }
+  }
+
+  input.addEventListener('keydown', e => {
+    if(e.key==='Enter') { e.preventDefault(); commit(); }
+    else if(e.key==='Escape') { e.preventDefault(); cancel(); }
+  });
+  input.addEventListener('input', updateInlineValidation);
+  input.addEventListener('blur', () => {
+    if(line.dataset.editing) commit();
+  });
+  updateInlineValidation();
+}
+
 // ─────────────────────────────────────────────────────────
 // SETTERS (called from HTML + App object)
 // ─────────────────────────────────────────────────────────
@@ -475,6 +1273,10 @@ function doSetEndian(e) {
   $('endianHint').innerHTML = e==='little'
     ? '<span class="eh-arrow">0x0000</span> ← byte menos significativo (LSB)'
     : '<span class="eh-arrow">0x0000</span> ← byte mais significativo (MSB)';
+  buildRegCards();
+  buildRegPicker();
+  buildStackView();
+  syncPicker();
   refreshPreview(); refreshBreakdown();
   lg('sys','Formato: '+e.toUpperCase()+' endian');
 }
@@ -487,6 +1289,9 @@ function doSetSize(s) {
   });
   // QWORD only available in x64 mode; clamp to dword otherwise
   if(s==='qword' && !is64()) { S.size='dword'; doSetSize('dword'); return; }
+  buildRegCards();
+  buildRegPicker();
+  syncPicker();
   refreshPreview(); refreshBreakdown();
   lg('sys','Tamanho: '+s.toUpperCase()+' ('+sizeN()*8+' bits)');
 }
@@ -497,9 +1302,8 @@ function doSelectReg(name) {
     $('rc-'+r)?.classList.toggle('rc-selected',r===name);
     $('r'+r)?.classList.toggle('active',r===name);
   });
-  const sp = spRegs();
-  const maxHex = Math.min(sizeN()*2,8);
-  const v = sp.includes(name) ? fmtA(getReg(name)) : hex32(getReg(name)).slice(8-maxHex);
+  const maxHex = Math.min(sizeN()*2, regWidthBytes(name)*2);
+  const v = isSpReg(name) ? fmtA(getReg(name)) : regHex(name).slice(-maxHex);
   $('valInput').value=v;
   refreshPreview(); refreshBreakdown();
   lg('sys','Registrador '+name+' selecionado');
@@ -511,14 +1315,27 @@ function buildRegPicker() {
   const all=[...gp,...ext,...sp];
   picker.innerHTML='';
   for(const name of all) {
-    const isSp=sp.includes(name);
+    const isSp=isSpReg(name);
+    const role = isSp ? ` rpbtn-${stackRoleClass(name)}` : '';
     const btn=document.createElement('button');
-    btn.className='rpbtn'+(isSp?' rpbtn-sp':'')+(name===S.reg?' active':'');
+    btn.className='rpbtn'+(isSp?' rpbtn-sp':'')+role+(name===S.reg?' active':'');
     btn.id='r'+name;
-    btn.onclick=()=>App.selectReg(name);
-    const val=getReg(name);
-    btn.innerHTML=`<span class="rp-name">${name}</span>
-      <span class="rp-val" id="rpv-${name}">${isSp?'0x'+fmtA(val):hex32(val)}</span>`;
+    btn.onclick=(e)=>{ if(!e.target.closest('.rc-edit-input')) App.selectReg(name); };
+    const val=isSp?'0x'+fmtA(getReg(name)):regHex(name);
+    btn.innerHTML=`<span class="rp-main">
+        <span class="rp-name">${name}</span>
+        <span class="rp-val rp-val-editable" id="rpv-${name}" title="Clique para editar">${val}</span>
+      </span>
+      ${isSp ? '' : `<span class="rp-bytes" id="rpb-${name}">${renderByteStrip(name, {
+        compact:true,
+        memoryOrder:true,
+        byteCount:regWidthBytes(name),
+        transferCount:regWidthBytes(name),
+      })}</span>`}`;
+    btn.querySelector('.rp-val').addEventListener('click', e => {
+      e.stopPropagation();
+      makeRegisterEditable(btn.querySelector('.rp-val'), name);
+    });
     picker.appendChild(btn);
   }
 }
@@ -534,32 +1351,31 @@ function doSetArch(arch) {
   // Switch back from qword if switching to ia32
   if(arch==='ia32' && S.size==='qword') doSetSize('dword');
 
-  // Map current register to equivalent in new arch
-  const ia32gp = ['EAX','EBX','ECX','EDX','ESI','EDI'];
-  const x64gp  = ['RAX','RBX','RCX','RDX','RSI','RDI'];
-  if(arch==='x64') {
-    const idx = ia32gp.indexOf(S.reg);
-    if(idx>=0) S.reg = x64gp[idx];
-    if(S.reg==='ESP') S.reg='RSP';
-    if(S.reg==='EBP') S.reg='RBP';
-  } else {
-    const idx = x64gp.indexOf(S.reg);
-    if(idx>=0) S.reg = ia32gp[idx];
-    if(S.reg==='RSP') S.reg='ESP';
-    if(S.reg==='RBP') S.reg='EBP';
-    // R8-R15 → default EAX
-    if(S.reg.match(/^R\d+$/)) S.reg='EAX';
-  }
+  resetStatsState();
+  resetCoreRegisters();
+  S.reg = arch==='x64' ? 'RAX' : 'EAX';
+  S.halt=false;
+  S.progRunning=false;
+  loadDefaultProgram(false, arch);
 
   buildRegCards();
   buildRegPicker();
-  setPC(S.pc);
+  buildMemGrid();
+  setPC(demoProgramForArch(arch).entry);
+  buildStackView();
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   updatePickerVal(S.reg);
   doSelectReg(S.reg);
+  $('clockDisplay').textContent='—';
+  $('opsDisplay').textContent='0';
+  const runBtn=$('opRun'); if(runBtn){ runBtn.textContent='RUN'; runBtn.onclick=doRun; }
   const chip=$('archDisplay'); if(chip) chip.textContent=arch==='x64'?'x86-64':'IA-32';
+  const stackLbl=$('stackArchLbl'); if(stackLbl) stackLbl.textContent=`STACK  ${arch==='x64'?'RSP/RBP':'ESP/EBP'}`;
   const asmPh=$('asmInput'); if(asmPh) asmPh.placeholder=arch==='x64'?'MOV RAX, 0x1234':'MOV EAX, 0x1234';
+  refreshAsmValidation();
+  setStatus(`Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado — PC em 0x0000`,'lbl-done');
   lg('sys','Arquitetura: '+(arch==='x64'?'x86-64':'IA-32'));
+  lg('sys', demoProgramForArch(arch).listing.join(' | '));
 }
 
 // ─────────────────────────────────────────────────────────
@@ -568,19 +1384,18 @@ function doSetArch(arch) {
 async function doStore() {
   if(S.busy) return;
   S.busy=true; setBusy(true);
-  const reg=S.reg, val=getReg(reg), addr=readAddr(), n=Math.min(sizeN(),4), t0=performance.now();
-  const ord=ordered(val,n,S.endian);
+  const reg=S.reg, addr=readAddr(), n=transferWidth(reg), t0=performance.now();
+  const ord=orderedBytes(regBytes(reg,n), S.endian);
   setPC(addr);
-  lg('store',`STORE ${reg}=0x${hex32(val)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, ${S.endian}-endian)`,
-     asmForOp('store-start',{reg,addr,val}));
+  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, ${S.endian}-endian)`,
+     asmForOp('store-start',{reg,addr,val:regHex(reg)}));
   setStatus(`STORE: gravando ${n} byte(s) em [0x${fmtA(addr)}]...`,'lbl-store');
 
   for(let i=0;i<n;i++) {
     const ma=addr+i;
     if(ma>=64){lg('error',`Endereço 0x${fmtA(ma)} fora do range`);break;}
-    // hexPos: display index of byte being sent
-    const hexPos=S.endian==='little'?(n-1-i):i;
-    storeHighlight(reg, hexPos);
+    const hexPos=displayPosForTransferByte(reg, i, n);
+    storeHighlight(reg, hexPos, n);
     setPC(ma);
     setMemSt(ma,'mc-pc');
     await animPacket('store', ord[i], ma);
@@ -596,6 +1411,7 @@ async function doStore() {
   setPC((addr+n)&0x3F);
   setStatus(`STORE concluído — ${ms}ms`,'lbl-done');
   lg('store',`STORE completo em ${ms}ms`);
+  buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
 }
@@ -606,7 +1422,7 @@ async function doStore() {
 async function doLoad() {
   if(S.busy) return;
   S.busy=true; setBusy(true);
-  const reg=S.reg, addr=readAddr(), n=Math.min(sizeN(),4), t0=performance.now();
+  const reg=S.reg, addr=readAddr(), n=transferWidth(reg), t0=performance.now();
   setPC(addr);
   lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, ${S.endian}-endian)`,
      asmForOp('load-start',{reg,addr}));
@@ -616,39 +1432,39 @@ async function doLoad() {
   for(let i=0;i<n;i++) { const ma=addr+i; raw.push(ma<64?S.mem[ma]:0); }
 
   // Zero register + show loading state
-  setReg(reg,0); setLoading(reg,true);
+  setRegParts(reg,0,0); setLoading(reg,true);
+  const partialLittle = new Array(n).fill(0);
 
   for(let i=0;i<n;i++) {
     const ma=addr+i; if(ma>=64) break;
     setPC(ma); setMemSt(ma,'mc-active');
     await animPacket('load', raw[i], ma);
 
-    // Assemble byte into correct bit position
-    let pv=getReg(reg);
-    pv = S.endian==='little'
-      ? (pv|((raw[i]&0xFF)<<(i*8)))>>>0
-      : (pv|((raw[i]&0xFF)<<((n-1-i)*8)))>>>0;
-    setReg(reg,pv);
+    partialLittle[S.endian==='little' ? i : (n-1-i)] = raw[i] & 0xFF;
+    setRegFromBytes(reg, partialLittle);
 
     // Live register update — value builds up byte by byte
-    liveUpdate(reg, pv, i);
+    liveUpdate(reg, 0, i, n);
     updatePickerVal(reg);
+    updatePickerBytes(reg);
 
-    lg('load',`  ${reg}[+${i}] ← [0x${fmtA(ma)}]=0x${hex8(raw[i])}  → ${reg}=0x${hex32(pv)}`,
-       asmForOp('load-byte',{byteAddr:ma,byteIdx:i,partial:pv}));
+    lg('load',`  ${reg}[+${i}] ← [0x${fmtA(ma)}]=0x${hex8(raw[i])}  → ${reg}=0x${regHex(reg)}`,
+       asmForOp('load-byte',{byteAddr:ma,byteIdx:i,partial:regHex(reg)}));
     await sleep(S.speed*0.18);
     S.memState[ma]='mc-written'; setMemSt(ma,'mc-written');
   }
 
   setLoading(reg,false);
   updatePickerVal(reg);
-  const fv=getReg(reg);
-  $('valInput').value=hex32(fv).slice(8-Math.min(sizeN()*2,8));
+  updatePickerBytes(reg);
+  const finalHex=regHex(reg);
+  $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
   const ms=Math.round(performance.now()-t0);
   recOp('load',ms);
   setPC((addr+n)&0x3F);
-  setStatus(`LOAD concluído: ${reg}=0x${hex32(fv)} — ${ms}ms`,'lbl-done');
-  lg('load',`LOAD completo: ${reg}=0x${hex32(fv)} em ${ms}ms`);
+  setStatus(`LOAD concluído: ${reg}=0x${finalHex} — ${ms}ms`,'lbl-done');
+  lg('load',`LOAD completo: ${reg}=0x${finalHex} em ${ms}ms`);
+  buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
 }
@@ -669,11 +1485,18 @@ function regName(idx, rex_ext) {
   if(is64()) return rex_ext ? REG64X[idx&7] : REG64[idx&7];
   return REG32[idx&7];
 }
+function operandRegName(idx, rex_ext, wide) {
+  if(!is64()) return REG32[idx&7];
+  if(rex_ext) return REG64X[idx&7];
+  return wide ? REG64[idx&7] : REG32[idx&7];
+}
 
 // Opcode table: byte → { mnem, size (bytes total), decode(mem, pc) }
 // Supported subset:
 //   0x90        NOP
 //   0xF4        HLT
+//   0xC3        RET
+//   0xE8 rel32  CALL near
 //   0xB8+r imm32  MOV r32, imm32   (B8..BF)
 //   0x89 /r     MOV r/m32, r32    (ModRM: mod=11 → reg-reg; mod=00 disp=addr8 → [addr], reg)
 //   0x8B /r     MOV r32, r/m32
@@ -684,6 +1507,8 @@ function regName(idx, rex_ext) {
 const OPMAP = {
   0x90: { mnem:'NOP',       size:1 },
   0xF4: { mnem:'HLT',       size:1 },
+  0xC3: { mnem:'RET',       size:1 },
+  0xE8: { mnem:'CALL',      size:5 },
   0x89: { mnem:'MOV',       size:3 },   // MOV [r/m32], r32  (mod=11 or mod=00+addr)
   0x8B: { mnem:'MOV',       size:3 },   // MOV r32, [r/m32]
   0xFF: { mnem:'PUSH',      size:2 },   // PUSH r/m32 (mod=11)
@@ -717,16 +1542,64 @@ function decodeAt(pc) {
   // B8..BF: MOV r32/r64, imm32
   if(op>=0xB8 && op<=0xBF) {
     const regIdx = (op-0xB8) + (rex_b ? 8 : 0);
-    const reg = regName(regIdx & 7, rex_b);
+    const reg = operandRegName(regIdx & 7, rex_b, rex_w);
     const base = pc+off+1;
+    if(rex_w) {
+      const bytes = [];
+      for(let i=0;i<8;i++) bytes.push(S.mem[(base+i)&0x3F]);
+      let lo = 0;
+      let hi = 0;
+      for(let i=0;i<4;i++) lo |= bytes[i]<<(i*8);
+      for(let i=4;i<8;i++) hi |= bytes[i]<<((i-4)*8);
+      return { op, mnem:`${rexPfx}MOV ${reg}, 0x${hex64(hi>>>0,lo>>>0)}`, size:off+9,
+               asm:`MOV ${reg}, 0x${hex64(hi>>>0,lo>>>0)}`,
+               exec:()=>{ setRegParts(reg, lo>>>0, hi>>>0); updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg); } };
+    }
     const imm=(S.mem[base&0x3F])|(S.mem[(base+1)&0x3F]<<8)|(S.mem[(base+2)&0x3F]<<16)|(S.mem[(base+3)&0x3F]<<24);
     const immU=imm>>>0;
     return { op, mnem:`${rexPfx}MOV ${reg}, 0x${hex32(immU)}`, size:off+5,
              asm:`MOV ${reg}, 0x${hex32(immU)}`,
-             exec:()=>{ setReg(reg,immU); updateRegCard(reg); updatePickerVal(reg); } };
+             exec:()=>{ setReg(reg,immU); updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg); } };
   }
   if(op===0x90) return { op, mnem:'NOP', size:off+1, asm:'NOP', exec:()=>{} };
   if(op===0xF4) return { op, mnem:'HLT', size:off+1, asm:'HLT', exec:()=>{ S.halt=true; } };
+  if(op===0xC3) return { op, mnem:'RET', size:off+1, asm:'RET',
+    exec:()=>{
+      const width = ptrSize();
+      const sp = S.regs[spKey] & 0x3F;
+      const bytes = [];
+      for(let i=0;i<width;i++) bytes.push(S.mem[(sp+i)&0x3F]);
+      let target = 0;
+      for(let i=0;i<Math.min(4,width);i++) target |= (bytes[i]&0xFF)<<(i*8);
+      S.regs[spKey]=(S.regs[spKey]+width)&0x3F;
+      updateRegCard(spName);
+      updatePickerVal(spName);
+      setPC(target & 0x3F);
+    } };
+  if(op===0xE8) {
+    const base = pc+off+1;
+    const rel = (
+      (S.mem[base&0x3F]) |
+      (S.mem[(base+1)&0x3F] << 8) |
+      (S.mem[(base+2)&0x3F] << 16) |
+      (S.mem[(base+3)&0x3F] << 24)
+    ) >> 0;
+    const nextIp = (pc+off+5) & 0x3F;
+    const target = (pc+off+5+rel) & 0x3F;
+    return { op, mnem:`CALL 0x${fmtA(target)}`, size:off+5, asm:`CALL 0x${fmtA(target)}`,
+      exec:()=>{
+        const width = ptrSize();
+        S.regs[spKey]=(S.regs[spKey]-width+64)&0x3F;
+        const sp = S.regs[spKey] & 0x3F;
+        for(let i=0;i<width;i++) {
+          const byte = i<4 ? ((nextIp>>>(i*8))&0xFF) : 0;
+          writeMem((sp+i)&0x3F, byte, 'mc-written');
+        }
+        updateRegCard(spName);
+        updatePickerVal(spName);
+        setPC(target);
+      } };
+  }
   if(op===0xEB) {
     const rel=((S.mem[(pc+off+1)&0x3F])<<24>>24); // signed byte
     const target=(pc+off+2+rel)&0x3F;
@@ -736,31 +1609,48 @@ function decodeAt(pc) {
   if(op===0x89||op===0x8B) {
     const modrm=S.mem[(pc+off+1)&0x3F];
     const mod=(modrm>>6)&3, regIdx=(modrm>>3)&7, rmIdx=modrm&7;
-    const rName=regName(regIdx, rex_r), rmName=regName(rmIdx, rex_b);
-    const dPtr = is64() ? 'QWORD PTR' : 'DWORD PTR';
+    const width = rex_w ? 8 : 4;
+    const rName=operandRegName(regIdx, rex_r, rex_w), rmName=operandRegName(rmIdx, rex_b, rex_w);
+    const dPtr = width===8 ? 'QWORD PTR' : 'DWORD PTR';
     if(mod===3) {
       if(op===0x89) return { op, mnem:`${rexPfx}MOV ${rmName}, ${rName}`, size:off+2, asm:`MOV ${rmName}, ${rName}`,
-        exec:()=>{ setReg(rmName,getReg(rName)); updateRegCard(rmName); updatePickerVal(rmName); } };
+        exec:()=>{
+          if(width===8) {
+            const {lo,hi}=regParts(rName);
+            setRegParts(rmName, lo, hi);
+          } else {
+            setReg(rmName,getReg(rName));
+          }
+          updateRegCard(rmName); updatePickerVal(rmName); updatePickerBytes(rmName);
+        } };
       else return { op, mnem:`${rexPfx}MOV ${rName}, ${rmName}`, size:off+2, asm:`MOV ${rName}, ${rmName}`,
-        exec:()=>{ setReg(rName,getReg(rmName)); updateRegCard(rName); updatePickerVal(rName); } };
+        exec:()=>{
+          if(width===8) {
+            const {lo,hi}=regParts(rmName);
+            setRegParts(rName, lo, hi);
+          } else {
+            setReg(rName,getReg(rmName));
+          }
+          updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName);
+        } };
     }
     if(mod===0) {
       const addr=S.mem[(pc+off+2)&0x3F]&0x3F;
       if(op===0x89) return { op, mnem:`${rexPfx}MOV [0x${fmtA(addr)}], ${rName}`, size:off+3, asm:`MOV ${dPtr} [0x${fmtA(addr)}], ${rName}`,
-        exec:()=>{ const v=getReg(rName); const bs=ordered(v,4,'little'); bs.forEach((b,i)=>writeMem((addr+i)&0x3F,b,'mc-written')); } };
+        exec:()=>{ regBytes(rName,width).forEach((b,i)=>writeMem((addr+i)&0x3F,b,'mc-written')); } };
       else return { op, mnem:`${rexPfx}MOV ${rName}, [0x${fmtA(addr)}]`, size:off+3, asm:`MOV ${rName}, ${dPtr} [0x${fmtA(addr)}]`,
-        exec:()=>{ let v=0; for(let i=0;i<4;i++) v|=(S.mem[(addr+i)&0x3F]<<(i*8)); setReg(rName,v>>>0); updateRegCard(rName); updatePickerVal(rName); } };
+        exec:()=>{ const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(addr+i)&0x3F]); setRegFromBytes(rName,bytes); updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName); } };
     }
   }
   if(op===0xFF) { // PUSH
     const modrm=S.mem[(pc+off+1)&0x3F]; const mod=(modrm>>6)&3, rmIdx=modrm&7;
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}PUSH ${rn}`, size:off+2, asm:`PUSH ${rn}`,
-      exec:()=>{ S.regs[spKey]=(S.regs[spKey]-4+64)&0x3F; const v=getReg(rn); const bs=ordered(v,4,'little'); bs.forEach((b,i)=>writeMem((S.regs[spKey]+i)&0x3F,b,'mc-written')); updateRegCard(spName); updatePickerVal(spName); } }; }
+      exec:()=>{ const width=ptrSize(); S.regs[spKey]=(S.regs[spKey]-width+64)&0x3F; regBytes(rn,width).forEach((b,i)=>writeMem((S.regs[spKey]+i)&0x3F,b,'mc-written')); updateRegCard(spName); updatePickerVal(spName); } }; }
   }
   if(op===0x8F) { // POP
     const modrm=S.mem[(pc+off+1)&0x3F]; const mod=(modrm>>6)&3, rmIdx=modrm&7;
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}POP ${rn}`, size:off+2, asm:`POP ${rn}`,
-      exec:()=>{ let v=0; for(let i=0;i<4;i++) v|=(S.mem[(S.regs[spKey]+i)&0x3F]<<(i*8)); setReg(rn,v>>>0); S.regs[spKey]=(S.regs[spKey]+4)&0x3F; updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); } }; }
+      exec:()=>{ const width=ptrSize(); const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(S.regs[spKey]+i)&0x3F]); setRegFromBytes(rn,bytes); S.regs[spKey]=(S.regs[spKey]+width)&0x3F; updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn); } }; }
   }
   return { op, mnem:`DB 0x${hex8(op)}`, size:1, asm:`; 0x${hex8(op)} (não reconhecido)`, exec:()=>{}, unknown:true };
 }
@@ -782,13 +1672,13 @@ async function doFetch() {
   const np=(addr+instr.size)&0x3F;   // novo PC = endereço pós-instrução
   setStatus(`FETCH: IP=0x${fmtA(addr)} → lendo ${instr.size} byte(s) → IR`,'lbl-fetch');
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,'mc-pc');}
-  lg('info',`FETCH  IP=0x${fmtA(addr)} | opcode=0x${hex8(instr.op)} | ${instr.size} byte(s)`);
+  lg('info',`FETCH  IP=0x${fmtA(addr)} | opcode=0x${hex8(instr.op)} | ${instr.size} byte(s) · Intel SDM Vol.1 §6.3`);
   await sleep(S.speed * 0.4);
 
   // IP avança durante o fetch (antes do decode/execute)
   setPC(np);
   setStatus(`FETCH: IP atualizado → 0x${fmtA(np)}  (instrução no IR)`,'lbl-fetch');
-  lg('info',`FETCH  IP ← 0x${fmtA(np)}  (incrementado durante o fetch)`);
+  lg('info',`FETCH  IP ← 0x${fmtA(np)}  (incrementado durante o fetch, Intel SDM Vol.1 §6.3)`);
   await sleep(S.speed * 0.25);
 
   // ── FASE 2: DECODE ─────────────────────────────────────
@@ -799,6 +1689,7 @@ async function doFetch() {
 
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
   setStatus(`FETCH+DECODE concluído — IP = 0x${fmtA(np)}`,'lbl-done');
+  buildStackView();
   S.busy=false; setBusy(false);
 }
 
@@ -843,6 +1734,7 @@ async function _executeOne() {
   if(S.halt) { setStatus('HLT — CPU parada','lbl-error'); lg('error','HLT executado. CPU parada.'); }
   else setStatus(`EXECUTE concluído — IP = 0x${fmtA(S.pc)}`,'lbl-done');
 
+  buildStackView();
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
 }
 
@@ -887,15 +1779,15 @@ async function doRun() {
 async function doPush() {
   if(S.busy) return;
   S.busy=true; setBusy(true);
-  const reg=S.reg, val=getReg(reg)>>>0;
+  const reg=S.reg, width=ptrSize();
   const spName = is64() ? 'RSP' : 'ESP';
-  S.regs.ESP=(S.regs.ESP-4+64)&0x3F;
+  S.regs.ESP=(S.regs.ESP-width+64)&0x3F;
   const sp=S.regs.ESP;
   setPC(sp);
-  lg('store',`PUSH ${reg}=0x${hex32(val)} → ${spName}=0x${fmtA(sp)}`, `PUSH ${reg}`);
+  lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtA(sp)}`, `PUSH ${reg}`);
   setStatus(`PUSH: ${reg} → [0x${fmtA(sp)}]`,'lbl-store');
-  const bs=ordered(val,4,'little');
-  for(let i=0;i<4;i++) {
+  const bs=regBytes(reg,width);
+  for(let i=0;i<width;i++) {
     const ma=(sp+i)&0x3F;
     setMemSt(ma,'mc-pc');
     await animPacket('store', bs[i], ma);
@@ -904,7 +1796,8 @@ async function doPush() {
   }
   updateRegCard(spName); updatePickerVal(spName);
   setStatus(`PUSH concluído — ${spName}=0x${fmtA(sp)}`,'lbl-done');
-  setPC((sp+4)&0x3F);
+  setPC((sp+width)&0x3F);
+  buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
 }
@@ -912,29 +1805,30 @@ async function doPush() {
 async function doPop() {
   if(S.busy) return;
   S.busy=true; setBusy(true);
-  const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP&0x3F;
+  const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP&0x3F, width=ptrSize();
   setPC(sp);
   lg('load',`POP [0x${fmtA(sp)}] → ${reg}`, `POP ${reg}`);
   setStatus(`POP: [0x${fmtA(sp)}] → ${reg}`,'lbl-load');
-  let v=0;
-  setReg(reg,0); setLoading(reg,true);
-  for(let i=0;i<4;i++) {
+  const partialLittle = new Array(width).fill(0);
+  setRegParts(reg,0,0); setLoading(reg,true);
+  for(let i=0;i<width;i++) {
     const ma=(sp+i)&0x3F;
     setMemSt(ma,'mc-active');
     await animPacket('load', S.mem[ma], ma);
-    v|=(S.mem[ma]<<(i*8));
-    setReg(reg,v>>>0);
-    liveUpdate(reg, v>>>0, i); updatePickerVal(reg);
+    partialLittle[i]=S.mem[ma]&0xFF;
+    setRegFromBytes(reg, partialLittle);
+    liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
     await sleep(S.speed*0.12);
     setMemSt(ma,S.memState[ma]||'');
   }
   setLoading(reg,false);
-  S.regs.ESP=(sp+4)&0x3F;
+  S.regs.ESP=(sp+width)&0x3F;
   updateRegCard(reg); updateRegCard(spName); updatePickerVal(spName);
-  const fv=getReg(reg);
-  $('valInput').value=hex32(fv).slice(8-Math.min(sizeN()*2,8));
-  setStatus(`POP concluído — ${reg}=0x${hex32(fv)}`,'lbl-done');
-  setPC((sp+4)&0x3F);
+  const finalHex=regHex(reg);
+  $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
+  setStatus(`POP concluído — ${reg}=0x${finalHex}`,'lbl-done');
+  setPC((sp+width)&0x3F);
+  buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
 }
@@ -943,18 +1837,197 @@ async function doPop() {
 // ASSEMBLER EMBUTIDO
 // Converte instrução Intel (subset) para bytes e grava na memória
 // ─────────────────────────────────────────────────────────
-function assemble(src) {
-  // Normaliza: uppercase, colapsa espaços
-  const s = src.trim().toUpperCase().replace(/\s+/g,' ').replace(/,\s*/g,',');
-  const tok = s.split(' ');
+function parseAsmSource(src) {
+  const normalized = src.trim().toUpperCase().replace(/\s+/g,' ').replace(/,\s*/g,',');
+  if(!normalized) return { normalized:'', mnem:'', ops:[] };
+  const tok = normalized.split(' ');
   const mnem = tok[0];
-  const ops  = tok.slice(1).join(' ').split(',').map(x=>x.trim());
+  const tail = tok.slice(1).join(' ').trim();
+  const ops = tail ? tail.split(',').map(x=>x.trim()).filter(Boolean) : [];
+  return { normalized, mnem, ops };
+}
+
+function parseAsmNumber(token) {
+  const raw = token.trim().toUpperCase();
+  if(!raw) return null;
+  if(!/^0X[0-9A-F]+$/.test(raw) && !/^[0-9]+$/.test(raw)) return null;
+  try {
+    return { raw, big: BigInt(raw) };
+  } catch(_) {
+    return null;
+  }
+}
+
+function fitsUnsigned(big, bits) {
+  return big >= 0n && big <= ((1n << BigInt(bits)) - 1n);
+}
+
+function asmRegWidth(name) {
+  return REG64.includes(name) || REG64X.includes(name) ? 64 : 32;
+}
+
+function parseAsmMemoryOperand(op) {
+  const m = /^(?:(QWORD|DWORD|WORD|BYTE)\s+PTR\s+)?\[(0X[0-9A-F]+|[0-9]+)\]$/.exec(op.trim().toUpperCase());
+  if(!m) return null;
+  const num = parseAsmNumber(m[2]);
+  if(!num) return { error:'Endereco de memoria invalido.' };
+  if(!fitsUnsigned(num.big, 16)) return { error:'Endereco de memoria fora de 16 bits.' };
+  if(num.big > 0x3Fn) return { error:'Endereco de memoria fora do mapa 0x0000..0x003F.' };
+  return {
+    ptr: m[1] || '',
+    addr: Number(num.big),
+  };
+}
+
+function validateAssembly(src, baseAddr=S.pc) {
+  const { normalized, mnem, ops } = parseAsmSource(src);
+  if(!normalized) return { ok:false, error:'Digite uma instrucao ASM.' };
+
+  const allRegs = [...REG32, ...REG64, ...REG64X];
+  const isReg = n => allRegs.includes(n);
+  const regAllowedInArch = n => is64() || (!REG64.includes(n) && !REG64X.includes(n));
+  const requireNoOps = name => {
+    if(ops.length!==0) return { ok:false, error:`${name} nao recebe operandos.` };
+    return null;
+  };
+  const requireOneOp = name => {
+    if(ops.length!==1) return { ok:false, error:`${name} exige exatamente 1 operando.` };
+    return null;
+  };
+  const requireTwoOps = name => {
+    if(ops.length!==2) return { ok:false, error:`${name} exige exatamente 2 operandos.` };
+    return null;
+  };
+
+  if(['NOP','HLT','RET'].includes(mnem)) {
+    const err = requireNoOps(mnem);
+    if(err) return err;
+  } else if(mnem==='PUSH' || mnem==='POP') {
+    const err = requireOneOp(mnem);
+    if(err) return err;
+    const reg = ops[0];
+    if(!isReg(reg)) return { ok:false, error:`Registrador invalido: ${reg}.` };
+    if(!regAllowedInArch(reg)) return { ok:false, error:`${reg} nao existe no modo IA-32.` };
+    if(is64() && asmRegWidth(reg)!==64) return { ok:false, error:`Em x86-64, ${mnem} da simulacao aceita apenas registradores de 64 bits.` };
+  } else if(mnem==='JMP') {
+    const err = requireOneOp('JMP');
+    if(err) return err;
+    const targetTok = ops[0].replace(/^SHORT\s+/,'').trim();
+    const target = parseAsmNumber(targetTok);
+    if(!target) return { ok:false, error:'Destino de JMP invalido.' };
+    if(target.big > 0x3Fn) return { ok:false, error:'Destino de JMP fora do mapa 0x0000..0x003F.' };
+  } else if(mnem==='CALL') {
+    const err = requireOneOp('CALL');
+    if(err) return err;
+    const target = parseAsmNumber(ops[0]);
+    if(!target) return { ok:false, error:'Destino de CALL invalido.' };
+    if(target.big > 0x3Fn) return { ok:false, error:'Destino de CALL fora do mapa 0x0000..0x003F.' };
+  } else if(mnem==='MOV') {
+    const err = requireTwoOps('MOV');
+    if(err) return err;
+    const [dst, src2] = ops;
+    const dstReg = isReg(dst) ? dst : null;
+    const srcReg = isReg(src2) ? src2 : null;
+    const dstMem = parseAsmMemoryOperand(dst);
+    const srcMem = parseAsmMemoryOperand(src2);
+    const imm = parseAsmNumber(src2);
+
+    if(dstReg && !regAllowedInArch(dstReg)) return { ok:false, error:`${dstReg} nao existe no modo IA-32.` };
+    if(srcReg && !regAllowedInArch(srcReg)) return { ok:false, error:`${srcReg} nao existe no modo IA-32.` };
+    if(dstMem?.error) return { ok:false, error:dstMem.error };
+    if(srcMem?.error) return { ok:false, error:srcMem.error };
+
+    if(dstReg && imm) {
+      const bits = asmRegWidth(dstReg);
+      if(bits===64) {
+        if(!is64()) return { ok:false, error:`${dstReg} nao existe no modo IA-32.` };
+        if(!fitsUnsigned(imm.big, 64)) return { ok:false, error:'Imediato nao cabe em 64 bits sem sinal.' };
+      } else if(!fitsUnsigned(imm.big, 32)) {
+        return { ok:false, error:'Imediato nao cabe em 32 bits sem sinal.' };
+      }
+    } else if(dstReg && srcReg) {
+      if(asmRegWidth(dstReg)!==asmRegWidth(srcReg)) {
+        return { ok:false, error:'MOV entre registradores exige operandos da mesma largura.' };
+      }
+    } else if(dstMem && srcReg) {
+      const bits = asmRegWidth(srcReg);
+      if(bits===64 && !is64()) return { ok:false, error:`${srcReg} nao existe no modo IA-32.` };
+      if(dstMem.ptr && !['DWORD','QWORD'].includes(dstMem.ptr)) {
+        return { ok:false, error:'A simulacao suporta apenas DWORD PTR e QWORD PTR para MOV.' };
+      }
+      if(bits===64 && dstMem.ptr && dstMem.ptr!=='QWORD') {
+        return { ok:false, error:'MOV com registrador de 64 bits requer QWORD PTR.' };
+      }
+      if(bits===32 && dstMem.ptr && dstMem.ptr!=='DWORD') {
+        return { ok:false, error:'MOV com registrador de 32 bits requer DWORD PTR.' };
+      }
+    } else if(dstReg && srcMem) {
+      const bits = asmRegWidth(dstReg);
+      if(bits===64 && !is64()) return { ok:false, error:`${dstReg} nao existe no modo IA-32.` };
+      if(srcMem.ptr && !['DWORD','QWORD'].includes(srcMem.ptr)) {
+        return { ok:false, error:'A simulacao suporta apenas DWORD PTR e QWORD PTR para MOV.' };
+      }
+      if(bits===64 && srcMem.ptr && srcMem.ptr!=='QWORD') {
+        return { ok:false, error:'MOV com registrador de 64 bits requer QWORD PTR.' };
+      }
+      if(bits===32 && srcMem.ptr && srcMem.ptr!=='DWORD') {
+        return { ok:false, error:'MOV com registrador de 32 bits requer DWORD PTR.' };
+      }
+    } else {
+      return { ok:false, error:'Formato de MOV nao suportado neste simulador.' };
+    }
+  } else {
+    return { ok:false, error:`Instrucao nao suportada pelo assembler: ${mnem}.` };
+  }
+
+  const bytes = assemble(normalized, baseAddr);
+  if(!bytes) return { ok:false, error:'Instrucao reconhecida, mas nao pode ser codificada pelo subset atual.' };
+  return { ok:true, bytes, normalized };
+}
+
+function refreshAsmValidation() {
+  const input = $('asmInput');
+  const hint = $('asmHint');
+  if(!input || !hint) return;
+
+  const raw = input.value.trim();
+  input.classList.remove('is-valid','is-invalid');
+  hint.classList.remove('asm-hint-ok','asm-hint-error');
+
+  if(!raw) {
+    hint.textContent = 'Grava bytes no PC atual. Enter para confirmar.';
+    return;
+  }
+
+  const check = validateAssembly(raw, S.pc);
+  if(check.ok) {
+    input.classList.add('is-valid');
+    hint.classList.add('asm-hint-ok');
+    hint.textContent = `Valido: ${check.bytes.length} byte(s) serao gravados em 0x${fmtA(S.pc)}.`;
+  } else {
+    input.classList.add('is-invalid');
+    hint.classList.add('asm-hint-error');
+    hint.textContent = `Invalido: ${check.error}`;
+  }
+}
+
+function assemble(src, baseAddr=S.pc) {
+  const { normalized, mnem, ops } = parseAsmSource(src);
+  if(!normalized) return null;
 
   // Build full register lookup (IA-32 + x64 GP + R8-R15)
   const ALL_REGS = [...REG32, ...REG64, ...REG64X];
   const isReg = n => ALL_REGS.includes(n);
+  const isWideAsmReg = n => REG64.includes(n) || REG64X.includes(n);
   const isImm = n => /^0X[0-9A-F]+$/.test(n)||/^[0-9]+$/.test(n);
-  const parseImm = n => (n.startsWith('0X') ? parseInt(n,16) : parseInt(n,10))>>>0;
+  const parseImm = n => Number(parseAsmNumber(n).big & 0xFFFFFFFFn)>>>0;
+  const parseImm64Parts = n => {
+    const big = BigInt.asUintN(64, parseAsmNumber(n).big);
+    return {
+      hi: Number((big >> 32n) & 0xFFFFFFFFn)>>>0,
+      lo: Number(big & 0xFFFFFFFFn)>>>0,
+    };
+  };
   const modrm = (mod,reg,rm) => ((mod&3)<<6)|((reg&7)<<3)|(rm&7);
 
   // Resolve a register name to {idx, rex_b/rex_r}
@@ -994,8 +2067,13 @@ function assemble(src) {
   if(mnem==='JMP' && ops.length===1) {
     const lbl=ops[0].replace('SHORT','').trim();
     const target = lbl.startsWith('0X') ? parseInt(lbl,16) : parseInt(lbl,10);
-    const rel = ((target - (S.pc+2))+128)&0xFF;
+    const rel = ((target - (baseAddr+2))+128)&0xFF;
     return [0xEB, rel&0xFF];
+  }
+  if(mnem==='CALL' && ops.length===1) {
+    const target = ops[0].startsWith('0X') ? parseInt(ops[0],16) : parseInt(ops[0],10);
+    const rel = (target - (baseAddr+5)) >> 0;
+    return [0xE8, rel&0xFF, (rel>>8)&0xFF, (rel>>16)&0xFF, (rel>>24)&0xFF];
   }
 
   if(mnem==='MOV' && ops.length===2) {
@@ -1003,13 +2081,23 @@ function assemble(src) {
     // MOV reg, imm32
     if(isReg(dst) && isImm(src2)) {
       const r=resolveReg(dst); if(!r) return null;
+      if(isWideAsmReg(dst)) {
+        const imm=parseImm64Parts(src2);
+        return [
+          ...rexByte(1,0,0,r.ext),
+          0xB8+r.idx,
+          imm.lo&0xFF,(imm.lo>>8)&0xFF,(imm.lo>>16)&0xFF,(imm.lo>>24)&0xFF,
+          imm.hi&0xFF,(imm.hi>>8)&0xFF,(imm.hi>>16)&0xFF,(imm.hi>>24)&0xFF,
+        ];
+      }
       const v=parseImm(src2);
       return [...rexByte(0,0,0,r.ext), 0xB8+r.idx, v&0xFF,(v>>8)&0xFF,(v>>16)&0xFF,(v>>24)&0xFF];
     }
     // MOV reg, reg
     if(isReg(dst) && isReg(src2)) {
       const rd=resolveReg(dst), rs=resolveReg(src2); if(!rd||!rs) return null;
-      return [...rexByte(0,rs.ext,0,rd.ext), 0x89, modrm(3,rs.idx,rd.idx)];
+      const wide = isWideAsmReg(dst) && isWideAsmReg(src2);
+      return [...rexByte(wide,rs.ext,0,rd.ext), 0x89, modrm(3,rs.idx,rd.idx)];
     }
     // MOV [addr], reg  (strip QWORD PTR / DWORD PTR if present)
     const dstClean = dst.replace(/(?:QWORD|DWORD|WORD|BYTE)\s*PTR\s*/,'');
@@ -1018,14 +2106,16 @@ function assemble(src) {
     if(mAddr && isReg(src2Clean)) {
       const rs=resolveReg(src2Clean); if(!rs) return null;
       const addr=parseInt(mAddr[1],16)&0x3F;
-      return [...rexByte(0,rs.ext,0,0), 0x89, modrm(0,rs.idx,0), addr];
+      const wide = /\bQWORD\b/.test(dst) || isWideAsmReg(src2Clean);
+      return [...rexByte(wide,rs.ext,0,0), 0x89, modrm(0,rs.idx,0), addr];
     }
     // MOV reg, [addr]
     const mAddr2=/^\[(?:0X)?([0-9A-F]+)\]$/.exec(src2Clean);
     if(isReg(dstClean) && mAddr2) {
       const rd=resolveReg(dstClean); if(!rd) return null;
       const addr=parseInt(mAddr2[1],16)&0x3F;
-      return [...rexByte(0,rd.ext,0,0), 0x8B, modrm(0,rd.idx,0), addr];
+      const wide = /\bQWORD\b/.test(src2) || isWideAsmReg(dstClean);
+      return [...rexByte(wide,rd.ext,0,0), 0x8B, modrm(0,rd.idx,0), addr];
     }
   }
   return null; // não reconhecido
@@ -1034,36 +2124,145 @@ function assemble(src) {
 async function doAssemble() {
   const inp=$('asmInput'); if(!inp) return;
   const src=inp.value.trim(); if(!src) return;
-  const bytes=assemble(src);
-  if(!bytes){ lg('error',`ASM: não reconhecido — "${src}"`); return; }
   const addr=S.pc;
-  lg('sys',`ASM: "${src}" → [${bytes.map(b=>'0x'+hex8(b)).join(', ')}] @ 0x${fmtA(addr)}`);
-  for(let i=0;i<bytes.length;i++) writeMem((addr+i)&0x3F, bytes[i], 'mc-written');
-  setPC((addr+bytes.length)&0x3F);
+  const validation = validateAssembly(src, addr);
+  refreshAsmValidation();
+  if(!validation.ok){
+    setStatus(`ASM inválido — ${validation.error}`,'lbl-error');
+    lg('error',`ASM inválido em 0x${fmtA(addr)} — ${validation.error}`);
+    return;
+  }
+  const result = writeAssembledBytes(addr, validation.normalized, undefined, validation.bytes);
+  if(!result){ lg('error',`ASM: não reconhecido — "${src}"`); return; }
+  lg('sys',`ASM: "${src}" → [${result.bytes.map(b=>'0x'+hex8(b)).join(', ')}] @ 0x${fmtA(addr)}`);
+  setPC((addr+result.bytes.length)&0x3F);
+  lg('sys', `${result.bytes.length} byte(s) gravados em 0x${fmtA(addr)}`);
   inp.value='';
+  refreshAsmValidation();
 }
 
 // ─────────────────────────────────────────────────────────
 // CLEAR
 // ─────────────────────────────────────────────────────────
 function doClear() {
-  S.mem.fill(0); S.memState.fill('');
-  // Reset all GP registers
-  S.regs.EAX=0xDEADBEEF; S.regs.EBX=0xCAFEBABE; S.regs.ECX=0x12345678; S.regs.EDX=0xABCD1234;
-  S.regs.ESI=0; S.regs.EDI=0;
-  S.regs.RAX_hi=0; S.regs.RBX_hi=0; S.regs.RCX_hi=0; S.regs.RDX_hi=0;
-  S.regs.RSI_hi=0; S.regs.RDI_hi=0;
-  ['R8','R9','R10','R11','R12','R13','R14','R15'].forEach(r=>{ S.regs[r]=0; S.regs[r+'_hi']=0; });
-  S.regs.ESP=0x003C; S.regs.EBP=0x003C;
+  resetStatsState();
+  resetCoreRegisters();
   S.halt=false; S.progRunning=false;
   // Reset selected register to arch default
   S.reg = is64() ? 'RAX' : 'EAX';
-  buildRegCards(); buildMemGrid(); setPC(0);
-  $('valInput').value=hex32(getReg(S.reg)).slice(8-Math.min(sizeN()*2,8));
-  syncPicker(); refreshPreview(); refreshBreakdown();
+  loadDefaultProgram(false);
+  buildRegCards(); buildRegPicker(); buildMemGrid(); setPC(0);
+  $('valInput').value=regHex(S.reg).slice(-Math.min(sizeN()*2, regWidthBytes(S.reg)*2));
+  buildStackView();
+  syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
+  $('clockDisplay').textContent='—';
+  $('opsDisplay').textContent='0';
   const runBtn=$('opRun'); if(runBtn){runBtn.textContent='RUN'; runBtn.onclick=doRun;}
-  setStatus('Memória e registradores limpos','lbl-done');
-  lg('sys','Reiniciado.', asmForOp('clear',{}));
+  setStatus('Programa demo restaurado — PC em 0x0000','lbl-done');
+  lg('sys','Reiniciado com programa demo.', asmForOp('clear',{}));
+  lg('sys', demoProgramForArch().listing.join(' | '));
+}
+
+// ─────────────────────────────────────────────────────────
+// STACK VIEW
+// ─────────────────────────────────────────────────────────
+function distanceUp(from, to) {
+  return ((to - from) + 64) & 0x3F;
+}
+
+function inActiveFrame(addr, sp, bp) {
+  if(sp===bp) return false;
+  const total = distanceUp(sp, bp);
+  const dist = distanceUp(sp, addr);
+  return dist>0 && dist<total;
+}
+
+function frameAddressesDesc() {
+  const sp = S.regs.ESP & 0x3F;
+  const bp = S.regs.EBP & 0x3F;
+  const ret = (bp + ptrSize()) & 0x3F;
+
+  if(sp===bp) {
+    const out = [];
+    for(let i=0;i<8;i++) out.push((sp + 3 - i + 64) & 0x3F);
+    return out;
+  }
+
+  const start = (ret + 2) & 0x3F;
+  const end = (sp - 2 + 64) & 0x3F;
+  const out = [];
+  let cur = start;
+  while(out.length < 20) {
+    out.push(cur);
+    if(cur===end) break;
+    cur = (cur - 1 + 64) & 0x3F;
+  }
+  return out;
+}
+
+function stackRowMeta(addr) {
+  const sp = S.regs.ESP & 0x3F;
+  const bp = S.regs.EBP & 0x3F;
+  const ret = (bp + ptrSize()) & 0x3F;
+  const tags = [];
+
+  if(addr===sp) tags.push({cls:'sp', text:`${is64()?'RSP':'ESP'} topo`});
+  if(addr===bp) tags.push({cls:'bp', text:`${is64()?'RBP':'EBP'} base`});
+  if(sp!==bp && addr===ret) tags.push({cls:'ret', text:'retorno'});
+  if(addr===S.pc) tags.push({cls:'pc', text:'PC'});
+  if(inActiveFrame(addr, sp, bp)) tags.push({cls:'frame', text:'frame ativo'});
+
+  const priority = ['sp','bp','ret','pc','frame'];
+  const primary = tags.find(tag => priority.includes(tag.cls))?.cls || 'default';
+  return {primary, tags};
+}
+
+function buildStackView() {
+  const view = $('stackView');
+  if(!view) return;
+
+  const spName = is64() ? 'RSP' : 'ESP';
+  const bpName = is64() ? 'RBP' : 'EBP';
+  const sp = S.regs.ESP & 0x3F;
+  const bp = S.regs.EBP & 0x3F;
+  const ret = (bp + ptrSize()) & 0x3F;
+  const mode = S.stackMode === 'frame' ? 'FRAME' : 'FULL';
+  const list = S.stackMode === 'frame'
+    ? frameAddressesDesc()
+    : Array.from({length:64}, (_,i)=>63-i);
+
+  const rows = list.map(addr => {
+    const meta = stackRowMeta(addr);
+    const tags = meta.tags.length
+      ? meta.tags.map(tag => `<span class="stack-tag stack-tag-${tag.cls}">${tag.text}</span>`).join('')
+      : '<span class="stack-row-empty">livre</span>';
+    return `<div class="stack-row stack-row-${meta.primary}">
+      <span class="stack-row-addr">0x${fmtA(addr)}</span>
+      <span class="stack-row-byte">${hex8(S.mem[addr])}</span>
+      <span class="stack-row-tags">${tags}</span>
+    </div>`;
+  }).join('');
+
+  view.innerHTML = `
+    <div class="stack-meta">
+      <div class="stack-meta-row stack-meta-row-mode"><span class="stack-meta-key">modo</span><span class="stack-meta-pill">${mode}</span></div>
+      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (topo da pilha)</span><span class="stack-meta-pill">0x${fmtA(sp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (base do frame)</span><span class="stack-meta-pill">0x${fmtA(bp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${sp===bp ? '—' : `0x${fmtA(ret)}`}</span></div>
+      <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">PC (Contador do Programa)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
+    </div>
+    ${buildStackTrace()}
+    <div class="stack-list">${rows}</div>`;
+
+  const stackLbl = $('stackArchLbl');
+  if(stackLbl) stackLbl.textContent = `STACK  ${spName}/${bpName}`;
+  const toggle = $('stackToggleBtn');
+  if(toggle) toggle.textContent = S.stackMode === 'frame' ? 'FULL' : 'FRAME';
+}
+
+function toggleStackMode() {
+  S.stackMode = S.stackMode === 'frame' ? 'full' : 'frame';
+  buildStackView();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1125,6 +2324,8 @@ function setPC(addr){
     memEl(S.pc)?.classList.add('mc-selected');
     refreshBreakdown();
   }
+  buildAsmTrace();
+  refreshAsmValidation();
 }
 function setStatus(msg,cls){
   const el=$('animLabel'); if(!el) return;
@@ -1149,7 +2350,7 @@ function asmForOp(type, ctx) {
     case 'load-start':
       return `MOV ${ctx.reg}, ${sizePtr()} [0x${fmtA(ctx.addr)}]`;
     case 'load-byte':
-      return `; [0x${fmtA(ctx.byteAddr)}] → ${ctx.reg}[byte ${ctx.byteIdx}]  (parcial: 0x${hex32(ctx.partial)})`;
+      return `; [0x${fmtA(ctx.byteAddr)}] → ${ctx.reg}[byte ${ctx.byteIdx}]  (parcial: 0x${ctx.partial})`;
     case 'fetch':
       return `; ${ipReg()} = 0x${fmtA(ctx.addr)}  →  fetch  →  ${ipReg()} = 0x${fmtA(ctx.newPC)}`;
     case 'clear':
@@ -1185,6 +2386,7 @@ function recOp(type,ms){
 
 function refreshStats(){
   const st=S.stats;
+  if(!$('st-ops')) return;
   $('st-ops').textContent=st.ops;
   $('st-time').textContent=st.totalTime+'ms';
   $('st-loads').textContent=st.loads;
@@ -1206,7 +2408,7 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // ─────────────────────────────────────────────────────────
 function saveSim(){
   const data={version:4,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,stackPanelWidth:S.stackPanelWidth,speed:S.speed,
     regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
   }};
@@ -1223,13 +2425,25 @@ function loadSim(e){
     try{
       const d=JSON.parse(ev.target.result).state;
       S.endian=d.endian; S.size=d.size; S.reg=d.reg;
+      if(d.stackMode) S.stackMode=d.stackMode;
+      if(Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
+      if(Number.isFinite(d.stackPanelWidth)) S.stackPanelWidth = clamp(d.stackPanelWidth, 220, 520);
+      if(Number.isFinite(d.speed)) S.speed = normalizeSpeed(d.speed);
       if(d.arch) S.arch=d.arch;
       Object.assign(S.regs,d.regs);
       S.mem=new Uint8Array(d.mem); S.memState=d.memState;
       Object.assign(S.stats,d.stats); S.pc=d.pc;
+      applySidebarPanelWidth();
+      persistSidebarPanelWidth();
+      applyStackPanelWidth();
+      persistStackPanelWidth();
       doSetEndian(S.endian); doSetArch(S.arch); doSetSize(S.size); doSelectReg(S.reg);
       buildRegCards(); buildRegPicker(); buildMemGrid(); setPC(S.pc);
+      buildStackView();
+      syncSpeedUI();
       syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
+      $('opsDisplay').textContent = S.stats.ops;
+      $('clockDisplay').textContent = '—';
       lg('sys','Simulação carregada.');
     }catch(err){ lg('error','Falha: '+err.message); }
   };
@@ -1274,7 +2488,7 @@ const HELP={
   <div class="md-cell md-mid">BE</div><div class="md-cell md-lsb">EF</div>
 </div>
 <p><strong style="color:var(--blu)">DE</strong> (MSB) → 0x0000 &nbsp;|&nbsp; <strong style="color:var(--grn)">EF</strong> (LSB) → 0x0003</p>
-<div class="info-box">✓ Usado por: SPARC, PowerPC, TCP/IP<br>✓ Vantagem: dump de memória legível da esquerda para direita</div>`,
+<div class="info-box">✓ Usado por: SPARC, PowerPC, TCP/IP<br>✓ No simulador: modo comparativo/visual; a execução Intel real continua little-endian</div>`,
 
   ops:`<h3>OPERAÇÕES</h3>
 <p><span class="hl">STORE</span> — Grava o valor do registrador na memória, byte a byte. O nibble sendo enviado fica destacado e um pacote animado voa até a célula de memória.</p>
@@ -1312,6 +2526,7 @@ const App = {
   doPush,
   doPop,
   doAssemble,
+  toggleStackMode,
   clearLog:   doClearLog,
   showHelp,
   closeHelp,

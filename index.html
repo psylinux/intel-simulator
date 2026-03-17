@@ -59,7 +59,7 @@
       <svg viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9H2V2h1zm4 9a2 2 0 100-4 2 2 0 000 4zm2-9v3H5V2h4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
     </button>
     <button class="tb-btn" id="btnLoad" title="Carregar simulação">
-      <svg viewBox="0 0 16 16" fill="none"><path d="M2 11v3h12v-3M8 2v8m-3-3l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg viewBox="0 0 16 16" fill="none"><path d="M2 12v2h12v-2M8 12V4m-3 3l3-3 3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <input type="file" id="fileInput" accept=".json" style="display:none">
   </div>
@@ -131,10 +131,10 @@
 
     <!-- SPEED -->
     <section class="ctrl-section">
-      <div class="ctrl-label">VELOCIDADE — <span id="speedVal">600ms</span></div>
+      <div class="ctrl-label">VELOCIDADE — <span id="speedVal">10000ms</span></div>
       <div class="speed-wrap">
         <span class="sp-fast">RÁPIDO</span>
-        <input type="range" id="speedSlider" min="80" max="1800" value="600" step="40">
+        <input type="range" id="speedSlider" min="80" max="10000" value="10000" step="40">
         <span class="sp-slow">LENTO</span>
       </div>
     </section>
@@ -193,13 +193,22 @@
                onkeydown="if(event.key==='Enter')App.doAssemble()"/>
         <button class="asm-btn" onclick="App.doAssemble()">ASM</button>
       </div>
-      <div class="asm-hint">Grava bytes no PC atual. Enter para confirmar.</div>
+      <div class="asm-hint" id="asmHint">Grava bytes no PC atual. Enter para confirmar.</div>
     </section>
 
   </aside>
 
+  <div id="sidebarResizeHandle" aria-hidden="true" title="Arraste para ajustar a largura da coluna esquerda"></div>
+
   <!-- ─────────── CENTER CANVAS ─────────── -->
   <main id="canvas">
+
+    <div id="editGuideBanner">
+      <span class="eg-title">EDICAO RAPIDA</span>
+      <span class="eg-item">Clique no <strong>PC</strong> e nos <strong>valores dos registradores</strong> para editar.</span>
+      <span class="eg-item">Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.</span>
+      <span class="eg-item">Use <strong>2× clique</strong> na <strong>LISTAGEM ASM</strong> para editar instrucoes.</span>
+    </div>
 
     <!-- REGISTERS ROW -->
     <div id="regsRow">
@@ -234,11 +243,23 @@
       <div id="animLabel">Pronto — selecione uma operação</div>
     </div>
 
+    <div id="asmTraceSection">
+      <div class="section-badge">
+        LISTAGENS DE CODIGO
+        <span class="asm-trace-tag">ASM editavel · pseudo-codigo sincronizado pelo PC · clique para navegar · 2× clique para editar ASM</span>
+      </div>
+      <div class="trace-heads">
+        <div class="trace-head">LISTAGEM ASM</div>
+        <div class="trace-head">PSEUDO-CÓDIGO</div>
+      </div>
+      <div id="asmTrace"></div>
+    </div>
+
     <!-- MEMORY GRID -->
     <div id="memSection">
       <div class="section-badge">
         MAPA DE MEMÓRIA
-        <span class="addr-dir-tag" id="addrDirTag">0x0000 ↓ endereços crescem · Intel SDM Vol.1 §3.3</span>
+        <span class="addr-dir-tag" id="addrDirTag">0x0000 no topo · endereços crescem ↓ · convenção Intel</span>
       </div>
       <div id="memWrapper">
         <div id="memAddrBar"></div>
@@ -248,7 +269,6 @@
           <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
           <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
           <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
-          <span class="ml-item ml-edit-hint">2×clique edita</span>
         </div>
       </div>
     </div>
@@ -261,6 +281,8 @@
 
   </main>
 
+  <div id="stackResizeHandle" aria-hidden="true" title="Arraste para ajustar a largura da stack"></div>
+
   <!-- ─────────── RIGHT PANEL ─────────── -->
   <aside id="rightPanel">
 
@@ -270,8 +292,8 @@
         <span id="stackArchLbl">STACK  ESP/EBP</span>
         <button class="stack-toggle-btn" id="stackToggleBtn" onclick="App.toggleStackMode()">FRAME</button>
       </div>
+      <div class="stack-note" id="stackNote">Pilha x86/x86-64: cresce para endereços menores.</div>
       <div id="stackView"><!-- injected by JS --></div>
-      <div class="stack-legend" id="stackLegend"><!-- injected by JS --></div>
     </section>
 
   </aside>

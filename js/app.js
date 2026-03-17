@@ -3,6 +3,10 @@
    ═══════════════════════════════════════════════════════ */
 'use strict';
 
+const DEFAULT_STACK_SIZE = 100 * 1024;
+const MIN_STACK_SIZE = 1 * 1024;
+const MAX_STACK_SIZE = 1024 * 1024;
+
 // ─────────────────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────────────────
@@ -11,6 +15,7 @@ const S = {
   size:   'dword',
   reg:    'EAX',
   stackMode: 'full',
+  stackSize: DEFAULT_STACK_SIZE,
   sidebarPanelWidth: 240,
   sidebarPanelManual: false,
   stackPanelWidth: 280,
@@ -38,9 +43,10 @@ const S = {
     R14: 0x00000000, R14_hi: 0,
     R15: 0x00000000, R15_hi: 0,
     // Stack pointers
-    ESP: 0x003C,   // stack pointer — topo da memória simulada
-    EBP: 0x003C,   // base pointer
+    ESP: DEFAULT_STACK_SIZE - 4,
+    EBP: DEFAULT_STACK_SIZE - 4,
   },
+  stackMem: new Uint8Array(DEFAULT_STACK_SIZE),
   mem:      new Uint8Array(64),
   memState: new Array(64).fill(''),
   stats: {
@@ -319,6 +325,85 @@ function normalizeSpeed(speed) {
   return clamp(Math.round(raw), 80, 10000);
 }
 
+function normalizeStackSizeBytes(size) {
+  const raw = Number.isFinite(size) ? size : DEFAULT_STACK_SIZE;
+  return clamp(Math.round(raw), MIN_STACK_SIZE, MAX_STACK_SIZE);
+}
+
+function stackSizeKb() {
+  return Math.round(S.stackSize / 1024);
+}
+
+function stackHexWidth() {
+  return Math.max(4, Math.max(S.stackSize - 1, 0).toString(16).length);
+}
+
+function fmtStackA(n) {
+  const safe = Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0));
+  return safe.toString(16).padStart(stackHexWidth(), '0').toUpperCase();
+}
+
+function stackTopInit() {
+  return Math.max(S.stackSize - ptrSize(), 0);
+}
+
+function ensureStackMem() {
+  const nextSize = normalizeStackSizeBytes(S.stackSize);
+  if(!(S.stackMem instanceof Uint8Array) || S.stackMem.length !== nextSize) {
+    S.stackMem = new Uint8Array(nextSize);
+  }
+  S.stackSize = nextSize;
+}
+
+function resetStackState() {
+  ensureStackMem();
+  S.stackMem.fill(0);
+  S.regs.ESP = stackTopInit();
+  S.regs.EBP = stackTopInit();
+  S.callFrames = [];
+}
+
+function stackAccessFits(addr, width) {
+  return Number.isInteger(addr) && Number.isInteger(width) && width > 0 && addr >= 0 && (addr + width) <= S.stackSize;
+}
+
+function readStackBytes(addr, width) {
+  if(!stackAccessFits(addr, width)) return [];
+  return Array.from(S.stackMem.slice(addr, addr + width));
+}
+
+function writeStackBytes(addr, bytes) {
+  if(!stackAccessFits(addr, bytes.length)) return;
+  bytes.forEach((byte, idx) => {
+    S.stackMem[addr + idx] = byte & 0xFF;
+  });
+}
+
+function readStackPtrLE(addr, width=ptrSize()) {
+  let value = 0;
+  const bytes = readStackBytes(addr, width);
+  for(let i=0;i<Math.min(4, bytes.length);i++) value |= (bytes[i] & 0xFF) << (i*8);
+  return value >>> 0;
+}
+
+function reportStackBoundsError(kind, addr, width, asm=null, opts={}) {
+  const first = addr;
+  const last = addr + width - 1;
+  const message = `${kind}: o acesso exige ${width} byte(s), de 0x${fmtStackA(first)} até 0x${fmtStackA(last)}, mas a stack simulada vai de 0x0000 até 0x${fmtStackA(S.stackSize - 1)}.`;
+  reportStackError(message, asm, opts);
+}
+
+function reportStackError(message, asm=null, opts={}) {
+  if(Number.isInteger(opts.pc)) setPC(opts.pc);
+  if(opts.halt) {
+    S.halt = true;
+    S.faulted = true;
+  }
+  setStatus(message, 'lbl-error', { log:false });
+  lg('error', message, asm);
+  buildStackView();
+}
+
 function clearFaultLatch() {
   if(!S.faulted) return;
   S.faulted = false;
@@ -383,6 +468,27 @@ function syncSpeedUI() {
   if(label) label.textContent = `${S.speed}ms`;
 }
 
+function syncStackSizeUI() {
+  const input = $('stackSizeInput');
+  if(input && document.activeElement!==input) input.value = String(stackSizeKb());
+}
+
+function applyStackSize() {
+  const input = $('stackSizeInput');
+  const requestedKb = parseInt(input?.value || '', 10);
+  const nextSize = normalizeStackSizeBytes((Number.isFinite(requestedKb) ? requestedKb : stackSizeKb()) * 1024);
+  S.stackSize = nextSize;
+  resetStackState();
+  buildRegCards();
+  buildRegPicker();
+  syncPicker();
+  buildStackView();
+  refreshPreview();
+  refreshBreakdown();
+  syncStackSizeUI();
+  lg('sys', `Tamanho da stack ajustado para ${stackSizeKb()} KB. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}.`);
+}
+
 // ─────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────
@@ -417,6 +523,13 @@ function init() {
   });
   $('asmInput')?.addEventListener('input', refreshAsmValidation);
   $('asmInput')?.addEventListener('blur', refreshAsmValidation);
+  $('stackSizeInput')?.addEventListener('change', applyStackSize);
+  $('stackSizeInput')?.addEventListener('keydown', e => {
+    if(e.key==='Enter') {
+      e.preventDefault();
+      applyStackSize();
+    }
+  });
 
   // PC input — manual editing
   $('pcDisplay').addEventListener('input', e => {
@@ -744,7 +857,7 @@ function resetCoreRegisters() {
   S.regs.RAX_hi=0; S.regs.RBX_hi=0; S.regs.RCX_hi=0; S.regs.RDX_hi=0;
   S.regs.RSI_hi=0; S.regs.RDI_hi=0;
   ['R8','R9','R10','R11','R12','R13','R14','R15'].forEach(r=>{ S.regs[r]=0; S.regs[r+'_hi']=0; });
-  S.regs.ESP=0x003C; S.regs.EBP=0x003C;
+  S.regs.ESP=stackTopInit(); S.regs.EBP=stackTopInit();
 }
 
 function resetStatsState() {
@@ -758,7 +871,7 @@ function loadDefaultProgram(announce=true, arch=S.arch) {
   const program = demoProgramForArch(arch);
   S.mem.fill(0);
   S.memState.fill('');
-  S.callFrames = [];
+  resetStackState();
   S.faulted = false;
   program.bytes.forEach((byte, idx) => {
     S.mem[idx] = byte;
@@ -879,14 +992,6 @@ function ensureCurrentTraceVisible() {
   }
 }
 
-function readPtrLE(addr, width=ptrSize()) {
-  let value = 0;
-  for(let i=0;i<Math.min(4, width);i++) {
-    value |= (S.mem[(addr+i)&0x3F] & 0xFF) << (i*8);
-  }
-  return value >>> 0;
-}
-
 function codeLabelAt(addr) {
   const at = addr & 0x3F;
   const instr = decodeAt(at);
@@ -914,13 +1019,14 @@ function stackTraceFrames() {
   }];
 
   const visitedBp = new Set();
-  let bp = S.regs.EBP & 0x3F;
+  let bp = S.regs.EBP >>> 0;
   let depth = 1;
 
-  while(depth <= 8 && !visitedBp.has(bp)) {
+  while(depth <= 8 && !visitedBp.has(bp) && stackAccessFits(bp, ptrSize())) {
     visitedBp.add(bp);
-    const retSlot = (bp + ptrSize()) & 0x3F;
-    const retAddr = readPtrLE(retSlot, ptrSize()) & 0x3F;
+    const retSlot = bp + ptrSize();
+    if(!stackAccessFits(retSlot, ptrSize())) break;
+    const retAddr = readStackPtrLE(retSlot, ptrSize()) & 0x3F;
     const callSite = callSiteForReturn(retAddr);
     if(!callSite) break;
 
@@ -932,7 +1038,7 @@ function stackTraceFrames() {
       extra: `via ${callSite.asm} @ 0x${fmtA(callSite.addr)}`,
     });
 
-    const prevBp = readPtrLE(bp, ptrSize()) & 0x3F;
+    const prevBp = readStackPtrLE(bp, ptrSize()) >>> 0;
     if(prevBp===bp) break;
     bp = prevBp;
     depth++;
@@ -2038,35 +2144,29 @@ function decodeAt(pc) {
   if(op===0xC3) return { op, mnem:'RET', size:off+1, asm:'RET',
     exec:()=>{
       const width = ptrSize();
-      const sp = S.regs[spKey] & 0x3F;
-      if(!mapAccessFits(sp, width)) {
-        reportWidthOverflow(`RET em 0x${fmtA(pc)}`, sp, width, 'RET', { halt:true, pc });
+      const sp = S.regs[spKey] >>> 0;
+      if(!stackAccessFits(sp, width)) {
+        reportStackBoundsError(`RET em 0x${fmtA(pc)}`, sp, width, 'RET', { halt:true, pc });
         return;
       }
-      const bytes = [];
-      for(let i=0;i<width;i++) bytes.push(S.mem[(sp+i)&0x3F]);
+      const bytes = readStackBytes(sp, width);
       let target = 0;
       for(let i=0;i<Math.min(4,width);i++) target |= (bytes[i]&0xFF)<<(i*8);
       const expected = S.callFrames[S.callFrames.length-1];
       const highGarbage = width>4 && bytes.slice(4).some(b => b!==0);
       if(expected) {
         const issues = [];
-        if(expected.slot !== sp) issues.push(`o topo da pilha esta em 0x${fmtA(sp)}, mas o CALL mais recente gravou o retorno em 0x${fmtA(expected.slot)}`);
+        if(expected.slot !== sp) issues.push(`o topo da pilha esta em 0x${fmtStackA(sp)}, mas o CALL mais recente gravou o retorno em 0x${fmtStackA(expected.slot)}`);
         if((expected.returnTo & 0x3F) !== (target & 0x3F)) issues.push(`o endereco lido foi 0x${fmtA(target & 0x3F)}, mas o CALL mais recente esperava 0x${fmtA(expected.returnTo & 0x3F)}`);
         if(expected.width !== width) issues.push(`a largura esperada para o retorno era ${expected.width} byte(s), mas o RET leu ${width}`);
         if(highGarbage) issues.push('os bytes altos do endereco de retorno nao estao zerados');
         if(issues.length) {
-          reportMemoryError(
-            mapVisibleRange(sp, width),
-            `RET corrompido em 0x${fmtA(pc)}: ${issues.join('; ')}.`,
-            'RET',
-            { halt:true, pc }
-          );
+          reportStackError(`RET corrompido em 0x${fmtA(pc)}: ${issues.join('; ')}.`, 'RET', { halt:true, pc });
           return;
         }
         S.callFrames.pop();
       }
-      S.regs[spKey]=(S.regs[spKey]+width)&0x3F;
+      S.regs[spKey]=S.regs[spKey]+width;
       updateRegCard(spName);
       updatePickerVal(spName);
       setPC(target & 0x3F);
@@ -2094,17 +2194,19 @@ function decodeAt(pc) {
           );
           return;
         }
-        const nextSp = (S.regs[spKey]-width+64)&0x3F;
-        if(!mapAccessFits(nextSp, width)) {
-          reportWidthOverflow(`CALL 0x${fmtA(target)}`, nextSp, width, `CALL 0x${fmtA(target)}`, { halt:true, pc });
+        const nextSp = S.regs[spKey] - width;
+        if(!stackAccessFits(nextSp, width)) {
+          reportStackBoundsError(`CALL 0x${fmtA(target)}`, nextSp, width, `CALL 0x${fmtA(target)}`, { halt:true, pc });
           return;
         }
         S.regs[spKey]=nextSp;
-        const sp = S.regs[spKey] & 0x3F;
+        const sp = S.regs[spKey] >>> 0;
+        const retBytes = [];
         for(let i=0;i<width;i++) {
           const byte = i<4 ? ((nextIp>>>(i*8))&0xFF) : 0;
-          writeMem((sp+i)&0x3F, byte, 'mc-written');
+          retBytes.push(byte);
         }
+        writeStackBytes(sp, retBytes);
         S.callFrames.push({ slot: sp, width, returnTo: nextIp & 0x3F, callSite: pc & 0x3F, target });
         updateRegCard(spName);
         updatePickerVal(spName);
@@ -2190,13 +2292,13 @@ function decodeAt(pc) {
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}PUSH ${rn}`, size:off+2, asm:`PUSH ${rn}`,
       exec:()=>{
         const width=ptrSize();
-        const nextSp=(S.regs[spKey]-width+64)&0x3F;
-        if(!mapAccessFits(nextSp, width)) {
-          reportWidthOverflow(`PUSH ${rn}`, nextSp, width, `PUSH ${rn}`, { halt:true, pc });
+        const nextSp=S.regs[spKey]-width;
+        if(!stackAccessFits(nextSp, width)) {
+          reportStackBoundsError(`PUSH ${rn}`, nextSp, width, `PUSH ${rn}`, { halt:true, pc });
           return;
         }
         S.regs[spKey]=nextSp;
-        regBytes(rn,width).forEach((b,i)=>writeMem((S.regs[spKey]+i)&0x3F,b,'mc-written'));
+        writeStackBytes(S.regs[spKey], regBytes(rn,width));
         updateRegCard(spName); updatePickerVal(spName);
       } }; }
     return faultInstr(
@@ -2218,12 +2320,15 @@ function decodeAt(pc) {
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}POP ${rn}`, size:off+2, asm:`POP ${rn}`,
       exec:()=>{
         const width=ptrSize();
-        const sp = S.regs[spKey] & 0x3F;
-        if(!mapAccessFits(sp, width)) {
-          reportWidthOverflow(`POP ${rn}`, sp, width, `POP ${rn}`, { halt:true, pc });
+        const sp = S.regs[spKey] >>> 0;
+        if(!stackAccessFits(sp, width)) {
+          reportStackBoundsError(`POP ${rn}`, sp, width, `POP ${rn}`, { halt:true, pc });
           return;
         }
-        const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(S.regs[spKey]+i)&0x3F]); setRegFromBytes(rn,bytes); S.regs[spKey]=(S.regs[spKey]+width)&0x3F; updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
+        const bytes = readStackBytes(sp, width);
+        setRegFromBytes(rn, bytes);
+        S.regs[spKey]=S.regs[spKey]+width;
+        updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
       } }; }
     return faultInstr(
       2,
@@ -2427,33 +2532,31 @@ async function doPush() {
   S.busy=true; setBusy(true);
   const reg=S.reg, width=ptrSize();
   const spName = is64() ? 'RSP' : 'ESP';
-  const nextSp = (S.regs.ESP-width+64)&0x3F;
-  if(!mapAccessFits(nextSp, width)) {
-    reportWidthOverflow(`PUSH ${reg}`, nextSp, width, `PUSH ${reg}`);
+  const nextSp = S.regs.ESP - width;
+  if(!stackAccessFits(nextSp, width)) {
+    reportStackBoundsError(`PUSH ${reg}`, nextSp, width, `PUSH ${reg}`);
     S.busy=false; setBusy(false);
     return;
   }
   S.regs.ESP=nextSp;
   const sp=S.regs.ESP;
   setPC(sp, { traceAutoScroll:false });
-  lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtA(sp)}`, `PUSH ${reg}`);
-  setStatus(`PUSH: ${reg} → [0x${fmtA(sp)}]`,'lbl-store');
+  lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtStackA(sp)}`, `PUSH ${reg}`);
+  setStatus(`PUSH: ${reg} → [STACK 0x${fmtStackA(sp)}]`,'lbl-store');
   const bs=regBytes(reg,width);
   for(let i=0;i<width;i++) {
-    const ma=(sp+i)&0x3F;
+    const ma=sp+i;
     const hexPos=displayPosForTransferByte(reg, i, width);
     storeHighlight(reg, hexPos, width);
     setPC(ma, { traceAutoScroll:false });
-    setMemSt(ma,'mc-pc');
     await animPacket('store', bs[i], ma);
-    writeMem(ma, bs[i], 'mc-active');
+    S.stackMem[ma] = bs[i] & 0xFF;
     await sleep(S.speed*0.12);
-    S.memState[ma]='mc-written'; setMemSt(ma,'mc-written');
   }
   updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg);
   updateRegCard(spName); updatePickerVal(spName);
-  setStatus(`PUSH concluído — ${spName}=0x${fmtA(sp)}`,'lbl-done');
-  setPC((sp+width)&0x3F, { traceAutoScroll:false });
+  setStatus(`PUSH concluído — ${spName}=0x${fmtStackA(sp)}`,'lbl-done');
+  setPC((sp+width) & 0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2463,34 +2566,33 @@ async function doPop() {
   if(S.busy) return;
   clearFaultLatch();
   S.busy=true; setBusy(true);
-  const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP&0x3F, width=ptrSize();
-  if(!mapAccessFits(sp, width)) {
-    reportWidthOverflow(`POP ${reg}`, sp, width, `POP ${reg}`);
+  const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP >>> 0, width=ptrSize();
+  if(!stackAccessFits(sp, width)) {
+    reportStackBoundsError(`POP ${reg}`, sp, width, `POP ${reg}`);
     S.busy=false; setBusy(false);
     return;
   }
   setPC(sp, { traceAutoScroll:false });
-  lg('load',`POP [0x${fmtA(sp)}] → ${reg}`, `POP ${reg}`);
-  setStatus(`POP: [0x${fmtA(sp)}] → ${reg}`,'lbl-load');
+  lg('load',`POP [STACK 0x${fmtStackA(sp)}] → ${reg}`, `POP ${reg}`);
+  setStatus(`POP: [STACK 0x${fmtStackA(sp)}] → ${reg}`,'lbl-load');
   const partialLittle = new Array(width).fill(0);
   setRegParts(reg,0,0); setLoading(reg,true);
   for(let i=0;i<width;i++) {
-    const ma=(sp+i)&0x3F;
-    setPC(ma, { traceAutoScroll:false }); setMemSt(ma,'mc-active');
-    await animPacket('load', S.mem[ma], ma);
-    partialLittle[i]=S.mem[ma]&0xFF;
+    const ma=sp+i;
+    setPC(ma, { traceAutoScroll:false });
+    await animPacket('load', S.stackMem[ma], ma);
+    partialLittle[i]=S.stackMem[ma]&0xFF;
     setRegFromBytes(reg, partialLittle);
     liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
     await sleep(S.speed*0.12);
-    setMemSt(ma,S.memState[ma]||'');
   }
   setLoading(reg,false);
-  S.regs.ESP=(sp+width)&0x3F;
+  S.regs.ESP=sp+width;
   updateRegCard(reg); updateRegCard(spName); updatePickerVal(spName);
   const finalHex=regHex(reg);
   $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
   setStatus(`POP concluído — ${reg}=0x${finalHex}`,'lbl-done');
-  setPC((sp+width)&0x3F, { traceAutoScroll:false });
+  setPC((sp+width) & 0x3F, { traceAutoScroll:false });
   buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2997,7 +3099,7 @@ function doClear() {
 // STACK VIEW
 // ─────────────────────────────────────────────────────────
 function distanceUp(from, to) {
-  return ((to - from) + 64) & 0x3F;
+  return Math.max(0, to - from);
 }
 
 function inActiveFrame(addr, sp, bp) {
@@ -3008,32 +3110,34 @@ function inActiveFrame(addr, sp, bp) {
 }
 
 function frameAddressesDesc() {
-  const sp = S.regs.ESP & 0x3F;
-  const bp = S.regs.EBP & 0x3F;
-  const ret = (bp + ptrSize()) & 0x3F;
+  const sp = S.regs.ESP >>> 0;
+  const bp = S.regs.EBP >>> 0;
+  const ret = bp + ptrSize();
 
   if(sp===bp) {
     const out = [];
-    for(let i=0;i<8;i++) out.push((sp + 3 - i + 64) & 0x3F);
+    const top = Math.min(S.stackSize - 1, sp + 3);
+    const bottom = Math.max(0, sp - 4);
+    for(let addr=top;addr>=bottom;addr--) out.push(addr);
     return out;
   }
 
-  const start = (ret + 2) & 0x3F;
-  const end = (sp - 2 + 64) & 0x3F;
+  const start = Math.min(S.stackSize - 1, ret + 2);
+  const end = Math.max(0, sp - 2);
   const out = [];
   let cur = start;
-  while(out.length < 20) {
+  while(out.length < 20 && cur >= end) {
     out.push(cur);
     if(cur===end) break;
-    cur = (cur - 1 + 64) & 0x3F;
+    cur -= 1;
   }
   return out;
 }
 
 function stackRowMeta(addr) {
-  const sp = S.regs.ESP & 0x3F;
-  const bp = S.regs.EBP & 0x3F;
-  const ret = (bp + ptrSize()) & 0x3F;
+  const sp = S.regs.ESP >>> 0;
+  const bp = S.regs.EBP >>> 0;
+  const ret = bp + ptrSize();
   const tags = [];
 
   if(addr===sp) tags.push({cls:'sp', text:`${is64()?'RSP':'ESP'} topo`});
@@ -3053,22 +3157,22 @@ function buildStackView() {
 
   const spName = is64() ? 'RSP' : 'ESP';
   const bpName = is64() ? 'RBP' : 'EBP';
-  const sp = S.regs.ESP & 0x3F;
-  const bp = S.regs.EBP & 0x3F;
-  const ret = (bp + ptrSize()) & 0x3F;
+  const sp = S.regs.ESP >>> 0;
+  const bp = S.regs.EBP >>> 0;
+  const ret = bp + ptrSize();
   const mode = S.stackMode === 'frame' ? 'FRAME' : 'FULL';
   const list = S.stackMode === 'frame'
     ? frameAddressesDesc()
-    : Array.from({length:64}, (_,i)=>63-i);
+    : Array.from({length:Math.min(64, S.stackSize)}, (_,i)=>(S.stackSize - 1) - i);
 
   const rows = list.map(addr => {
     const meta = stackRowMeta(addr);
     const tags = meta.tags.length
       ? meta.tags.map(tag => `<span class="stack-tag stack-tag-${tag.cls}">${tag.text}</span>`).join('')
       : '<span class="stack-row-empty">livre</span>';
-    return `<div class="stack-row stack-row-${meta.primary}">
-      <span class="stack-row-addr">0x${fmtA(addr)}</span>
-      <span class="stack-row-byte">${hex8(S.mem[addr])}</span>
+    return `<div class="stack-row stack-row-${meta.primary}" data-stack-addr="${addr}">
+      <span class="stack-row-addr">0x${fmtStackA(addr)}</span>
+      <span class="stack-row-byte">${hex8(S.stackMem[addr] || 0)}</span>
       <span class="stack-row-tags">${tags}</span>
     </div>`;
   }).join('');
@@ -3076,9 +3180,10 @@ function buildStackView() {
   view.innerHTML = `
     <div class="stack-meta">
       <div class="stack-meta-row stack-meta-row-mode"><span class="stack-meta-key">modo</span><span class="stack-meta-pill">${mode}</span></div>
-      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (topo da pilha)</span><span class="stack-meta-pill">0x${fmtA(sp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (base do frame)</span><span class="stack-meta-pill">0x${fmtA(bp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${sp===bp ? '—' : `0x${fmtA(ret)}`}</span></div>
+      <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${stackSizeKb()} KB</span></div>
+      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (topo da pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (base do frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${sp===bp ? '—' : `0x${fmtStackA(ret)}`}</span></div>
       <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">PC (Contador do Programa)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
     </div>
     ${buildStackTrace()}
@@ -3086,6 +3191,7 @@ function buildStackView() {
 
   const stackLbl = $('stackArchLbl');
   if(stackLbl) stackLbl.textContent = `STACK  ${spName}/${bpName}`;
+  syncStackSizeUI();
   const toggle = $('stackToggleBtn');
   if(toggle) toggle.textContent = S.stackMode === 'frame' ? 'FULL' : 'FRAME';
   scheduleCenterPaneLayout();
@@ -3096,12 +3202,14 @@ function toggleStackMode() {
   buildStackView();
 }
 
+const stackRowEl = addr => $('stackView')?.querySelector(`.stack-row[data-stack-addr="${addr}"]`);
+
 // ─────────────────────────────────────────────────────────
 // ANIMATION
 // ─────────────────────────────────────────────────────────
 async function animPacket(dir, bv, memIdx) {
   const stage=$('animStage'), svg=$('animSVG');
-  const rc=$('rc-'+S.reg), mc=memEl(memIdx);
+  const rc=$('rc-'+S.reg), mc=memEl(memIdx) || stackRowEl(memIdx);
   if(!stage||!svg||!rc||!mc){ await sleep(Math.max(S.speed*0.4,80)); return; }
 
   const sr=stage.getBoundingClientRect();
@@ -3293,9 +3401,9 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // SAVE / LOAD
 // ─────────────────────────────────────────────────────────
 function saveSim(){
-  const data={version:8,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
-    regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],
+  const data={version:9,state:{
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
+    regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],stackMem:Array.from(S.stackMem || []),
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
   }};
   const a=document.createElement('a');
@@ -3312,6 +3420,7 @@ function loadSim(e){
       const d=JSON.parse(ev.target.result).state;
       S.endian=d.endian; S.size=d.size; S.reg=d.reg;
       if(d.stackMode) S.stackMode=d.stackMode;
+      if(Number.isFinite(d.stackSize)) S.stackSize = normalizeStackSizeBytes(d.stackSize);
       S.sidebarPanelManual = !!d.sidebarPanelManual;
       S.stackPanelManual = !!d.stackPanelManual;
       if(S.sidebarPanelManual && Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
@@ -3329,6 +3438,9 @@ function loadSim(e){
       if(d.arch) S.arch=d.arch;
       Object.assign(S.regs,d.regs);
       S.mem=new Uint8Array(d.mem); S.memState=d.memState;
+      ensureStackMem();
+      if(Array.isArray(d.stackMem) && d.stackMem.length===S.stackSize) S.stackMem = new Uint8Array(d.stackMem);
+      else S.stackMem.fill(0);
       Object.assign(S.stats,d.stats); S.pc=d.pc;
       applySidebarPanelWidth();
       persistSidebarPanelWidth();
@@ -3341,7 +3453,8 @@ function loadSim(e){
       doSetEndian(S.endian); doSetArch(S.arch); doSetSize(S.size); doSelectReg(S.reg);
       buildRegCards(); buildRegPicker(); buildMemGrid(); setPC(S.pc);
       buildStackView();
-      syncSpeedUI();
+  syncSpeedUI();
+  syncStackSizeUI();
       syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
       $('opsDisplay').textContent = S.stats.ops;
       $('clockDisplay').textContent = '—';
@@ -3427,6 +3540,7 @@ const App = {
   doPop,
   doAssemble,
   toggleStackMode,
+  applyStackSize,
   clearLog:   doClearLog,
   showHelp,
   closeHelp,

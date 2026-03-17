@@ -286,6 +286,14 @@
         <button class="stack-toggle-btn" id="stackToggleBtn" onclick="App.toggleStackMode()">FRAME</button>
       </div>
       <div class="stack-note" id="stackNote">Pilha x86/x86-64: cresce para endereços menores.</div>
+      <div class="stack-size-row">
+        <label class="stack-size-label" for="stackSizeInput">Tamanho da stack</label>
+        <div class="stack-size-ctrl">
+          <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1024" step="1" value="100"/>
+          <span class="stack-size-unit">KB</span>
+          <button class="stack-size-apply" type="button" onclick="App.applyStackSize()">Aplicar</button>
+        </div>
+      </div>
       <div id="stackView"><!-- injected by JS --></div>
     </section>
 

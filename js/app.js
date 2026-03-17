@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════ */
 'use strict';
 
-const DEFAULT_STACK_SIZE = 100 * 1024;
+const DEFAULT_STACK_SIZE = 64 * 1024;
 const MIN_STACK_SIZE = 1 * 1024;
 const MAX_STACK_SIZE = 1024 * 1024;
 
@@ -1395,7 +1395,7 @@ function buildStackTrace() {
   return `
     <div class="stack-trace">
       <div class="stack-trace-hd">
-        <span>STACK TRACE</span>
+        <span>BACKTRACE</span>
         <span class="stack-trace-hint">ordem das chamadas ativas e seus enderecos de retorno</span>
       </div>
       <div class="stack-trace-list">${rows}</div>
@@ -2337,8 +2337,9 @@ function doSetArch(arch) {
   // Add QWORD button visibility
   const sQ=$('sQword'); if(sQ) sQ.style.display = arch==='x64' ? '' : 'none';
 
-  // Switch back from qword if switching to ia32
-  if(arch==='ia32' && S.size==='qword') doSetSize('dword');
+  // Default operand size follows the selected architecture in the UI
+  if(arch==='x64') S.size = 'qword';
+  else if(S.size==='qword') S.size = 'dword';
 
   resetStatsState();
   resetCoreRegisters();
@@ -2352,6 +2353,7 @@ function doSetArch(arch) {
   buildMemGrid();
   setPC(demoProgramForArch(arch).entry);
   buildStackView();
+  doSetSize(S.size);
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   updatePickerVal(S.reg);
   doSelectReg(S.reg);

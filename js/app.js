@@ -21,6 +21,8 @@ const S = {
   sidebarPanelManual: false,
   stackPanelWidth: 280,
   stackPanelManual: false,
+  codeMemSplitWidth: 0,
+  codeMemSplitManual: false,
   centerPaneHeights: {},
   collapsedSections: {},
   speed:  2500,
@@ -66,8 +68,7 @@ const S = {
 
 const CENTER_PANE_CONFIG = {
   regsRow: { initial: 332, min: 180, max: 520 },
-  asmTraceSection: { initial: 250, min: 160, max: 520 },
-  memSection: { initial: 278, min: 180, max: 520 },
+  codeMemRow: { initial: 360, min: 220, max: 680 },
   logSection: { initial: 242, min: 170, max: 520 },
 };
 
@@ -599,6 +600,7 @@ function applyStackSize() {
 function init() {
   loadSidebarPanelWidth();
   loadStackPanelWidth();
+  loadCodeMemSplit();
   initCollapsibleSections();
   applySidebarPanelWidth();
   applyStackPanelWidth();
@@ -609,6 +611,7 @@ function init() {
   buildStackView();
   initSidebarResize();
   initStackResize();
+  initCodeMemSplitResize();
   initCenterPaneResize();
   syncPicker();
   refreshPreview();
@@ -729,7 +732,11 @@ function init() {
   lg('sys', demoProgramForArch().listing.join(' | '));
   applyCollapsedSections();
   applyCenterPaneHeights();
-  if(typeof window !== 'undefined') window.addEventListener('resize', applyCenterPaneHeights);
+  applyCodeMemSplit();
+  if(typeof window !== 'undefined') window.addEventListener('resize', () => {
+    applyCenterPaneHeights();
+    applyCodeMemSplit();
+  });
 }
 
 function loadStackPanelWidth() {
@@ -741,6 +748,20 @@ function loadStackPanelWidth() {
       S.stackPanelWidth = clamp(saved, 220, 520);
     } else {
       S.stackPanelManual = false;
+    }
+  } catch(_) {}
+}
+
+function loadCodeMemSplit() {
+  try {
+    const manual = localStorage.getItem('memsim.codeMemSplitManual') === '1';
+    const saved = parseInt(localStorage.getItem('memsim.codeMemSplitWidth') || '', 10);
+    if(manual && Number.isFinite(saved)) {
+      S.codeMemSplitManual = true;
+      S.codeMemSplitWidth = saved;
+    } else {
+      S.codeMemSplitManual = false;
+      S.codeMemSplitWidth = 0;
     }
   } catch(_) {}
 }
@@ -780,11 +801,67 @@ function loadCollapsedSections() {
   } catch(_) {}
 }
 
+function codeMemSplitMinPane(totalWidth) {
+  const usable = Math.max((Number.isFinite(totalWidth) ? totalWidth : 0) - 10, 0);
+  return clamp(Math.floor(usable / 2) - 24, 180, 320);
+}
+
+function applyCodeMemSplit() {
+  const split = $('codeMemSplit');
+  const handle = $('codeMemSplitHandle');
+  const memPane = $('memSection');
+  const asmPane = $('asmTraceSection');
+  if(!split || !handle || !memPane || !asmPane) return;
+
+  const total = Math.round(split.getBoundingClientRect().width || split.clientWidth || 0);
+  if(!total) return;
+
+  const handleW = Math.max(handle.getBoundingClientRect().width || 0, 10);
+  const minPane = codeMemSplitMinPane(total);
+  const memCollapsed = !!S.collapsedSections[sectionStateId(memPane)];
+  const asmCollapsed = !!S.collapsedSections[sectionStateId(asmPane)];
+
+  memPane.classList.toggle('is-collapsed', memCollapsed);
+  asmPane.classList.toggle('is-collapsed', asmCollapsed);
+
+  if(memCollapsed && asmCollapsed) {
+    handle.hidden = true;
+    split.style.gridTemplateColumns = 'minmax(0, 1fr) 0px minmax(0, 1fr)';
+    return;
+  }
+
+  if(memCollapsed) {
+    handle.hidden = true;
+    const collapsed = clamp(Math.round(total * 0.28), 210, 320);
+    split.style.gridTemplateColumns = `${collapsed}px 0px minmax(0, 1fr)`;
+    return;
+  }
+
+  if(asmCollapsed) {
+    handle.hidden = true;
+    const collapsed = clamp(Math.round(total * 0.28), 210, 320);
+    split.style.gridTemplateColumns = `minmax(0, 1fr) 0px ${collapsed}px`;
+    return;
+  }
+
+  handle.hidden = false;
+  if(!S.codeMemSplitManual) {
+    split.style.gridTemplateColumns = `minmax(${minPane}px, 1fr) ${handleW}px minmax(${minPane}px, 1fr)`;
+    return;
+  }
+
+  const maxLeft = Math.max(minPane, total - handleW - minPane);
+  const left = clamp(S.codeMemSplitWidth || Math.round((total - handleW) / 2), minPane, maxLeft);
+  S.codeMemSplitWidth = left;
+  split.style.gridTemplateColumns = `${left}px ${handleW}px minmax(${minPane}px, 1fr)`;
+}
+
 function applySidebarPanelWidth() {
   const shell = $('appShell');
   if(!shell) return;
   if(S.sidebarPanelManual) shell.style.setProperty('--sidebar-w', `${clamp(S.sidebarPanelWidth, 220, 420)}px`);
   else shell.style.removeProperty('--sidebar-w');
+  applyCodeMemSplit();
 }
 
 function persistSidebarPanelWidth() {
@@ -804,6 +881,7 @@ function applyStackPanelWidth() {
   if(!shell) return;
   if(S.stackPanelManual) shell.style.setProperty('--stack-panel-w', `${clamp(S.stackPanelWidth, 220, 520)}px`);
   else shell.style.removeProperty('--stack-panel-w');
+  applyCodeMemSplit();
 }
 
 function persistStackPanelWidth() {
@@ -814,6 +892,18 @@ function persistStackPanelWidth() {
     } else {
       localStorage.removeItem('memsim.stackPanelManual');
       localStorage.removeItem('memsim.stackPanelWidth');
+    }
+  } catch(_) {}
+}
+
+function persistCodeMemSplit() {
+  try {
+    if(S.codeMemSplitManual) {
+      localStorage.setItem('memsim.codeMemSplitManual', '1');
+      localStorage.setItem('memsim.codeMemSplitWidth', String(Math.max(0, Math.round(S.codeMemSplitWidth || 0))));
+    } else {
+      localStorage.removeItem('memsim.codeMemSplitManual');
+      localStorage.removeItem('memsim.codeMemSplitWidth');
     }
   } catch(_) {}
 }
@@ -842,6 +932,7 @@ function applyCenterPaneHeights() {
     pane.style.flexBasis = `${next}px`;
     pane.style.height = `${next}px`;
   });
+  applyCodeMemSplit();
 }
 
 function persistCenterPaneHeights() {
@@ -941,18 +1032,34 @@ function ensureCanvasPaneHeads() {
   });
 }
 
+function ensureSplitPaneHeads() {
+  $$('.split-pane').forEach((pane, idx) => {
+    const body = pane.querySelector(':scope > .split-pane-body');
+    if(!body) return;
+    const paneId = sectionStateId(pane, `split-${idx}`);
+    let head = pane.querySelector(':scope > .section-badge');
+    if(!head) {
+      head = body.querySelector(':scope > .section-badge');
+      if(head) pane.insertBefore(head, body);
+    }
+    if(!head) return;
+    if(!head.querySelector('.section-collapse-btn')) createCollapseButton(head, paneId);
+  });
+}
+
 function applyCollapsedSections() {
-  $$('.ctrl-section, .canvas-pane').forEach(section => {
+  $$('.ctrl-section, .canvas-pane, .split-pane').forEach(section => {
     const sectionId = sectionStateId(section);
     const collapsed = !!S.collapsedSections[sectionId];
     section.classList.toggle('is-collapsed', collapsed);
-    const body = section.querySelector(':scope > .ctrl-section-body, :scope > .canvas-pane-body');
-    const handle = section.querySelector(':scope > .canvas-pane-handle');
+    const body = section.querySelector(':scope > .ctrl-section-body, :scope > .canvas-pane-body, :scope > .split-pane-body');
+    const handle = section.querySelector(':scope > .canvas-pane-handle, :scope > .split-pane-handle');
     if(body) body.hidden = collapsed;
     if(handle) handle.hidden = collapsed;
     setToggleVisual(section.querySelector('[data-section-toggle]'), collapsed);
   });
   applyCenterPaneHeights();
+  applyCodeMemSplit();
 }
 
 function toggleSectionCollapsed(sectionId) {
@@ -964,6 +1071,7 @@ function toggleSectionCollapsed(sectionId) {
 function initCollapsibleSections() {
   ensureCtrlSectionBodies();
   ensureCanvasPaneHeads();
+  ensureSplitPaneHeads();
   applyCollapsedSections();
 }
 
@@ -1307,6 +1415,39 @@ function initSidebarResize() {
     function onUp() {
       document.body.classList.remove('sidebar-resizing');
       persistSidebarPanelWidth();
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+function initCodeMemSplitResize() {
+  const split = $('codeMemSplit');
+  const handle = $('codeMemSplitHandle');
+  if(!split || !handle) return;
+
+  handle.addEventListener('mousedown', e => {
+    if(handle.hidden) return;
+    e.preventDefault();
+    document.body.classList.add('code-mem-resizing');
+
+    function onMove(ev) {
+      const rect = split.getBoundingClientRect();
+      const total = rect.width;
+      const handleW = Math.max(handle.getBoundingClientRect().width || 0, 10);
+      const minPane = codeMemSplitMinPane(total);
+      const maxLeft = Math.max(minPane, total - handleW - minPane);
+      S.codeMemSplitManual = true;
+      S.codeMemSplitWidth = clamp(Math.round(ev.clientX - rect.left), minPane, maxLeft);
+      applyCodeMemSplit();
+    }
+
+    function onUp() {
+      document.body.classList.remove('code-mem-resizing');
+      persistCodeMemSplit();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -3618,7 +3759,7 @@ function readAddr(){return parseInt($('addrInput').value||'0',16)&0x3F;}
 // ─────────────────────────────────────────────────────────
 function saveSim(){
   const data={version:10,state:{
-    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
+    endian:S.endian,size:S.size,reg:S.reg,arch:S.arch,stackMode:S.stackMode,stackSize:S.stackSize,sidebarPanelWidth:S.sidebarPanelWidth,sidebarPanelManual:S.sidebarPanelManual,stackPanelWidth:S.stackPanelWidth,stackPanelManual:S.stackPanelManual,codeMemSplitWidth:S.codeMemSplitWidth,codeMemSplitManual:S.codeMemSplitManual,centerPaneHeights:{...S.centerPaneHeights},collapsedSections:{...S.collapsedSections},speed:S.speed,
     memViewBase:S.memViewBase,
     regs:{...S.regs},mem:Array.from(S.mem),memState:[...S.memState],stackMem:Array.from(S.stackMem || []),stackState:Array.from((S.stackState || new Map()).entries()),
     stats:{...S.stats,loadTimes:[...S.stats.loadTimes],storeTimes:[...S.stats.storeTimes]},pc:S.pc
@@ -3640,8 +3781,10 @@ function loadSim(e){
       if(Number.isFinite(d.stackSize)) S.stackSize = normalizeStackSizeBytes(d.stackSize);
       S.sidebarPanelManual = !!d.sidebarPanelManual;
       S.stackPanelManual = !!d.stackPanelManual;
+      S.codeMemSplitManual = !!d.codeMemSplitManual;
       if(S.sidebarPanelManual && Number.isFinite(d.sidebarPanelWidth)) S.sidebarPanelWidth = clamp(d.sidebarPanelWidth, 220, 420);
       if(S.stackPanelManual && Number.isFinite(d.stackPanelWidth)) S.stackPanelWidth = clamp(d.stackPanelWidth, 220, 520);
+      if(S.codeMemSplitManual && Number.isFinite(d.codeMemSplitWidth)) S.codeMemSplitWidth = d.codeMemSplitWidth;
       if(d.centerPaneHeights && typeof d.centerPaneHeights==='object') {
         Object.keys(CENTER_PANE_CONFIG).forEach(key => {
           const height = parseInt(d.centerPaneHeights[key], 10);
@@ -3667,6 +3810,8 @@ function loadSim(e){
       persistSidebarPanelWidth();
       applyStackPanelWidth();
       persistStackPanelWidth();
+      applyCodeMemSplit();
+      persistCodeMemSplit();
       applyCenterPaneHeights();
       persistCenterPaneHeights();
       applyCollapsedSections();

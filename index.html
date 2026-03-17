@@ -197,26 +197,6 @@
       <span class="eg-item">Edite o programa direto na <strong>LISTAGEM ASM</strong> com <strong>2× clique</strong> em qualquer instrucao.</span>
     </div>
 
-    <div id="memSection" class="canvas-pane">
-      <div class="canvas-pane-body">
-        <div class="section-badge">
-          MAPA DE MEMÓRIA
-          <span class="addr-dir-tag" id="addrDirTag">0x0000 no topo · endereços crescem ↓ · convenção Intel</span>
-        </div>
-        <div id="memWrapper">
-          <div id="memAddrBar"></div>
-          <div id="memGrid"></div>
-          <div id="memLegend">
-            <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
-            <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
-            <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
-            <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
-          </div>
-        </div>
-      </div>
-      <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
-    </div>
-
     <!-- REGISTERS ROW -->
     <div id="regsRow" class="canvas-pane">
       <div class="canvas-pane-body">
@@ -252,16 +232,43 @@
       </svg>
     </div>
 
-    <div id="asmTraceSection" class="canvas-pane">
+    <div id="codeMemRow" class="canvas-pane">
       <div class="canvas-pane-body">
-        <div class="section-badge">
-          LISTAGENS DE CODIGO
+        <div id="codeMemSplit">
+          <section id="memSection" class="split-pane">
+            <div class="split-pane-body">
+              <div class="section-badge">
+                MAPA DE MEMÓRIA
+                <span class="addr-dir-tag" id="addrDirTag">0x0000 no topo · endereços crescem ↓ · convenção Intel</span>
+              </div>
+              <div id="memWrapper">
+                <div id="memAddrBar"></div>
+                <div id="memGrid"></div>
+                <div id="memLegend">
+                  <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
+                  <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
+                  <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
+                  <span class="ml-item"><span class="ml-dot ml-err"></span>Erro</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div id="codeMemSplitHandle" aria-hidden="true" title="Arraste para ajustar a largura entre mapa e listagens"></div>
+
+          <section id="asmTraceSection" class="split-pane">
+            <div class="split-pane-body">
+              <div class="section-badge">
+                LISTAGENS DE CODIGO
+              </div>
+              <div class="trace-heads">
+                <div class="trace-head">LISTAGEM ASM</div>
+                <div class="trace-head">PSEUDO-CÓDIGO</div>
+              </div>
+              <div id="asmTrace"></div>
+            </div>
+          </section>
         </div>
-        <div class="trace-heads">
-          <div class="trace-head">LISTAGEM ASM</div>
-          <div class="trace-head">PSEUDO-CÓDIGO</div>
-        </div>
-        <div id="asmTrace"></div>
       </div>
       <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
     </div>

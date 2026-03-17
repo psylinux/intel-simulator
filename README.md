@@ -1,13 +1,14 @@
 # Intel x86/x64 Memory & Stack Lab
 
-Simulador visual interativo de memoria, registradores e stack para arquiteturas Intel x86/x64. A execucao do subset Intel implementado segue little-endian; o toggle `BIG/LITTLE` existe como modo comparativo/visual da interface.
+Simulador visual interativo de memoria, registradores e stack para arquiteturas Intel x86/x64. A execucao do subset Intel implementado segue little-endian; 
+Implementei uma feature experimental para fazer o toggle `BIG/LITTLE` que existe apenas como modo comparativo/visual da interface.
 
 Auditoria tecnica e escopo validado: [INTEL_SUBSET_AUDIT.md](INTEL_SUBSET_AUDIT.md)
 
 ---
 ## Opção 1: Use online
 
-https://psylinux.github.io/memory-endianness-simulator/
+https://psylinux.github.io/intel-simulator/
 
 
 ## Opção 2: Faça o download do projeto e rode localmente

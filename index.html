@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>MEM·SIM — Memory Endianness Simulator</title>
+<title>Intel x86/x64 Memory & Stack Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
@@ -26,8 +26,8 @@
       <line x1="12" y1="21.5" x2="16" y2="21.5" stroke="currentColor" stroke-width="1.5"/>
     </svg>
     <div>
-      <div class="tb-title">MEM·SIM</div>
-      <div class="tb-sub">Memory Endianness Simulator</div>
+      <div class="tb-title">Intel x86/x64 Memory &amp; Stack Lab</div>
+      <div class="tb-sub">Simulador didático de memória, registradores e stack</div>
     </div>
   </div>
 
@@ -185,17 +185,6 @@
       </div>
     </section>
 
-    <!-- ASSEMBLER -->
-    <section class="ctrl-section">
-      <div class="ctrl-label">ASSEMBLER</div>
-      <div class="asm-input-row">
-        <input class="asm-input" id="asmInput" type="text" placeholder="MOV EAX, 0x1234" spellcheck="false"
-               onkeydown="if(event.key==='Enter')App.doAssemble()"/>
-        <button class="asm-btn" onclick="App.doAssemble()">ASM</button>
-      </div>
-      <div class="asm-hint" id="asmHint">Grava bytes no PC atual. Enter para confirmar.</div>
-    </section>
-
   </aside>
 
   <div id="sidebarResizeHandle" aria-hidden="true" title="Arraste para ajustar a largura da coluna esquerda"></div>
@@ -205,9 +194,8 @@
 
     <div id="editGuideBanner">
       <span class="eg-title">EDICAO RAPIDA</span>
-      <span class="eg-item">Clique no <strong>PC</strong> e nos <strong>valores dos registradores</strong> para editar.</span>
-      <span class="eg-item">Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.</span>
-      <span class="eg-item">Use <strong>2× clique</strong> na <strong>LISTAGEM ASM</strong> para editar instrucoes.</span>
+      <span class="eg-item">Clique no <strong>PC</strong> e nos <strong>valores dos registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.</span>
+      <span class="eg-item">Edite o programa direto na <strong>LISTAGEM ASM</strong> com <strong>2× clique</strong> em qualquer instrucao.</span>
     </div>
 
     <!-- REGISTERS ROW -->
@@ -240,13 +228,11 @@
         </defs>
         <!-- dynamic content injected -->
       </svg>
-      <div id="animLabel">Pronto — selecione uma operação</div>
     </div>
 
     <div id="asmTraceSection">
       <div class="section-badge">
         LISTAGENS DE CODIGO
-        <span class="asm-trace-tag">ASM editavel · pseudo-codigo sincronizado pelo PC · clique para navegar · 2× clique para editar ASM</span>
       </div>
       <div class="trace-heads">
         <div class="trace-head">LISTAGEM ASM</div>

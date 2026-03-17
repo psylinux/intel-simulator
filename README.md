@@ -1,6 +1,6 @@
-# MEM·SIM — Memory Endianness Simulator
+# Intel x86/x64 Memory & Stack Lab
 
-Simulador visual interativo de armazenamento em memória com animações byte a byte, suporte a Little Endian e Big Endian, e interface de estilo blueprint técnico.
+Simulador visual interativo de memória, registradores e stack para arquiteturas Intel x86/x64, com animações byte a byte, suporte a Little Endian e Big Endian, e interface de estilo blueprint técnico.
 
 ---
 ## Opção 1: Use online

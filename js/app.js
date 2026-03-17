@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   MEM·SIM  —  Memory Endianness Simulator
+   Intel x86/x64 Memory & Stack Lab
    ═══════════════════════════════════════════════════════ */
 'use strict';
 
@@ -44,7 +44,9 @@ const S = {
   },
   pc:   0,
   halt: false,   // HLT foi executado
+  faulted: false,
   progRunning: false,
+  callFrames: [],
 };
 
 const DEMO_PROGRAMS = {
@@ -129,6 +131,7 @@ const sizeN  = () => S.size==='byte'?1 : S.size==='word'?2 : S.size==='qword'?8 
 const is64   = () => S.arch==='x64';
 const demoProgramForArch = (arch=S.arch) => DEMO_PROGRAMS[arch==='x64' ? 'x64' : 'ia32'];
 let asmTraceClickTimer = 0;
+let lastStatusLog = '';
 
 // Current register name set based on arch
 function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX']; }
@@ -288,6 +291,62 @@ function clamp(n, min, max) {
 function normalizeSpeed(speed) {
   const raw = Number.isFinite(speed) ? speed : 10000;
   return clamp(Math.round(raw), 80, 10000);
+}
+
+function clearFaultLatch() {
+  if(!S.faulted) return;
+  S.faulted = false;
+  S.halt = false;
+}
+
+function mapAccessFits(addr, width) {
+  return Number.isInteger(addr) && Number.isInteger(width) && width > 0 && addr >= 0 && (addr + width - 1) < 64;
+}
+
+function mapVisibleRange(addr, width) {
+  const out = [];
+  for(let i=0;i<width;i++) {
+    const ma = addr + i;
+    if(ma>=0 && ma<64) out.push(ma);
+  }
+  return out;
+}
+
+function applyMemError(addrs) {
+  [...new Set(addrs.filter(idx => idx>=0 && idx<64))].forEach(idx => {
+    S.memState[idx] = 'mc-error';
+    setMemSt(idx, 'mc-error');
+  });
+}
+
+function reportMemoryError(addrs, message, asm=null, opts={}) {
+  const faultAddrs = [...new Set((addrs || []).filter(idx => idx>=0 && idx<64))];
+  if(faultAddrs.length) applyMemError(faultAddrs);
+  if(Number.isInteger(opts.pc)) setPC(opts.pc);
+  if(opts.halt) {
+    S.halt = true;
+    S.faulted = true;
+  }
+  setStatus(message, 'lbl-error', { log:false });
+  lg('error', message, asm);
+  buildStackView();
+  refreshBreakdown();
+}
+
+function reportWidthOverflow(kind, addr, width, asm=null, opts={}) {
+  const first = addr;
+  const last = addr + width - 1;
+  const addrs = mapVisibleRange(addr, width);
+  reportMemoryError(
+    addrs.length ? addrs : [clamp(addr, 0, 63)],
+    `${kind}: o acesso exige ${width} byte(s), de 0x${fmtA(first)} até 0x${fmtA(last)}, mas o mapa termina em 0x003F.`,
+    asm,
+    opts
+  );
+}
+
+function isInstructionFault(instr) {
+  return !!(instr && (instr.unknown || instr.decodeError));
 }
 
 function syncSpeedUI() {
@@ -470,6 +529,8 @@ function loadDefaultProgram(announce=true, arch=S.arch) {
   const program = demoProgramForArch(arch);
   S.mem.fill(0);
   S.memState.fill('');
+  S.callFrames = [];
+  S.faulted = false;
   program.bytes.forEach((byte, idx) => {
     S.mem[idx] = byte;
     S.memState[idx] = 'mc-written';
@@ -1383,12 +1444,18 @@ function doSetArch(arch) {
 // ─────────────────────────────────────────────────────────
 async function doStore() {
   if(S.busy) return;
+  clearFaultLatch();
   S.busy=true; setBusy(true);
   const reg=S.reg, addr=readAddr(), n=transferWidth(reg), t0=performance.now();
   const ord=orderedBytes(regBytes(reg,n), S.endian);
+  const asm = asmForOp('store-start',{reg,addr,val:regHex(reg)});
+  if(!mapAccessFits(addr, n)) {
+    reportWidthOverflow(`STORE ${reg}`, addr, n, asm);
+    S.busy=false; setBusy(false);
+    return;
+  }
   setPC(addr);
-  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, ${S.endian}-endian)`,
-     asmForOp('store-start',{reg,addr,val:regHex(reg)}));
+  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, ${S.endian}-endian)`, asm);
   setStatus(`STORE: gravando ${n} byte(s) em [0x${fmtA(addr)}]...`,'lbl-store');
 
   for(let i=0;i<n;i++) {
@@ -1421,11 +1488,17 @@ async function doStore() {
 // ─────────────────────────────────────────────────────────
 async function doLoad() {
   if(S.busy) return;
+  clearFaultLatch();
   S.busy=true; setBusy(true);
   const reg=S.reg, addr=readAddr(), n=transferWidth(reg), t0=performance.now();
+  const asm = asmForOp('load-start',{reg,addr});
+  if(!mapAccessFits(addr, n)) {
+    reportWidthOverflow(`LOAD ${reg}`, addr, n, asm);
+    S.busy=false; setBusy(false);
+    return;
+  }
   setPC(addr);
-  lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, ${S.endian}-endian)`,
-     asmForOp('load-start',{reg,addr}));
+  lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, ${S.endian}-endian)`, asm);
   setStatus(`LOAD: lendo ${n} byte(s) de [0x${fmtA(addr)}]...`,'lbl-load');
 
   const raw=[];
@@ -1538,6 +1611,26 @@ function decodeAt(pc) {
   // Helpers
   const spName = is64() ? 'RSP' : 'ESP';
   const spKey  = 'ESP';  // S.regs key is always ESP
+  const faultInstr = (size, detail, asmText=null, opts={}) => {
+    const total = Math.max(off + size, 1);
+    return {
+      op,
+      mnem: opts.mnem || 'DECODE ERROR',
+      size: total,
+      asm: asmText || `; ${detail}`,
+      exec:()=>{},
+      unknown: !!opts.unknown,
+      decodeError: !opts.unknown,
+      errorDetail: detail,
+      errorAddrs: Array.from({length:total}, (_,i)=>(pc+i)&0x3F),
+    };
+  };
+  const unknownOpcodeInstr = () => faultInstr(
+    1,
+    `Opcode invalido em 0x${fmtA(pc)}: 0x${hex8(op)} nao pertence ao subset Intel implementado pelo simulador.`,
+    `; 0x${hex8(op)} (opcode nao reconhecido)`,
+    { mnem:`DB 0x${hex8(op)}`, unknown:true }
+  );
 
   // B8..BF: MOV r32/r64, imm32
   if(op>=0xB8 && op<=0xBF) {
@@ -1567,10 +1660,33 @@ function decodeAt(pc) {
     exec:()=>{
       const width = ptrSize();
       const sp = S.regs[spKey] & 0x3F;
+      if(!mapAccessFits(sp, width)) {
+        reportWidthOverflow(`RET em 0x${fmtA(pc)}`, sp, width, 'RET', { halt:true, pc });
+        return;
+      }
       const bytes = [];
       for(let i=0;i<width;i++) bytes.push(S.mem[(sp+i)&0x3F]);
       let target = 0;
       for(let i=0;i<Math.min(4,width);i++) target |= (bytes[i]&0xFF)<<(i*8);
+      const expected = S.callFrames[S.callFrames.length-1];
+      const highGarbage = width>4 && bytes.slice(4).some(b => b!==0);
+      if(expected) {
+        const issues = [];
+        if(expected.slot !== sp) issues.push(`o topo da pilha esta em 0x${fmtA(sp)}, mas o CALL mais recente gravou o retorno em 0x${fmtA(expected.slot)}`);
+        if((expected.returnTo & 0x3F) !== (target & 0x3F)) issues.push(`o endereco lido foi 0x${fmtA(target & 0x3F)}, mas o CALL mais recente esperava 0x${fmtA(expected.returnTo & 0x3F)}`);
+        if(expected.width !== width) issues.push(`a largura esperada para o retorno era ${expected.width} byte(s), mas o RET leu ${width}`);
+        if(highGarbage) issues.push('os bytes altos do endereco de retorno nao estao zerados');
+        if(issues.length) {
+          reportMemoryError(
+            mapVisibleRange(sp, width),
+            `RET corrompido em 0x${fmtA(pc)}: ${issues.join('; ')}.`,
+            'RET',
+            { halt:true, pc }
+          );
+          return;
+        }
+        S.callFrames.pop();
+      }
       S.regs[spKey]=(S.regs[spKey]+width)&0x3F;
       updateRegCard(spName);
       updatePickerVal(spName);
@@ -1589,12 +1705,28 @@ function decodeAt(pc) {
     return { op, mnem:`CALL 0x${fmtA(target)}`, size:off+5, asm:`CALL 0x${fmtA(target)}`,
       exec:()=>{
         const width = ptrSize();
-        S.regs[spKey]=(S.regs[spKey]-width+64)&0x3F;
+        const targetInstr = decodeAt(target);
+        if(isInstructionFault(targetInstr)) {
+          reportMemoryError(
+            [target],
+            `CALL corrompido em 0x${fmtA(pc)}: o destino 0x${fmtA(target)} nao aponta para uma instrucao valida no subset atual.`,
+            `CALL 0x${fmtA(target)}`,
+            { halt:true, pc }
+          );
+          return;
+        }
+        const nextSp = (S.regs[spKey]-width+64)&0x3F;
+        if(!mapAccessFits(nextSp, width)) {
+          reportWidthOverflow(`CALL 0x${fmtA(target)}`, nextSp, width, `CALL 0x${fmtA(target)}`, { halt:true, pc });
+          return;
+        }
+        S.regs[spKey]=nextSp;
         const sp = S.regs[spKey] & 0x3F;
         for(let i=0;i<width;i++) {
           const byte = i<4 ? ((nextIp>>>(i*8))&0xFF) : 0;
           writeMem((sp+i)&0x3F, byte, 'mc-written');
         }
+        S.callFrames.push({ slot: sp, width, returnTo: nextIp & 0x3F, callSite: pc & 0x3F, target });
         updateRegCard(spName);
         updatePickerVal(spName);
         setPC(target);
@@ -1635,24 +1767,92 @@ function decodeAt(pc) {
         } };
     }
     if(mod===0) {
+      if(rmIdx!==0) {
+        return faultInstr(
+          3,
+          `DECODE inconsistente em 0x${fmtA(pc)}: o subset atual aceita MOV com memoria apenas no formato absoluto [disp8], codificado com rm=000. Foi lido rm=${rmIdx}.`,
+          `; MOV /r com rm=${rmIdx} nao suportado`
+        );
+      }
       const addr=S.mem[(pc+off+2)&0x3F]&0x3F;
       if(op===0x89) return { op, mnem:`${rexPfx}MOV [0x${fmtA(addr)}], ${rName}`, size:off+3, asm:`MOV ${dPtr} [0x${fmtA(addr)}], ${rName}`,
-        exec:()=>{ regBytes(rName,width).forEach((b,i)=>writeMem((addr+i)&0x3F,b,'mc-written')); } };
+        exec:()=>{
+          if(!mapAccessFits(addr, width)) {
+            reportWidthOverflow(`MOV [0x${fmtA(addr)}], ${rName}`, addr, width, `MOV ${dPtr} [0x${fmtA(addr)}], ${rName}`, { halt:true, pc });
+            return;
+          }
+          regBytes(rName,width).forEach((b,i)=>writeMem((addr+i)&0x3F,b,'mc-written'));
+        } };
       else return { op, mnem:`${rexPfx}MOV ${rName}, [0x${fmtA(addr)}]`, size:off+3, asm:`MOV ${rName}, ${dPtr} [0x${fmtA(addr)}]`,
-        exec:()=>{ const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(addr+i)&0x3F]); setRegFromBytes(rName,bytes); updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName); } };
+        exec:()=>{
+          if(!mapAccessFits(addr, width)) {
+            reportWidthOverflow(`MOV ${rName}, [0x${fmtA(addr)}]`, addr, width, `MOV ${rName}, ${dPtr} [0x${fmtA(addr)}]`, { halt:true, pc });
+            return;
+          }
+          const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(addr+i)&0x3F]); setRegFromBytes(rName,bytes); updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName);
+        } };
     }
+    return faultInstr(
+      2,
+      `DECODE inconsistente em 0x${fmtA(pc)}: opcode 0x${hex8(op)} com ModRM mod=${mod} nao e suportado pelo subset atual.`,
+      `; MOV /r com mod=${mod} nao suportado`
+    );
   }
   if(op===0xFF) { // PUSH
-    const modrm=S.mem[(pc+off+1)&0x3F]; const mod=(modrm>>6)&3, rmIdx=modrm&7;
+    const modrm=S.mem[(pc+off+1)&0x3F];
+    const mod=(modrm>>6)&3, subop=(modrm>>3)&7, rmIdx=modrm&7;
+    if(subop!==6) {
+      return faultInstr(
+        2,
+        `DECODE inconsistente em 0x${fmtA(pc)}: opcode 0xFF exige ModRM /6 para PUSH, mas foi lido /${subop}.`,
+        `; FF /${subop} nao corresponde a PUSH`
+      );
+    }
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}PUSH ${rn}`, size:off+2, asm:`PUSH ${rn}`,
-      exec:()=>{ const width=ptrSize(); S.regs[spKey]=(S.regs[spKey]-width+64)&0x3F; regBytes(rn,width).forEach((b,i)=>writeMem((S.regs[spKey]+i)&0x3F,b,'mc-written')); updateRegCard(spName); updatePickerVal(spName); } }; }
+      exec:()=>{
+        const width=ptrSize();
+        const nextSp=(S.regs[spKey]-width+64)&0x3F;
+        if(!mapAccessFits(nextSp, width)) {
+          reportWidthOverflow(`PUSH ${rn}`, nextSp, width, `PUSH ${rn}`, { halt:true, pc });
+          return;
+        }
+        S.regs[spKey]=nextSp;
+        regBytes(rn,width).forEach((b,i)=>writeMem((S.regs[spKey]+i)&0x3F,b,'mc-written'));
+        updateRegCard(spName); updatePickerVal(spName);
+      } }; }
+    return faultInstr(
+      2,
+      `DECODE inconsistente em 0x${fmtA(pc)}: o subset atual aceita PUSH apenas com registrador (ModRM mod=11), mas foi lido mod=${mod}.`,
+      `; PUSH com mod=${mod} nao suportado`
+    );
   }
   if(op===0x8F) { // POP
-    const modrm=S.mem[(pc+off+1)&0x3F]; const mod=(modrm>>6)&3, rmIdx=modrm&7;
+    const modrm=S.mem[(pc+off+1)&0x3F];
+    const mod=(modrm>>6)&3, subop=(modrm>>3)&7, rmIdx=modrm&7;
+    if(subop!==0) {
+      return faultInstr(
+        2,
+        `DECODE inconsistente em 0x${fmtA(pc)}: opcode 0x8F exige ModRM /0 para POP, mas foi lido /${subop}.`,
+        `; 8F /${subop} nao corresponde a POP`
+      );
+    }
     if(mod===3) { const rn=regName(rmIdx, rex_b); return { op, mnem:`${rexPfx}POP ${rn}`, size:off+2, asm:`POP ${rn}`,
-      exec:()=>{ const width=ptrSize(); const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(S.regs[spKey]+i)&0x3F]); setRegFromBytes(rn,bytes); S.regs[spKey]=(S.regs[spKey]+width)&0x3F; updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn); } }; }
+      exec:()=>{
+        const width=ptrSize();
+        const sp = S.regs[spKey] & 0x3F;
+        if(!mapAccessFits(sp, width)) {
+          reportWidthOverflow(`POP ${rn}`, sp, width, `POP ${rn}`, { halt:true, pc });
+          return;
+        }
+        const bytes=[]; for(let i=0;i<width;i++) bytes.push(S.mem[(S.regs[spKey]+i)&0x3F]); setRegFromBytes(rn,bytes); S.regs[spKey]=(S.regs[spKey]+width)&0x3F; updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
+      } }; }
+    return faultInstr(
+      2,
+      `DECODE inconsistente em 0x${fmtA(pc)}: o subset atual aceita POP apenas com registrador (ModRM mod=11), mas foi lido mod=${mod}.`,
+      `; POP com mod=${mod} nao suportado`
+    );
   }
-  return { op, mnem:`DB 0x${hex8(op)}`, size:1, asm:`; 0x${hex8(op)} (não reconhecido)`, exec:()=>{}, unknown:true };
+  return unknownOpcodeInstr();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1660,6 +1860,7 @@ function decodeAt(pc) {
 // ─────────────────────────────────────────────────────────
 async function doFetch() {
   if(S.busy) return;
+  clearFaultLatch();
   S.busy=true; setBusy(true);
   const addr=S.pc;                    // IP aponta para a instrução
   const instr=decodeAt(addr);
@@ -1685,6 +1886,16 @@ async function doFetch() {
   // Decodifica o conteúdo do IR
   setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch');
   lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+  if(isInstructionFault(instr)) {
+    reportMemoryError(
+      instr.errorAddrs || [addr],
+      instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
+      instr.asm,
+      { pc: addr }
+    );
+    S.busy=false; setBusy(false);
+    return;
+  }
   await sleep(S.speed * 0.35);
 
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
@@ -1716,20 +1927,33 @@ async function _executeOne() {
   // ── FASE 2: DECODE ─────────────────────────────────────
   setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch');
   lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+  if(isInstructionFault(instr)) {
+    reportMemoryError(
+      instr.errorAddrs || [addr],
+      instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
+      instr.asm,
+      { halt:true, pc: addr }
+    );
+    syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
+    return;
+  }
   await sleep(S.speed * 0.2);
 
   // ── FASE 3: EXECUTE ────────────────────────────────────
   setStatus(`EXECUTE: ${instr.mnem}`,'lbl-load');
   instr.exec();
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
+  if(S.faulted) {
+    syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
+    return;
+  }
 
   // JMP sobrescreve o IP que foi incrementado durante o fetch
   if(instr.jmpTarget !== undefined) setPC(instr.jmpTarget);
 
   await sleep(S.speed * 0.2);
 
-  if(instr.unknown) lg('error',`Opcode 0x${hex8(instr.op)} não suportado`);
-  else lg('store',`EXEC OK: ${instr.mnem}`, instr.asm);
+  lg('store',`EXEC OK: ${instr.mnem}`, instr.asm);
 
   if(S.halt) { setStatus('HLT — CPU parada','lbl-error'); lg('error','HLT executado. CPU parada.'); }
   else setStatus(`EXECUTE concluído — IP = 0x${fmtA(S.pc)}`,'lbl-done');
@@ -1740,6 +1964,7 @@ async function _executeOne() {
 
 async function doExecute() {
   if(S.busy) return;
+  clearFaultLatch();
   if(S.halt){ lg('error','CPU halted. CLEAR para reiniciar.'); return; }
   S.busy=true; setBusy(true);
   await _executeOne();
@@ -1753,6 +1978,7 @@ async function doStep() { await doExecute(); }
 
 async function doRun() {
   if(S.busy||S.progRunning) return;
+  clearFaultLatch();
   S.halt=false; S.progRunning=true;
   S.busy=true;
   // Desabilita tudo EXCETO o botão STOP (opRun)
@@ -1778,10 +2004,17 @@ async function doRun() {
 // ─────────────────────────────────────────────────────────
 async function doPush() {
   if(S.busy) return;
+  clearFaultLatch();
   S.busy=true; setBusy(true);
   const reg=S.reg, width=ptrSize();
   const spName = is64() ? 'RSP' : 'ESP';
-  S.regs.ESP=(S.regs.ESP-width+64)&0x3F;
+  const nextSp = (S.regs.ESP-width+64)&0x3F;
+  if(!mapAccessFits(nextSp, width)) {
+    reportWidthOverflow(`PUSH ${reg}`, nextSp, width, `PUSH ${reg}`);
+    S.busy=false; setBusy(false);
+    return;
+  }
+  S.regs.ESP=nextSp;
   const sp=S.regs.ESP;
   setPC(sp);
   lg('store',`PUSH ${reg}=0x${regHex(reg)} → ${spName}=0x${fmtA(sp)}`, `PUSH ${reg}`);
@@ -1804,8 +2037,14 @@ async function doPush() {
 
 async function doPop() {
   if(S.busy) return;
+  clearFaultLatch();
   S.busy=true; setBusy(true);
   const reg=S.reg, spName=is64()?'RSP':'ESP', sp=S.regs.ESP&0x3F, width=ptrSize();
+  if(!mapAccessFits(sp, width)) {
+    reportWidthOverflow(`POP ${reg}`, sp, width, `POP ${reg}`);
+    S.busy=false; setBusy(false);
+    return;
+  }
   setPC(sp);
   lg('load',`POP [0x${fmtA(sp)}] → ${reg}`, `POP ${reg}`);
   setStatus(`POP: [0x${fmtA(sp)}] → ${reg}`,'lbl-load');
@@ -2494,9 +2733,19 @@ function setPC(addr){
   buildAsmTrace();
   refreshAsmValidation();
 }
-function setStatus(msg,cls){
-  const el=$('animLabel'); if(!el) return;
-  el.textContent=msg; el.className=cls||'';
+function statusLogType(cls) {
+  if(cls==='lbl-error') return 'error';
+  if(cls==='lbl-store') return 'store';
+  if(cls==='lbl-load') return 'load';
+  if(cls==='lbl-fetch') return 'info';
+  return 'sys';
+}
+function setStatus(msg, cls, opts={}) {
+  if(!msg || opts.log===false) return;
+  const key = `${cls||''}|${msg}`;
+  if(key===lastStatusLog) return;
+  lastStatusLog = key;
+  lg(statusLogType(cls), msg);
 }
 
 function sizePtr() {
@@ -2527,20 +2776,52 @@ function asmForOp(type, ctx) {
   }
 }
 
+function logKindLabel(type) {
+  if(type==='store') return 'STORE';
+  if(type==='load') return 'LOAD';
+  if(type==='info') return 'CPU';
+  if(type==='error') return 'ERRO';
+  return 'SISTEMA';
+}
+
 function lg(type, msg, asm) {
   const out=$('logOutput'); if(!out) return;
   const d=document.createElement('div');
   d.className='le le-'+type;
+  d.dataset.type = type;
   const ts=new Date().toTimeString().slice(0,8);
+  const tsEl=document.createElement('span');
+  tsEl.className='le-ts';
+  tsEl.textContent=`[${ts}]`;
+
+  const kindEl=document.createElement('span');
+  kindEl.className='le-kind';
+  kindEl.textContent=logKindLabel(type);
+
+  const msgEl=document.createElement('span');
+  msgEl.className='le-msg';
+  msgEl.textContent=msg;
+
+  d.append(tsEl, kindEl, msgEl);
+
   if(asm) {
-    d.innerHTML=`<span class="le-ts">[${ts}]</span> <span class="le-msg">${msg}</span>`+
-                `<span class="le-asm">; asm: <code>${asm}</code></span>`;
-  } else {
-    d.textContent=`[${ts}] ${msg}`;
+    const asmEl=document.createElement('div');
+    asmEl.className='le-asm';
+    const asmLbl=document.createElement('span');
+    asmLbl.className='le-asm-lbl';
+    asmLbl.textContent='asm:';
+    const code=document.createElement('code');
+    code.textContent=asm;
+    asmEl.append(asmLbl, code);
+    d.appendChild(asmEl);
   }
   out.appendChild(d); out.scrollTop=out.scrollHeight;
 }
-function doClearLog(){ const o=$('logOutput'); if(o) o.innerHTML=''; }
+function doClearLog(){
+  const o=$('logOutput');
+  if(o) o.innerHTML='';
+  lastStatusLog = '';
+}
 
 function recOp(type,ms){
   S.stats.ops++; S.stats.totalTime+=ms;

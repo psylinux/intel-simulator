@@ -332,28 +332,49 @@
     <section class="ctrl-section stack-section">
       <div class="ctrl-label stack-hd">
         <span id="stackArchLbl">STACK  ESP/EBP</span>
-        <div class="stack-hd-controls">
-          <select class="stack-gran-select" id="stackGranSelect" onchange="App.setStackGranularity(this.value)" title="Granularidade de exibição da stack">
-            <option value="byte"  selected>Byte</option>
-            <option value="word" >Word</option>
-            <option value="dword">DWord</option>
-            <option value="qword">QWord</option>
-          </select>
-          <button class="stack-toggle-btn" id="stackToggleBtn" onclick="App.toggleStackMode()">FRAME</button>
+        <button class="stack-cfg-toggle" id="stackCfgToggle" onclick="App.toggleStackCfg()" title="Configurações da stack" aria-expanded="false">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 3a1 1 0 01.993.883L11 4v1.17a5.002 5.002 0 012.83 1.657l1.014-.586a1 1 0 011.37.365l.003.005 1 1.732a1 1 0 01-.365 1.37l-.005.003-1.014.585c.1.39.152.8.152 1.22s-.052.83-.152 1.22l1.014.585a1 1 0 01.365 1.37l-.003.005-1 1.732a1 1 0 01-1.37.365l-.005-.003-1.014-.586A5.002 5.002 0 0111 14.83V16a1 1 0 01-2 0v-1.17a5.002 5.002 0 01-2.83-1.657l-1.014.586a1 1 0 01-1.37-.365l-.003-.005-1-1.732a1 1 0 01.365-1.37l.005-.003 1.014-.585A5.05 5.05 0 014 10c0-.42.052-.83.152-1.22L3.138 8.195a1 1 0 01-.365-1.37l.003-.005 1-1.732a1 1 0 011.37-.365l.005.003 1.014.586A5.002 5.002 0 019 5.17V4a1 1 0 011-1zm0 5a2 2 0 100 4 2 2 0 000-4z" fill="currentColor"/></svg>
+          CFG
+        </button>
+      </div>
+
+      <!-- Painel de configuração da stack -->
+      <div class="stack-cfg" id="stackCfg" aria-hidden="true">
+        <div class="stack-cfg-inner">
+          <div class="stack-cfg-header">CONFIGURAÇÃO DA STACK</div>
+
+          <div class="stack-cfg-row">
+            <span class="stack-cfg-label">Tamanho</span>
+            <div class="stack-cfg-ctrl">
+              <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1048576" step="1" value="100"/>
+              <select class="stack-size-unit-select" id="stackSizeUnitSelect">
+                <option value="B" selected>Bytes</option>
+                <option value="KB">KB</option>
+              </select>
+              <button class="stack-size-apply" type="button" onclick="App.applyStackSize()">Aplicar</button>
+            </div>
+          </div>
+
+          <div class="stack-cfg-row">
+            <span class="stack-cfg-label">Modo</span>
+            <div class="stack-cfg-ctrl">
+              <button class="stack-cfg-mode-btn stack-cfg-mode-btn-active" id="stackModeFull"  onclick="App.setStackMode('full')" >FULL</button>
+              <button class="stack-cfg-mode-btn" id="stackModeFrame" onclick="App.setStackMode('frame')">FRAME</button>
+            </div>
+          </div>
+
+          <div class="stack-cfg-row">
+            <span class="stack-cfg-label">Granularidade</span>
+            <div class="stack-cfg-ctrl">
+              <button class="stack-cfg-gran-btn" id="stackGranByte"  onclick="App.setStackGranularity('byte')" >Byte</button>
+              <button class="stack-cfg-gran-btn" id="stackGranWord"  onclick="App.setStackGranularity('word')" >Word</button>
+              <button class="stack-cfg-gran-btn stack-cfg-gran-btn-active" id="stackGranDword" onclick="App.setStackGranularity('dword')">DWord</button>
+              <button class="stack-cfg-gran-btn" id="stackGranQword" onclick="App.setStackGranularity('qword')">QWord</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="stack-note" id="stackNote">Pilha x86/x86-64: cresce para endereços menores.</div>
-      <div class="stack-size-row">
-        <label class="stack-size-label" for="stackSizeInput">Tamanho da stack</label>
-        <div class="stack-size-ctrl">
-          <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1048576" step="1" value="100"/>
-          <select class="stack-size-unit-select" id="stackSizeUnitSelect">
-            <option value="B" selected>Bytes</option>
-            <option value="KB">KB</option>
-          </select>
-          <button class="stack-size-apply" type="button" onclick="App.applyStackSize()">Aplicar</button>
-        </div>
-      </div>
+
       <div id="stackView"><!-- injected by JS --></div>
     </section>
 

@@ -1872,10 +1872,11 @@ body.code-mem-resizing #codeMemSplitHandle {
 /* ══════════════════════════════════
    RIGHT PANEL
 ══════════════════════════════════ */
+/* ── Stack section layout ─────────────────────────────── */
 .stack-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .stack-hd {
   display: flex;
@@ -1886,90 +1887,127 @@ body.code-mem-resizing #codeMemSplitHandle {
 #stackArchLbl {
   color: #f8fbff;
 }
-.stack-hd-controls {
+
+/* Botão de abrir/fechar painel de configuração */
+.stack-cfg-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-.stack-gran-select {
-  padding: 3px 6px;
-  border: 1px solid var(--acc-dim);
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--bdr-hi);
   border-radius: 999px;
-  background: rgba(56,189,248,.08);
+  background: var(--bg2);
+  color: var(--tx1);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: var(--fs-ui-xs);
+  font-weight: 700;
+  letter-spacing: .8px;
+  transition: all .15s var(--ease);
+}
+.stack-cfg-toggle svg { width: 13px; height: 13px; flex-shrink: 0; }
+.stack-cfg-toggle:hover,
+.stack-cfg-toggle[aria-expanded="true"] {
+  border-color: var(--acc);
   color: var(--acc);
+  background: rgba(56,189,248,.08);
+}
+
+/* Painel de configuração colapsável */
+.stack-cfg {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .22s var(--ease);
+  overflow: hidden;
+}
+.stack-cfg.stack-cfg-open {
+  grid-template-rows: 1fr;
+}
+.stack-cfg > * { min-height: 0; }
+
+/* Conteúdo interno do painel */
+.stack-cfg-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 0 2px;
+  border: 1px solid var(--bdr-hi);
+  border-radius: var(--r);
+  background: var(--bg2);
+  overflow: hidden;
+}
+.stack-cfg-header {
+  padding: 6px 10px 5px;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--acc);
+  background: rgba(56,189,248,.06);
+  border-bottom: 1px solid var(--bdr);
+  text-transform: uppercase;
+}
+.stack-cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--bdr);
+}
+.stack-cfg-row:last-child { border-bottom: none; }
+.stack-cfg-label {
+  flex: 0 0 90px;
+  font-size: var(--fs-ui-xs);
+  font-weight: 600;
+  letter-spacing: .5px;
+  color: var(--tx1);
+}
+.stack-cfg-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+/* Botões de modo e granularidade: grupo segmentado */
+.stack-cfg-mode-btn,
+.stack-cfg-gran-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--bdr-hi);
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--tx1);
   cursor: pointer;
   font-family: var(--mono);
   font-size: var(--fs-ui-xs);
   font-weight: 700;
   letter-spacing: .5px;
-  appearance: none;
-  -webkit-appearance: none;
-  text-align: center;
-  min-width: 52px;
-  transition: all .15s var(--ease);
+  transition: all .12s var(--ease);
+  white-space: nowrap;
 }
-.stack-gran-select:hover,
-.stack-gran-select:focus {
-  border-color: var(--acc);
-  background: rgba(56,189,248,.14);
-  outline: none;
-}
-.stack-toggle-btn {
-  min-width: 58px;
-  padding: 4px 8px;
-  border: 1px solid var(--acc-dim);
-  border-radius: 999px;
-  background: rgba(56,189,248,.08);
+.stack-cfg-mode-btn:hover,
+.stack-cfg-gran-btn:hover {
+  border-color: var(--acc-dim);
   color: var(--acc);
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: var(--fs-ui-xs);
-  font-weight: 700;
-  letter-spacing: 1px;
-  transition: all .15s var(--ease);
+  background: rgba(56,189,248,.06);
 }
-.stack-toggle-btn:hover {
+.stack-cfg-mode-btn-active,
+.stack-cfg-gran-btn-active {
   border-color: var(--acc);
   background: rgba(56,189,248,.14);
+  color: var(--acc);
 }
-.stack-note {
-  font-size: var(--fs-ui-sm);
-  line-height: 1.5;
-  color: var(--tx1);
-  background: rgba(129,140,248,.08);
-  border: 1px solid rgba(129,140,248,.22);
-  border-radius: var(--r);
-  padding: 8px 10px;
-}
-.stack-size-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--bg2);
-  border: 1px solid var(--bdr);
-  border-radius: var(--r);
-}
-.stack-size-label {
-  font-size: var(--fs-ui-xs);
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: var(--tx0);
-}
-.stack-size-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+
+/* Inputs de tamanho dentro do painel */
 .stack-size-input {
-  width: 82px;
-  padding: 5px 7px;
+  width: 70px;
+  padding: 4px 6px;
   border: 1px solid var(--bdr-hi);
   border-radius: 6px;
   background: var(--bg0);
   color: #f8fbff;
   font-family: var(--mono);
-  font-size: var(--fs-ui-md);
+  font-size: var(--fs-ui-sm);
   outline: none;
 }
 .stack-size-input:focus {
@@ -1977,8 +2015,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   box-shadow: 0 0 0 1px rgba(56,189,248,.18);
 }
 .stack-size-unit-select {
-  min-width: 74px;
-  padding: 5px 7px;
+  min-width: 62px;
+  padding: 4px 6px;
   border: 1px solid var(--bdr-hi);
   border-radius: 6px;
   background: var(--bg0);
@@ -1995,7 +2033,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-size-apply {
   margin-left: auto;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--acc-dim);
   border-radius: 999px;
   background: rgba(56,189,248,.08);

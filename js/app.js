@@ -15,7 +15,7 @@ const S = {
   size:   'dword',
   reg:    'EAX',
   stackMode: 'full',
-  stackGranularity: 'byte',  // 'byte' | 'word' | 'dword' | 'qword'
+  stackGranularity: 'dword', // 'byte' | 'word' | 'dword' | 'qword' — padrão IA-32
   stackSize: DEFAULT_STACK_SIZE,
   stackSizeInputUnit: 'B',
   changedRegs: [],
@@ -2528,6 +2528,9 @@ function doSetArch(arch) {
   if(arch==='x64') S.size = 'qword';
   else if(S.size==='qword') S.size = 'dword';
 
+  // Granularidade padrão por arquitetura: DWord (IA-32) / QWord (x64)
+  S.stackGranularity = arch === 'x64' ? 'qword' : 'dword';
+
   resetStatsState();
   resetCoreRegisters();
   S.reg = arch==='x64' ? 'RAX' : 'EAX';
@@ -4030,11 +4033,42 @@ function buildStackView() {
   const stackLbl = $('stackArchLbl');
   if(stackLbl) stackLbl.textContent = `STACK  ${spName}/${bpName}`;
   syncStackSizeUI();
-  const toggle = $('stackToggleBtn');
-  if(toggle) toggle.textContent = S.stackMode === 'frame' ? 'FULL' : 'FRAME';
+  syncStackCfgUI();
   scheduleCenterPaneLayout();
 }
 
+// Sincroniza os botões ativos do painel de configuração
+function syncStackCfgUI() {
+  // Modo: FULL / FRAME
+  const modeFull  = $('stackModeFull');
+  const modeFrame = $('stackModeFrame');
+  if(modeFull)  modeFull.classList.toggle('stack-cfg-mode-btn-active',  S.stackMode !== 'frame');
+  if(modeFrame) modeFrame.classList.toggle('stack-cfg-mode-btn-active', S.stackMode === 'frame');
+
+  // Granularidade
+  const granIds = { byte:'stackGranByte', word:'stackGranWord', dword:'stackGranDword', qword:'stackGranQword' };
+  for(const [val, id] of Object.entries(granIds)) {
+    const el = $(id);
+    if(el) el.classList.toggle('stack-cfg-gran-btn-active', S.stackGranularity === val);
+  }
+}
+
+function toggleStackCfg() {
+  const panel  = $('stackCfg');
+  const toggle = $('stackCfgToggle');
+  if(!panel) return;
+  const isOpen = panel.classList.toggle('stack-cfg-open');
+  panel.setAttribute('aria-hidden', String(!isOpen));
+  if(toggle) toggle.setAttribute('aria-expanded', String(isOpen));
+}
+
+function setStackMode(mode) {
+  if(mode !== 'full' && mode !== 'frame') return;
+  S.stackMode = mode;
+  buildStackView();
+}
+
+// Mantém toggleStackMode para compatibilidade interna
 function toggleStackMode() {
   S.stackMode = S.stackMode === 'frame' ? 'full' : 'frame';
   buildStackView();
@@ -4477,7 +4511,9 @@ const App = {
   doPop,
   doAssemble,
   toggleStackMode,
+  setStackMode,
   setStackGranularity,
+  toggleStackCfg,
   applyStackSize,
   clearLog:   doClearLog,
   showHelp,

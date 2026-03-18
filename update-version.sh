@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Gera version.js e atualiza cache-busting dos módulos JS no index.html.
+# Gerado pelo CI (GitHub Actions) em cada push — não execute manualmente.
+# Gera version.js (ignorado pelo git) e estampa ?v=<commit> nos módulos JS
+# do index.html para forçar cache-bust no browser após cada deploy.
 # Uso: ./update-version.sh          (usa o commit atual)
 #      ./update-version.sh v0.2     (altera o semver base)
 set -euo pipefail

@@ -2179,7 +2179,7 @@ function buildMemGrid() {
   for(const bpAddr of S.breakpoints) {
     const instr = decodeAt(bpAddr & 0x3F);
     const sz = Math.max(instr.size || 1, 1);
-    for(let i = 0; i < sz; i++) bpBytes.add((bpAddr + i) & 0x3F);
+    for(let i = 0; i < sz; i++) bpBytes.add(bpAddr + i);
   }
   g.innerHTML='';
   a.innerHTML='';
@@ -2213,7 +2213,7 @@ function buildMemGrid() {
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);
       if(addr===S.memSelectedAddr) cell.classList.add('mc-selected');
-      if(bpBytes.has(addr & 0x3F)) cell.classList.add('mc-bp');
+      if(addr < 64 && bpBytes.has(addr)) cell.classList.add('mc-bp');
       memCellRefs[addr] = cell;
       gridFrag.appendChild(cell);
     }

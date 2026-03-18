@@ -710,7 +710,7 @@ function applyStackSize() {
   refreshPreview();
   refreshBreakdown();
   syncStackSizeUI();
-  lg('sys', `Tamanho da stack ajustado para ${formatStackSize(nextSize)}. ${is64() ? 'RSP/RBP' : 'ESP/EBP'} reiniciados em 0x${fmtStackA(stackTopInit())}. Mapa de memoria agora cobre 0x0000..0x${fmtMemA(Math.max(memSpaceSize() - 1, 0))}.`);
+  lg('sys', t('log.sys.stack_size', formatStackSize(nextSize), is64()?'RSP/RBP':'ESP/EBP', fmtStackA(stackTopInit()), fmtMemA(Math.max(memSpaceSize()-1,0))));
 }
 
 // ─────────────────────────────────────────────────────────
@@ -776,7 +776,7 @@ function init() {
     setPC(addr, { revealMem:true });
     refreshBreakdown();
     buildStackView();
-    lg('sys',`PC definido manualmente: 0x${fmtA(addr)}`);
+    lg('sys', t('log.sys.pc_manual', fmtA(addr)));
   });
   $('pcDisplay').addEventListener('keydown', e => {
     if(e.key==='Enter') e.target.blur();
@@ -809,7 +809,7 @@ function init() {
     if(!row) return;
     const addr = parseInt(row.dataset.stackAddr || '0', 10);
     revealMemAddr(addr, { select:true, scroll:true });
-    lg('sys', `Stack 0x${fmtStackA(addr)} localizada no mapa de memoria.`);
+    lg('sys', t('log.sys.stack_located', fmtStackA(addr)));
   });
   $('stackView')?.addEventListener('dblclick', e => {
     const row = e.target.closest('.stack-row');
@@ -834,7 +834,7 @@ function init() {
       asmTraceClickTimer = 0;
       setPC(addr, { revealMem:true });
       buildStackView();
-      lg('sys', `PC movido para a listagem de codigo 0x${fmtA(addr)}`);
+      lg('sys', t('log.sys.pc_moved', fmtA(addr)));
     }, 220);
   });
   $('asmTrace')?.addEventListener('dblclick', e => {
@@ -857,8 +857,8 @@ function init() {
   buildStackView();
   refreshAsmValidation();
   refreshBreakdown();
-  setStatus('Programa demo carregado — main em 0x0000','lbl-done');
-  lg('sys',`Simulador iniciado com programa demo ${is64() ? 'x86-64' : 'IA-32'}: main + 2 funcoes que usam a stack.`);
+  setStatus(t('status.demo_loaded'),'lbl-done');
+  lg('sys', t('log.sys.demo_loaded', is64()?'x86-64':'IA-32'));
   lg('sys', demoProgramForArch().listing.join(' | '));
   applyCollapsedSections();
   applyCenterPaneHeights();
@@ -1096,7 +1096,7 @@ function createCollapseButton(target, sectionId) {
   btn.className = 'section-collapse-btn';
   btn.dataset.sectionToggle = sectionId;
   btn.setAttribute('aria-expanded', 'true');
-  btn.title = 'Minimizar seção';
+  btn.title = t('ui.section.collapse');
   btn.textContent = '−';
   btn.addEventListener('click', e => {
     e.preventDefault();
@@ -1125,7 +1125,7 @@ function setSectionHeaderText(el, text) {
 function setToggleVisual(btn, collapsed) {
   if(!btn) return;
   btn.textContent = collapsed ? '+' : '−';
-  btn.title = collapsed ? 'Expandir seção' : 'Minimizar seção';
+  btn.title = collapsed ? t('ui.section.expand') : t('ui.section.collapse');
   btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
 }
 
@@ -1238,7 +1238,7 @@ function loadDefaultProgram(announce=true, arch=S.arch) {
   S.memViewBase = 0;
   setPC(program.entry);
   if(announce) {
-    lg('sys', `Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado em 0x0000: main + 2 funcoes com uso de stack.`);
+    lg('sys', t('log.sys.demo_arch', arch==='x64'?'x86-64':'IA-32'));
     lg('sys', program.listing.join(' | '));
   }
 }
@@ -1536,16 +1536,16 @@ function buildAsmTrace(opts={}) {
         const bpNum = hasBp ? bpNumber(line.addr) : 0;
         const isHit = hasBp && S.breakpointHit === line.addr && S.paused;
         return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}${hasBp ? ' trace-row-bp' : ''}${isHit ? ' trace-row-bp-hit' : ''}">
-          <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="Clique para navegar · 2× clique para editar">
+          <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="${t('asm.nav.title')}">
             <div class="asm-line-head">
-              <span class="bp-dot${hasBp ? ' bp-dot-active' : ''}${isHit ? ' bp-dot-hit' : ''}" data-addr="${fmtA(line.addr)}" title="${hasBp ? `BP #${bpNum} — clique para remover` : 'Clique para definir breakpoint'}">${hasBp ? bpNum : ''}</span>
+              <span class="bp-dot${hasBp ? ' bp-dot-active' : ''}${isHit ? ' bp-dot-hit' : ''}" data-addr="${fmtA(line.addr)}" title="${hasBp ? t('asm.bp.remove', bpNum) : t('asm.bp.set')}">${hasBp ? bpNum : ''}</span>
               <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
               <span class="asm-line-size">${line.size || 1}B</span>
             </div>
             <div class="asm-line-bytes">${byteChips}</div>
             <div class="asm-line-asm">${line.asm}</div>
           </div>
-          <div class="c-line${line.addr===S.pc ? ' c-line-current' : ''}" data-addr="${fmtA(line.addr)}" title="Clique para navegar">
+          <div class="c-line${line.addr===S.pc ? ' c-line-current' : ''}" data-addr="${fmtA(line.addr)}" title="${t('asm.pseudocode.title')}">
             <div class="c-line-head">
               <span class="c-line-addr">0x${fmtA(line.addr)}</span>
               <span class="c-line-kind c-line-kind-${line.c.kind}">${line.c.label}</span>
@@ -1716,7 +1716,7 @@ function commitRegisterValue(name, raw) {
     refreshBreakdown();
   }
   buildStackView();
-  lg('sys', `${name} ← 0x${isSpReg(name) ? fmtA(getReg(name)) : regHex(name)}`);
+  lg('sys', t('log.sys.reg_set', name, isSpReg(name)?fmtA(getReg(name)):regHex(name)));
 }
 
 // Make a register value element editable on click
@@ -1773,12 +1773,12 @@ function buildRegCards() {
     const valueHex = regHex(name);
     if(is64()) {
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
         <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     } else {
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-value-editable" id="rcv-${name}" title="Clique para editar">${valueHex}</div>
+        <div class="rc-value rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}">${valueHex}</div>
         <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
     }
@@ -1800,7 +1800,7 @@ function buildRegCards() {
       d.onclick=(e)=>{ if(!e.target.closest('.rc-edit-input')) App.selectReg(name); };
       const valueHex=regHex(name);
       d.innerHTML=`<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="Clique para editar"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
+        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}"><span class="rc-hi">${valueHex.slice(0,8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
         <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
       d.querySelector('.rc-value').addEventListener('click', e => {
         e.stopPropagation();
@@ -1826,7 +1826,7 @@ function buildRegCards() {
         <div class="rc-sp-role">${roleLabel}</div>
       </div>
       <div class="rc-sp-body">
-        <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="Clique para editar">0x${fmtA(getReg(name))}</div>
+        <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}">0x${fmtA(getReg(name))}</div>
         <div class="rc-subregs rc-subregs-sp" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
       </div>`;
     d.querySelector('.rc-value').addEventListener('click', e => {
@@ -2185,7 +2185,7 @@ function buildMemGrid() {
       if(addr>=totalBytes) break;
       const cell=document.createElement('div');
       cell.className='mem-cell'; cell.dataset.addr=addr;
-      cell.title=`Endereco 0x${fmtMemA(addr)} · Shift+Clique para breakpoint`;
+      cell.title=t('mem.cell.title', fmtMemA(addr));
       cell.textContent=hex8(memByteAt(addr));
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);
@@ -2292,7 +2292,7 @@ function editMemCell(addr) {
     writeMem(addr, val, 'mc-written');
     if(addr < 64) buildAsmTrace();
     buildStackView();
-    lg('sys', `[0x${fmtMemA(addr)}] ← 0x${hex8(val)} (edição manual)`);
+    lg('sys', t('log.sys.mem_edit', fmtMemA(addr), hex8(val)));
   }
 
   inp.addEventListener('keydown', e => {
@@ -2353,7 +2353,7 @@ function editAsmLine(line) {
   function updateInlineValidation() {
     const check = validateAssembly(input.value, addr);
     input.classList.toggle('is-invalid', !!input.value.trim() && !check.ok);
-    input.title = check.ok ? `Instrucao valida (${check.bytes.length} byte(s))` : check.error;
+    input.title = check.ok ? t('ui.asm.valid', check.bytes.length) : check.error;
     return check;
   }
 
@@ -2368,8 +2368,8 @@ function editAsmLine(line) {
     if(!src) { cancel(); return; }
     const validation = updateInlineValidation();
     if(!validation.ok) {
-      setStatus(`ASM inválido em 0x${fmtA(addr)} — ${validation.error}`,'lbl-error');
-      lg('error', `ASM inválido na listagem @ 0x${fmtA(addr)} — ${validation.error}`);
+      setStatus(t('status.asm_invalid', fmtA(addr), validation.error),'lbl-error');
+      lg('error', t('log.error.asm_invalid_listing', fmtA(addr), validation.error));
       requestAnimationFrame(() => { input.focus(); input.select(); });
       return;
     }
@@ -2378,11 +2378,11 @@ function editAsmLine(line) {
     delete line.dataset.editing;
     line.classList.remove('asm-line-editing');
     setPC(addr);
-    lg('sys', `ASM editado em 0x${fmtA(addr)}: "${src}"`);
+    lg('sys', t('log.sys.asm_edit', fmtA(addr), src));
     if(result.bytes.length < result.oldSize) {
-      lg('sys', `Bytes restantes em 0x${fmtA(addr)}..0x${fmtA((addr+result.oldSize-1)&0x3F)} preenchidos com NOP.`);
+      lg('sys', t('log.sys.nop_fill', fmtA(addr), fmtA((addr+result.oldSize-1)&0x3F)));
     } else if(result.bytes.length > result.oldSize) {
-      lg('error', `Instrucao em 0x${fmtA(addr)} cresceu de ${result.oldSize}B para ${result.bytes.length}B e sobrescreveu o fluxo seguinte.`);
+      lg('error', t('log.error.asm_grew', fmtA(addr), result.oldSize, result.bytes.length));
     }
   }
 
@@ -2412,7 +2412,7 @@ function doSetEndian(e) {
   buildStackView();
   syncPicker();
   refreshPreview(); refreshBreakdown();
-  lg('sys','Formato: '+e.toUpperCase()+' endian');
+  lg('sys', t('log.sys.format', e.toUpperCase()));
 }
 
 function doSetSize(s) {
@@ -2427,7 +2427,7 @@ function doSetSize(s) {
   buildRegPicker();
   syncPicker();
   refreshPreview(); refreshBreakdown();
-  lg('sys','Tamanho: '+s.toUpperCase()+' ('+sizeN()*8+' bits)');
+  lg('sys', t('log.sys.size', s.toUpperCase(), sizeN()*8));
 }
 
 function doSelectReg(name) {
@@ -2440,7 +2440,7 @@ function doSelectReg(name) {
   const v = isSpReg(name) ? fmtA(getReg(name)) : regHex(name).slice(-maxHex);
   $('valInput').value=v;
   refreshPreview(); refreshBreakdown();
-  lg('sys','Registrador '+name+' selecionado');
+  lg('sys', t('log.sys.reg_selected', name));
 }
 
 function buildRegPicker() {
@@ -2458,7 +2458,7 @@ function buildRegPicker() {
     const val=isSp?'0x'+fmtA(getReg(name)):regHex(name);
     btn.innerHTML=`<span class="rp-main">
         <span class="rp-name">${name}</span>
-        <span class="rp-val rp-val-editable" id="rpv-${name}" title="Clique para editar">${val}</span>
+        <span class="rp-val rp-val-editable" id="rpv-${name}" title="${t('ui.reg.picker.title')}">${val}</span>
       </span>
       ${isSp ? '' : `<span class="rp-bytes" id="rpb-${name}">${renderByteStrip(name, {
         compact:true,
@@ -2511,10 +2511,10 @@ function doSetArch(arch) {
   setCpuState('idle');
   const chip=$('archDisplay'); if(chip) chip.textContent=arch==='x64'?'x86-64':'IA-32';
   const stackLbl=$('stackArchLbl'); if(stackLbl) stackLbl.textContent=`STACK  ${arch==='x64'?'RSP/RBP':'ESP/EBP'}`;
-  const asmPh=$('asmInput'); if(asmPh) asmPh.placeholder=arch==='x64'?'MOV RAX, 0x1234':'MOV EAX, 0x1234';
+  const asmPh=$('asmInput'); if(asmPh) asmPh.placeholder=t(arch==='x64'?'asm.hint.placeholder.x64':'asm.hint.placeholder.ia32');
   refreshAsmValidation();
-  setStatus(`Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado — PC em 0x0000`,'lbl-done');
-  lg('sys','Arquitetura: '+(arch==='x64'?'x86-64':'IA-32'));
+  setStatus(t('status.demo_arch', arch==='x64'?'x86-64':'IA-32'),'lbl-done');
+  lg('sys', t('log.sys.arch', arch==='x64'?'x86-64':'IA-32'));
   lg('sys', demoProgramForArch(arch).listing.join(' | '));
 }
 
@@ -2534,19 +2534,19 @@ async function doStore() {
     return;
   }
   setPC(addr, { traceAutoScroll:false });
-  lg('store',`STORE ${reg}=0x${regHex(reg)} → [0x${fmtA(addr)}] (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
-  setStatus(`STORE: gravando ${n} byte(s) em [0x${fmtA(addr)}]...`,'lbl-store');
+  lg('store', t('log.store.start', reg, regHex(reg), fmtA(addr), S.size.toUpperCase(), S.endian.toUpperCase()), asm);
+  setStatus(t('status.store_start', n, fmtA(addr)),'lbl-store');
 
   for(let i=0;i<n;i++) {
     const ma=addr+i;
-    if(ma>=64){lg('error',`Endereço 0x${fmtA(ma)} fora do range`);break;}
+    if(ma>=64){lg('error', t('log.error.addr_range', fmtA(ma)));break;}
     const hexPos=displayPosForTransferByte(reg, i, n);
     storeHighlight(reg, hexPos, n);
     setPC(ma, { traceAutoScroll:false });
     setMemSt(ma,'mc-active');
     await animPacket('store', ord[i], ma, { regName: reg, byteIdx: i, transferCount: n });
     writeMem(ma, ord[i], 'mc-active');
-    lg('store',`  [0x${fmtA(ma)}] ← 0x${hex8(ord[i])}  (byte ${i+1}/${n})`,
+    lg('store', t('log.store.byte', fmtA(ma), hex8(ord[i]), i+1, n),
        asmForOp('store-byte',{byteAddr:ma,byteVal:ord[i],byteIdx:i,byteCount:n}));
     await sleep(S.speed*0.18);
     S.memState[ma]='mc-written'; setMemSt(ma,'mc-written');
@@ -2555,8 +2555,8 @@ async function doStore() {
   const ms=Math.round(performance.now()-t0);
   recOp('store',ms);
   setPC((addr+n)&0x3F, { traceAutoScroll:false });
-  setStatus(`STORE concluído — ${ms}ms`,'lbl-done');
-  lg('store',`STORE completo em ${ms}ms`);
+  setStatus(t('status.store_done', ms),'lbl-done');
+  lg('store', t('log.store.done', ms));
   buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2577,8 +2577,8 @@ async function doLoad() {
     return;
   }
   setPC(addr, { traceAutoScroll:false });
-  lg('load',`LOAD [0x${fmtA(addr)}] → ${reg} (${S.size.toUpperCase()}, execucao Intel little-endian; visualizacao ${S.endian.toUpperCase()})`, asm);
-  setStatus(`LOAD: lendo ${n} byte(s) de [0x${fmtA(addr)}]...`,'lbl-load');
+  lg('load', t('log.load.start', fmtA(addr), reg, S.size.toUpperCase(), S.endian.toUpperCase()), asm);
+  setStatus(t('status.load_start', n, fmtA(addr)),'lbl-load');
 
   const raw=[];
   for(let i=0;i<n;i++) { const ma=addr+i; raw.push(ma<64?S.mem[ma]:0); }
@@ -2600,7 +2600,7 @@ async function doLoad() {
     updatePickerVal(reg);
     updatePickerBytes(reg);
 
-    lg('load',`  ${reg}[+${i}] ← [0x${fmtA(ma)}]=0x${hex8(raw[i])}  → ${reg}=0x${regHex(reg)}`,
+    lg('load', t('log.load.byte', reg, i, fmtA(ma), hex8(raw[i]), regHex(reg)),
        asmForOp('load-byte',{byteAddr:ma,byteIdx:i,partial:regHex(reg)}));
     await sleep(S.speed*0.18);
     S.memState[ma]='mc-written'; setMemSt(ma,'mc-written');
@@ -2614,8 +2614,8 @@ async function doLoad() {
   const ms=Math.round(performance.now()-t0);
   recOp('load',ms);
   setPC((addr+n)&0x3F, { traceAutoScroll:false });
-  setStatus(`LOAD concluído: ${reg}=0x${finalHex} — ${ms}ms`,'lbl-done');
-  lg('load',`LOAD completo: ${reg}=0x${finalHex} em ${ms}ms`);
+  setStatus(t('status.load_done', reg, finalHex, ms),'lbl-done');
+  lg('load', t('log.load.done', reg, finalHex, ms));
   buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -2957,21 +2957,21 @@ async function doFetch() {
   // (Intel SDM Vol.1 §6.3: "The EIP register is incremented after each
   //  instruction fetch to point to the next sequential instruction")
   const np=(addr+instr.size)&0x3F;   // novo PC = endereço pós-instrução
-  setStatus(`FETCH: IP=0x${fmtA(addr)} → lendo ${instr.size} byte(s) → IR`,'lbl-fetch');
+  setStatus(t('status.fetch1', fmtA(addr), instr.size),'lbl-fetch');
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,'mc-pc');}
-  lg('info',`FETCH  IP=0x${fmtA(addr)} | opcode=0x${hex8(instr.op)} | ${instr.size} byte(s) · Intel SDM Vol.1 §6.3`);
+  lg('info', t('log.info.fetch1', fmtA(addr), hex8(instr.op), instr.size));
   await sleep(S.speed * 0.4);
 
   // IP avança durante o fetch (antes do decode/execute)
   setPC(np, { traceAutoScroll: true });
-  setStatus(`FETCH: IP atualizado → 0x${fmtA(np)}  (instrução no IR)`,'lbl-fetch');
-  lg('info',`FETCH  IP ← 0x${fmtA(np)}  (incrementado durante o fetch, Intel SDM Vol.1 §6.3)`);
+  setStatus(t('status.fetch2', fmtA(np)),'lbl-fetch');
+  lg('info', t('log.info.fetch2', fmtA(np)));
   await sleep(S.speed * 0.25);
 
   // ── FASE 2: DECODE ─────────────────────────────────────
   // Decodifica o conteúdo do IR
-  setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch');
-  lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+  setStatus(t('status.decode', instr.mnem),'lbl-fetch');
+  lg('info', t('log.info.decode', instr.mnem), instr.asm);
   if(isInstructionFault(instr)) {
     reportMemoryError(
       instr.errorAddrs || [addr],
@@ -2985,7 +2985,7 @@ async function doFetch() {
   await sleep(S.speed * 0.35);
 
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
-  setStatus(`FETCH+DECODE concluído — IP = 0x${fmtA(np)}`,'lbl-done');
+  setStatus(t('status.fetch_decode_done', fmtA(np)),'lbl-done');
   buildStackView();
   S.busy=false; setBusy(false);
 }
@@ -3000,34 +3000,34 @@ async function _executeOne(opts={}) {
   const addr=S.pc;
   const instr=decodeAt(addr);
   if(isStepTrace) {
-    lg('step', `STEP em 0x${fmtA(addr)} — ciclo completo da instrução atual.`);
+    lg('step', t('log.sys.step_start', fmtA(addr)));
   }
 
   // ── FASE 1: FETCH ──────────────────────────────────────
   // Lê bytes da memória → IR; IP incrementa imediatamente (Intel SDM §6.3)
   const np_seq = (addr+instr.size)&0x3F;   // PC sequencial (pode ser sobrescrito por JMP)
-  setStatus(`FETCH  IP=0x${fmtA(addr)} | ${instr.size}B → IR`,'lbl-fetch',{log:false});
+  setStatus(t('status.fetch_short', fmtA(addr), instr.size),'lbl-fetch',{log:false});
   for(let i=0;i<instr.size;i++){const ma=(addr+i)&0x3F; setMemSt(ma,'mc-pc');}
   if(isStepTrace) {
-    lg('info', `Busca ${instr.size} byte(s) em 0x${fmtA(addr)} e carrega a instrução no registrador de instrução.`, asmForOp('fetch', { addr, newPC: np_seq }), { indent:1, kindLabel:'FETCH' });
+    lg('info', t('log.info.fetch_desc', instr.size, fmtA(addr)), asmForOp('fetch', { addr, newPC: np_seq }), { indent:1, kindLabel:'FETCH' });
   } else {
-    lg('info',`FETCH  IP=0x${fmtA(addr)} opcode=0x${hex8(instr.op)}`);
+    lg('info', t('log.info.fetch1', fmtA(addr), hex8(instr.op), instr.size));
   }
   await sleep(S.speed * 0.25);
 
   // IP avança durante o fetch
   setPC(np_seq, { traceAutoScroll: true });
   if(isStepTrace) {
-    lg('info', `${ipReg()} avança para 0x${fmtA(np_seq)} após o FETCH, antes do efeito da instrução.`, null, { indent:1, kindLabel:'FETCH' });
+    lg('info', t('log.info.fetch_ip', ipReg(), fmtA(np_seq)), null, { indent:1, kindLabel:'FETCH' });
   }
   await sleep(S.speed * 0.1);
 
   // ── FASE 2: DECODE ─────────────────────────────────────
-  setStatus(`DECODE: ${instr.mnem}`,'lbl-fetch',{log:false});
+  setStatus(t('status.decode', instr.mnem),'lbl-fetch',{log:false});
   if(isStepTrace) {
-    lg('info', `Os bytes buscados são decodificados como ${instr.mnem}.`, instr.asm, { indent:1, kindLabel:'DECODE' });
+    lg('info', t('log.info.decode_desc', instr.mnem), instr.asm, { indent:1, kindLabel:'DECODE' });
   } else {
-    lg('info',`DECODE → ${instr.mnem}`, instr.asm);
+    lg('info', t('log.info.decode', instr.mnem), instr.asm);
   }
   if(isInstructionFault(instr)) {
     const prevIndent = S.logIndent;
@@ -3048,9 +3048,9 @@ async function _executeOne(opts={}) {
   await sleep(S.speed * 0.2);
 
   // ── FASE 3: EXECUTE ────────────────────────────────────
-  setStatus(`EXECUTE: ${instr.mnem}`,'lbl-load',{log:false});
+  setStatus(t('status.execute', instr.mnem),'lbl-load',{log:false});
   if(isStepTrace) {
-    lg('info', `Aplica os efeitos arquiteturais da instrução decodificada sobre PC, registradores, memória e stack quando necessário.`, instr.asm, { indent:1, kindLabel:'EXECUTE' });
+    lg('info', t('log.info.execute_desc'), instr.asm, { indent:1, kindLabel:'EXECUTE' });
   }
   const prevIndent = S.logIndent;
   if(isStepTrace) S.logIndent = 2;
@@ -3071,17 +3071,17 @@ async function _executeOne(opts={}) {
   await sleep(S.speed * 0.2);
 
   if(isStepTrace) {
-    lg('sys', `STEP concluído — ${ipReg()} agora aponta para 0x${fmtA(S.pc)}.`, null, { indent:1, kindLabel:'RESULTADO' });
+    lg('sys', t('log.sys.step_done', ipReg(), fmtA(S.pc)), null, { indent:1, kindLabel:'RESULTADO' });
   } else {
-    lg('store',`EXEC OK: ${instr.mnem}`, instr.asm);
+    lg('store', t('log.store.exec_ok', instr.mnem), instr.asm);
   }
 
   if(S.halt) {
-    setStatus('HLT — CPU parada','lbl-error',{log:false});
-    if(isStepTrace) lg('error','HLT executado. CPU parada.', null, { indent:1, kindLabel:'HALT' });
-    else lg('error','HLT executado. CPU parada.');
+    setStatus(t('status.hlt'),'lbl-error',{log:false});
+    if(isStepTrace) lg('error', t('log.error.hlt'), null, { indent:1, kindLabel:'HALT' });
+    else lg('error', t('log.error.hlt'));
   } else {
-    setStatus(`EXECUTE concluído — IP = 0x${fmtA(S.pc)}`,'lbl-done',{log:false});
+    setStatus(t('status.execute_done', fmtA(S.pc)),'lbl-done',{log:false});
   }
 
   buildStackView();
@@ -3156,7 +3156,7 @@ function bpNumber(addr) {
 async function doExecute(opts={}) {
   if(S.busy) return;
   clearFaultLatch();
-  if(S.halt){ lg('error','CPU halted. CLEAR para reiniciar.'); return; }
+  if(S.halt){ lg('error', t('log.error.cpu_halted')); return; }
   S.busy=true; setBusy(true);
   await _executeOne(opts);
   S.busy=false; setBusy(false);
@@ -3179,7 +3179,7 @@ async function doRun() {
     if(S.breakpoints.has(S.pc & 0x3F)) {
       S.paused = true;
       S.breakpointHit = S.pc & 0x3F;
-      lg('sys', `BP #${bpNumber(S.pc)} atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      lg('sys', t('log.sys.bp_hit', bpNumber(S.pc), fmtA(S.pc & 0x3F)));
       break;
     }
     snapshotState();
@@ -3225,7 +3225,7 @@ async function doResume() {
     if(shouldPauseOnBreakpoint) {
       S.paused = true;
       S.breakpointHit = pc;
-      lg('sys', `BP #${bpNumber(S.pc)} atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      lg('sys', t('log.sys.bp_hit', bpNumber(S.pc), fmtA(S.pc & 0x3F)));
       break;
     }
     snapshotState();
@@ -3258,7 +3258,7 @@ function doStop() {
 
 async function doStepForward() {
   if(!S.paused) return;
-  if(S.halt) { lg('error','CPU halted. CLEAR para reiniciar.'); return; }
+  if(S.halt) { lg('error', t('log.error.cpu_halted')); return; }
   clearFaultLatch();
   snapshotState();
   S.busy = true; setBusy(true);
@@ -3269,15 +3269,15 @@ async function doStepForward() {
 async function _executeOneReverse(fromAddr) {
   const instr = decodeAt(fromAddr);
   // EXECUTE → DECODE → FETCH (ordem inversa)
-  setStatus(`EXECUTE: ${instr.mnem} — revertendo`,'lbl-load',{log:false});
+  setStatus(t('status.execute_revert', instr.mnem),'lbl-load',{log:false});
   await sleep(S.speed * 0.2);
-  setStatus(`DECODE: ${instr.mnem} — revertendo`,'lbl-fetch',{log:false});
+  setStatus(t('status.decode_revert', instr.mnem),'lbl-fetch',{log:false});
   await sleep(S.speed * 0.2);
-  setStatus(`FETCH  IP=0x${fmtA(fromAddr)} — revertendo`,'lbl-fetch',{log:false});
+  setStatus(t('status.fetch_revert', fmtA(fromAddr)),'lbl-fetch',{log:false});
   for(let i=0;i<instr.size;i++){const ma=(fromAddr+i)&0x3F; setMemSt(ma,'mc-pc');}
   await sleep(S.speed * 0.25);
   for(let i=0;i<instr.size;i++){const ma=(fromAddr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
-  setStatus(`BACK concluído — IP = 0x${fmtA(fromAddr)}`,'lbl-done',{log:false});
+  setStatus(t('status.back_done', fmtA(fromAddr)),'lbl-done',{log:false});
 }
 
 async function doStepBack() {
@@ -3309,8 +3309,8 @@ async function doPush() {
   const sp=S.regs.ESP;
   revealMemRange(sp, width, { select:true });
   buildStackView();
-  lg('store',`PUSH ${reg}=0x${regHex(reg)}: ${spName} decrementa para 0x${fmtStackA(sp)} e o dado segue para o topo da pilha [0x${fmtStackA(sp)}].`, `PUSH ${reg}`);
-  setStatus(`PUSH: ${reg} → topo da pilha [0x${fmtStackA(sp)}]`,'lbl-store');
+  lg('store', t('log.push', reg, regHex(reg), spName, fmtStackA(sp)), `PUSH ${reg}`);
+  setStatus(t('status.push_start', reg, fmtStackA(sp)),'lbl-store');
   const bs=regBytes(reg,width);
   for(let i=0;i<width;i++) {
     const ma=sp+i;
@@ -3325,7 +3325,7 @@ async function doPush() {
   updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg);
   updateRegCard(spName); updatePickerVal(spName);
   markRegistersChanged(spName);
-  setStatus(`PUSH concluído — ${spName}=0x${fmtStackA(sp)}`,'lbl-done');
+  setStatus(t('status.push_done', spName, fmtStackA(sp)),'lbl-done');
   buildStackView();
   refreshStats(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -3341,8 +3341,8 @@ async function doPop() {
     S.busy=false; setBusy(false);
     return;
   }
-  lg('load',`POP [0x${fmtStackA(sp)}] → ${reg}: o dado sai do topo da pilha e ${spName} sera incrementado apos a leitura.`, `POP ${reg}`);
-  setStatus(`POP: topo da pilha [0x${fmtStackA(sp)}] → ${reg}`,'lbl-load');
+  lg('load', t('log.pop', fmtStackA(sp), reg, spName), `POP ${reg}`);
+  setStatus(t('status.pop_start', fmtStackA(sp), reg),'lbl-load');
   revealMemRange(sp, width, { select:true });
   buildStackView();
   const partialLittle = new Array(width).fill(0);
@@ -3363,7 +3363,7 @@ async function doPop() {
   markRegistersChanged([reg, spName]);
   const finalHex=regHex(reg);
   $('valInput').value=finalHex.slice(-Math.min(sizeN()*2, regWidthBytes(reg)*2));
-  setStatus(`POP concluído — ${reg}=0x${finalHex}`,'lbl-done');
+  setStatus(t('status.pop_done', reg, finalHex),'lbl-done');
   buildStackView();
   refreshStats(); refreshPreview(); refreshBreakdown();
   S.busy=false; setBusy(false);
@@ -3831,8 +3831,8 @@ async function doAssemble() {
   const validation = validateAssembly(src, addr);
   refreshAsmValidation();
   if(!validation.ok){
-    setStatus(`ASM inválido — ${validation.error}`,'lbl-error');
-    lg('error',`ASM inválido em 0x${fmtA(addr)} — ${validation.error}`);
+    setStatus(t('status.asm_invalid_short', validation.error),'lbl-error');
+    lg('error', t('log.error.asm_invalid', fmtA(addr), validation.error));
     return;
   }
   const result = writeAssembledBytes(addr, validation.normalized, undefined, validation.bytes);
@@ -3861,9 +3861,16 @@ function doClear() {
   $('clockDisplay').textContent='—';
   $('opsDisplay').textContent='0';
   setCpuState('idle');
-  setStatus('Programa demo restaurado — PC em 0x0000','lbl-done');
-  lg('sys','Reiniciado com programa demo.', asmForOp('clear',{}));
+  setStatus(t('status.demo_reset'),'lbl-done');
+  lg('sys', t('log.sys.demo_reset'), asmForOp('clear',{}));
   lg('sys', demoProgramForArch().listing.join(' | '));
+}
+
+function clearBreakpoints() {
+  S.breakpoints.clear();
+  S.breakpointHit = null;
+  buildAsmTrace();
+  buildMemGrid();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -3978,7 +3985,7 @@ function buildStackView() {
       ? hex8(S.stackMem[addr] || 0)
       : stackGroupHex(addr, gran);
     const granLabel = gran === 1 ? '' : ` stack-row-gran-${S.stackGranularity}`;
-    return `<div class="stack-row${granLabel} stack-row-${meta.primary}" data-stack-addr="${addr}" title="Clique para localizar no mapa de memoria · 2× clique para editar">
+    return `<div class="stack-row${granLabel} stack-row-${meta.primary}" data-stack-addr="${addr}" title="${t('ui.stack.row.title')}">
       <span class="stack-row-addr">0x${fmtStackA(addr)}</span>
       <span class="stack-row-byte">${valHex}</span>
       <span class="stack-row-tags">${tags}</span>
@@ -4233,12 +4240,12 @@ function asmForOp(type, ctx) {
 
 function logKindLabel(type, overrideLabel='') {
   if(overrideLabel) return overrideLabel;
-  if(type==='step') return 'STEP';
-  if(type==='store') return 'STORE';
-  if(type==='load') return 'LOAD';
-  if(type==='info') return 'CPU';
-  if(type==='error') return 'ERRO';
-  return 'SISTEMA';
+  if(type==='step') return t('log.kind.step');
+  if(type==='store') return t('log.kind.store');
+  if(type==='load') return t('log.kind.load');
+  if(type==='info') return t('log.kind.info');
+  if(type==='error') return t('log.kind.error');
+  return t('log.kind.sys');
 }
 
 function lg(type, msg, asm, opts={}) {
@@ -4394,57 +4401,9 @@ function loadSim(e){
 // ─────────────────────────────────────────────────────────
 // HELP
 // ─────────────────────────────────────────────────────────
-const HELP={
-  intro:`<h3>O QUE É ENDIANNESS?</h3>
-<p>Endianness define a <strong>ordem dos bytes</strong> na qual um valor multi-byte é armazenado na memória. A questão central é: qual byte vai para o endereço mais baixo?</p>
-<p>Os dois formatos principais são <span class="hl">Little Endian</span> e <span class="hl-b">Big Endian</span>.</p>
-<div class="info-box">💡 O nome vem de "As Viagens de Gulliver" — a guerra entre os que quebram o ovo pelo lado pequeno (<em>little-endians</em>) e os que o quebram pelo lado grande (<em>big-endians</em>).</div>
-<p><strong>CPUs x86/x64</strong> (Intel, AMD) → Little Endian<br>
-<strong>Protocolos TCP/IP</strong> → Big Endian ("network byte order")<br>
-<strong>ARM</strong> → bi-endian (configurável)</p>`,
-
-  little:`<h3>LITTLE ENDIAN</h3>
-<p>O byte <span class="hl">menos significativo (LSB)</span> fica no <strong>menor endereço</strong> de memória.</p>
-<p>Exemplo: valor <span class="hl">0xDEADBEEF</span> a partir de 0x0000:</p>
-<div class="mem-diagram">
-  <div class="md-cell md-addr"></div>
-  <div class="md-cell md-hdr">+0</div><div class="md-cell md-hdr">+1</div>
-  <div class="md-cell md-hdr">+2</div><div class="md-cell md-hdr">+3</div>
-  <div class="md-cell md-addr">0x0000</div>
-  <div class="md-cell md-lsb">EF</div><div class="md-cell md-mid">BE</div>
-  <div class="md-cell md-mid">AD</div><div class="md-cell md-msb">DE</div>
-</div>
-<p><strong style="color:var(--grn)">EF</strong> (LSB) → 0x0000 &nbsp;|&nbsp; <strong style="color:var(--blu)">DE</strong> (MSB) → 0x0003</p>
-<div class="info-box">✓ Usado por: x86, x64, ARM (padrão), RISC-V<br>✓ Vantagem: extensão de inteiros sem alterar o endereço base</div>`,
-
-  big:`<h3>BIG ENDIAN</h3>
-<p>O byte <span class="hl-b">mais significativo (MSB)</span> fica no <strong>menor endereço</strong> de memória.</p>
-<p>Exemplo: valor <span class="hl-b">0xDEADBEEF</span> a partir de 0x0000:</p>
-<div class="mem-diagram">
-  <div class="md-cell md-addr"></div>
-  <div class="md-cell md-hdr">+0</div><div class="md-cell md-hdr">+1</div>
-  <div class="md-cell md-hdr">+2</div><div class="md-cell md-hdr">+3</div>
-  <div class="md-cell md-addr">0x0000</div>
-  <div class="md-cell md-msb">DE</div><div class="md-cell md-mid">AD</div>
-  <div class="md-cell md-mid">BE</div><div class="md-cell md-lsb">EF</div>
-</div>
-<p><strong style="color:var(--blu)">DE</strong> (MSB) → 0x0000 &nbsp;|&nbsp; <strong style="color:var(--grn)">EF</strong> (LSB) → 0x0003</p>
-<div class="info-box">✓ Usado por: SPARC, PowerPC, TCP/IP<br>✓ No simulador: modo comparativo/visual; a execução Intel real continua little-endian</div>`,
-
-  ops:`<h3>OPERAÇÕES</h3>
-<p><span class="hl">STORE</span> — Grava o valor do registrador na memória, byte a byte. O nibble sendo enviado fica destacado e um pacote animado voa até a célula de memória.</p>
-<p><span class="hl-b">LOAD</span> — Lê bytes da memória para o registrador. O registrador começa em zero e é preenchido byte a byte em tempo real — você vê o valor se construindo!</p>
-<p><span style="color:var(--amb)">STEP</span> — Executa o ciclo completo <strong>FETCH → DECODE → EXECUTE</strong>, atualizando PC, registradores, memória e stack conforme a instrução.</p>
-<p><span style="color:var(--red)">CLEAR</span> — Reinicia memória e registradores.</p>
-<div class="info-box">💡 Clique em qualquer célula de memória para selecionar aquele endereço.<br>
-💡 Use DWORD para ver o efeito completo Little vs Big Endian.<br>
-💡 Reduza a velocidade para acompanhar cada byte com calma.<br>
-💡 Salve 💾 e carregue 📂 simulações para compartilhar.</div>`
-};
-
 function showHelp(page, tabEl){
-  $('helpBody').innerHTML=HELP[page]||'';
-  $$('.htab').forEach(t=>t.classList.remove('active'));
+  $('helpBody').innerHTML=t(`help.${page}`)||'';
+  $$('.htab').forEach(tab=>tab.classList.remove('active'));
   if(tabEl) tabEl.classList.add('active');
 }
 function closeHelp(){ $('helpBg').classList.remove('open'); }
@@ -4476,9 +4435,19 @@ const App = {
   setStackGranularity,
   toggleStackCfg,
   applyStackSize,
-  clearLog:   doClearLog,
+  clearLog:        doClearLog,
+  clearBreakpoints,
   showHelp,
   closeHelp,
+  _applyI18n: function() {
+    const asmPh = $('asmInput');
+    if (asmPh) asmPh.placeholder = t(S.arch==='x64' ? 'asm.hint.placeholder.x64' : 'asm.hint.placeholder.ia32');
+    const stackLbl = $('stackArchLbl');
+    if (stackLbl) stackLbl.textContent = t(is64() ? 'stack.label.x64' : 'stack.label.ia32');
+    buildAsmTrace();
+    buildMemGrid();
+    buildRegCards();
+  },
 };
 
 document.addEventListener('DOMContentLoaded', init);

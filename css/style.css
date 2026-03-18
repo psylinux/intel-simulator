@@ -1957,6 +1957,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   grid-template-rows: repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px));
   gap: 2px;
   align-content: start;
+  user-select: none;
 }
 .mem-cell {
   height: var(--mem-cell-h, 24px); display: flex; align-items: center; justify-content: center;
@@ -1964,6 +1965,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   border-radius: var(--r); font-size: var(--fs-ui-sm); font-weight: 700; color: var(--tx1);
   cursor: pointer; transition: all .15s var(--ease); position: relative;
   font-family: var(--mono);
+  user-select: none;
 }
 .mem-cell:hover { border-color: var(--bdr-focus); color: var(--tx1); background: var(--bg3); }
 

@@ -782,12 +782,19 @@ function init() {
     if(e.key==='Enter') e.target.blur();
   });
 
+  // Bloqueia a seleção de texto que o browser inicia ao Shift+Click
+  $('memGrid').addEventListener('mousedown', e => {
+    if(e.shiftKey && e.target.closest('.mem-cell')) e.preventDefault();
+  });
+
   $('memGrid').addEventListener('click', e => {
     const c = e.target.closest('.mem-cell');
     if(!c) return;
     if(c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
     const addr = +c.dataset.addr;
     if(e.shiftKey) {
+      e.preventDefault();
+      window.getSelection()?.removeAllRanges();
       toggleBreakpoint(addr);
       return;
     }
@@ -818,6 +825,10 @@ function init() {
     revealMemAddr(addr, { select:true, scroll:true });
     editMemCell(addr);
   });
+  $('asmTrace')?.addEventListener('mousedown', e => {
+    if(e.target.closest('.bp-dot')) e.preventDefault();
+  });
+
   $('asmTrace')?.addEventListener('click', e => {
     if(e.target.closest('.asm-edit-input')) return;
     const bpDot = e.target.closest('.bp-dot');

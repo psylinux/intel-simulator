@@ -182,6 +182,7 @@ globalThis.__memsim = {
   doStepForward,
   doStepBack,
   toggleBreakpoint,
+  instrStartFor,
   doSetArch,
   doSetEndian,
   doSetSize,
@@ -2054,6 +2055,53 @@ test('breakpoint não afeta estado de registradores: EAX correto após pausa', a
   assert.equal(api.S.pc,          0x05,   'deve parar no NOP após MOV');
   assert.equal(api.S.regs.EAX,    0xDEAD, 'EAX deve ter sido atualizado pelo MOV antes do breakpoint');
   assert.equal(api.S.paused,      true);
+});
+
+test('instrStartFor: byte no início de instrução retorna o próprio endereço', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00, MOV EAX,imm em 0x01
+  writeBytes(api, 0, [0x90, 0xB8, 0x78, 0x56, 0x34, 0x12]);
+  assert.equal(api.instrStartFor(0x00), 0x00, 'início do NOP deve ser 0x00');
+  assert.equal(api.instrStartFor(0x01), 0x01, 'início do MOV deve ser 0x01');
+});
+
+test('instrStartFor: byte no meio de instrução multi-byte retorna o início', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EAX, 0x12345678 em 0x00 (5 bytes: B8 78 56 34 12); NOP em 0x05
+  writeBytes(api, 0, [0xB8, 0x78, 0x56, 0x34, 0x12, 0x90]);
+  assert.equal(api.instrStartFor(0x00), 0x00, 'byte 0 → início 0x00');
+  assert.equal(api.instrStartFor(0x01), 0x00, 'byte 1 (imm) → início 0x00');
+  assert.equal(api.instrStartFor(0x02), 0x00, 'byte 2 (imm) → início 0x00');
+  assert.equal(api.instrStartFor(0x03), 0x00, 'byte 3 (imm) → início 0x00');
+  assert.equal(api.instrStartFor(0x04), 0x00, 'byte 4 (imm) → início 0x00');
+  assert.equal(api.instrStartFor(0x05), 0x05, 'byte 5 (NOP) → início 0x05');
+});
+
+test('toggleBreakpoint em byte do meio de instrução: armazena o início', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EAX, imm32 em 0x00 (5 bytes)
+  writeBytes(api, 0, [0xB8, 0x78, 0x56, 0x34, 0x12, 0x90]);
+  // Clica no byte 0x03 (meio da instrução)
+  api.toggleBreakpoint(0x03);
+  assert.ok(api.S.breakpoints.has(0x00), 'breakpoint deve ser no início (0x00), não no byte clicado (0x03)');
+  assert.ok(!api.S.breakpoints.has(0x03), 'não deve ter breakpoint em 0x03');
+});
+
+test('RUN para no início da instrução mesmo quando bp foi definido no byte do meio', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP 0x00; MOV EAX,imm32 0x01 (5 bytes); HLT 0x06
+  writeBytes(api, 0, [0x90, 0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4]);
+  api.setPC(0);
+  // Define breakpoint no byte 0x03 (meio do MOV) — deve resolver para 0x01
+  api.toggleBreakpoint(0x03);
+  assert.ok(api.S.breakpoints.has(0x01), 'breakpoint deve estar em 0x01');
+  await api.doRun();
+  assert.equal(api.S.pc,     0x01, 'deve parar em 0x01 (início do MOV)');
+  assert.equal(api.S.paused, true);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -805,13 +805,18 @@ function init() {
       editMemCell(addr);
       return;
     }
-    S.memSelectedAddr = addr;
+    // Resolve para o início da instrução que contém este byte
+    const instrAddr = addr < 64 ? instrStartFor(addr) : addr;
+    const instrSize = addr < 64 ? (decodeAt(instrAddr).size || 1) : 1;
+    S.memSelectedAddr = instrAddr;
     clearSel({ keepState:true });
-    c.classList.add('mc-selected');
+    // Seleciona todos os bytes da instrução
+    for(let i = 0; i < instrSize; i++) {
+      const cell = memCellRefs[instrAddr + i];
+      if(cell) cell.classList.add('mc-selected');
+    }
     if(addr < 64) {
-      S.pc = addr;
-      const pd=$('pcDisplay'); if(pd && document.activeElement!==pd) pd.value=fmtA(addr);
-      $('addrInput').value = fmtA(addr);
+      setPC(instrAddr, { traceAutoScroll: true });
     }
     refreshBreakdown();
     buildStackView();
@@ -2169,6 +2174,13 @@ function buildMemGrid() {
   const addrFrag = document.createDocumentFragment();
   const gridFrag = document.createDocumentFragment();
   memCellRefs = new Array(totalBytes);
+  // Expande breakpoints para cobrir todos os bytes de cada instrução marcada
+  const bpBytes = new Set();
+  for(const bpAddr of S.breakpoints) {
+    const instr = decodeAt(bpAddr & 0x3F);
+    const sz = Math.max(instr.size || 1, 1);
+    for(let i = 0; i < sz; i++) bpBytes.add((bpAddr + i) & 0x3F);
+  }
   g.innerHTML='';
   a.innerHTML='';
   const tag=$('addrDirTag');
@@ -2201,7 +2213,7 @@ function buildMemGrid() {
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);
       if(addr===S.memSelectedAddr) cell.classList.add('mc-selected');
-      if(S.breakpoints.has(addr & 0x3F)) cell.classList.add('mc-bp');
+      if(bpBytes.has(addr & 0x3F)) cell.classList.add('mc-bp');
       memCellRefs[addr] = cell;
       gridFrag.appendChild(cell);
     }
@@ -3124,8 +3136,25 @@ function restoreSnapshot(snap) {
   setPC(snap.pc, { traceAutoScroll: true });
 }
 
+// Resolve qualquer byte de memória para o endereço de início
+// da instrução que o contém. Se o byte não pertencer a nenhuma
+// instrução conhecida do programa atual, retorna o próprio addr.
+function instrStartFor(addr) {
+  const target = addr & 0x3F;
+  const lines = traceProgram(demoProgramForArch());
+  for(const line of lines) {
+    if(target >= line.addr && target < line.addr + line.size) return line.addr;
+  }
+  // Fora do programa principal: tenta traceBlock a partir do início
+  const block = traceBlock(0, 64);
+  for(const line of block) {
+    if(target >= line.addr && target < line.addr + line.size) return line.addr;
+  }
+  return target;
+}
+
 function toggleBreakpoint(addr) {
-  const a = addr & 0x3F;
+  const a = instrStartFor(addr);
   if(S.breakpoints.has(a)) S.breakpoints.delete(a);
   else S.breakpoints.add(a);
   buildAsmTrace();

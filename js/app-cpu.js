@@ -367,7 +367,7 @@ async function doPop() {
     await animPacket('load', S.stackMem[ma], ma, { surface: 'stack', regName: reg, byteIdx: i, transferCount: width });
     partialLittle[i] = S.stackMem[ma] & 0xFF;
     setRegFromBytes(reg, partialLittle);
-    liveUpdate(reg, 0, i, width); updatePickerVal(reg); updatePickerBytes(reg);
+    liveUpdate(reg, 0, i, width);
     await sleep(S.speed * 0.12);
     setMemSt(ma, 'mc-written');
   }

@@ -1307,8 +1307,6 @@ async function doLoad() {
 
     // Live register update — value builds up byte by byte
     liveUpdate(reg, 0, i, n);
-    updatePickerVal(reg);
-    updatePickerBytes(reg);
 
     lg('load', t('log.load.byte', reg, i, fmtA(ma), hex8(raw[i]), regHex(reg)),
       asmForOp('load-byte', { byteAddr: ma, byteIdx: i, partial: regHex(reg) }));

@@ -1767,7 +1767,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   font-family: var(--mono);
 }
 .mem-cell:hover { border-color: var(--bdr-focus); color: var(--tx1); background: var(--bg3); }
-.mem-cell.mc-selected { border-color: var(--amb) !important; box-shadow: 0 0 0 1px var(--amb); }
+
 .mem-cell.mc-op-store::after,
 .mem-cell.mc-op-load::after {
   position: absolute;

@@ -29,7 +29,6 @@ const S = {
   collapsedSections: {},
   speed:  2500,
   memViewBase: 0,
-  memSelectedAddr: 0,
   busy:   false,
   logIndent: 0,
   arch:   'ia32',   // 'ia32' | 'x64'
@@ -534,21 +533,11 @@ function setByteState(addr, st='') {
 
 function revealMemAddr(addr, opts={}) {
   const target = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
-  if(opts.select) {
-    clearSel({ keepState:true });
-    S.memSelectedAddr = target;
-    memEl(target)?.classList.add('mc-selected');
-  }
   if(opts.scroll) memEl(target)?.scrollIntoView({ block:'center', inline:'nearest' });
 }
 
 function revealMemRange(addr, width=1, opts={}) {
   const first = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
-  if(opts.select) {
-    clearSel({ keepState:true });
-    S.memSelectedAddr = first;
-    memEl(first)?.classList.add('mc-selected');
-  }
   if(opts.scroll) memEl(first)?.scrollIntoView({ block:'center', inline:'nearest' });
 }
 
@@ -711,7 +700,6 @@ function applyStackSize() {
   resetStackState();
   const stackViewAddr = clamp(Math.max(S.stackSize - ptrSize(), 0), 0, Math.max(memSpaceSize() - 1, 0));
   S.memViewBase = 0;
-  S.memSelectedAddr = stackViewAddr;
   markRegistersChanged(spRegs());
   buildRegCards();
   buildRegPicker();
@@ -803,20 +791,8 @@ function init() {
       toggleBreakpoint(addr);
       return;
     }
-    if(c.classList.contains('mc-selected') && !S.busy) {
-      editMemCell(addr);
-      return;
-    }
     // Resolve para o início da instrução que contém este byte
     const instrAddr = addr < 64 ? instrStartFor(addr) : addr;
-    const instrSize = addr < 64 ? (decodeAt(instrAddr).size || 1) : 1;
-    S.memSelectedAddr = instrAddr;
-    clearSel({ keepState:true });
-    // Seleciona todos os bytes da instrução
-    for(let i = 0; i < instrSize; i++) {
-      const cell = memCellRefs[instrAddr + i];
-      if(cell) cell.classList.add('mc-selected');
-    }
     if(addr < 64) {
       setPC(instrAddr, { traceAutoScroll: true });
     }
@@ -1260,7 +1236,6 @@ function loadDefaultProgram(announce=true, arch=S.arch) {
     S.memState[idx] = 'mc-written';
   });
   S.memViewBase = 0;
-  S.memSelectedAddr = program.entry & 0x3F;
   setPC(program.entry);
   if(announce) {
     lg('sys', `Programa demo ${arch==='x64' ? 'x86-64' : 'IA-32'} carregado em 0x0000: main + 2 funcoes com uso de stack.`);
@@ -2279,7 +2254,6 @@ function writeMem(addr, val, st) {
   const el=memEl(addr); if(!el) return;
   el.textContent=hex8(val);
   el.className='mem-cell mc-flash'+(st?' '+st:'');
-  if(addr===S.memSelectedAddr) el.classList.add('mc-selected');
   setTimeout(()=>{ if(el) el.classList.remove('mc-flash'); },500);
 }
 
@@ -2288,20 +2262,12 @@ function setMemSt(addr, st) {
   setByteState(addr, st || '');
   const el=memEl(addr); if(!el) return;
   el.className='mem-cell'+(st?' '+st:'');
-  if(addr===S.memSelectedAddr) el.classList.add('mc-selected');
-}
-
-function clearSel(opts={}) {
-  $$('.mc-selected').forEach(c=>c.classList.remove('mc-selected'));
-  if(!opts.keepState) S.memSelectedAddr = null;
 }
 
 function editMemCell(addr) {
   const cell = memEl(addr);
   if(!cell || cell.classList.contains('is-editing')) return;
-  clearSel({ keepState:true });
-  S.memSelectedAddr = addr;
-  cell.classList.add('mc-selected','is-editing');
+  cell.classList.add('is-editing');
   const prevState = memStateAt(addr) || '';
   const prevVal = hex8(memByteAt(addr));
   const inp = document.createElement('input');
@@ -2316,7 +2282,7 @@ function editMemCell(addr) {
   inp.select();
 
   function restore() {
-    cell.className = 'mem-cell'+(prevState ? ' '+prevState : '')+' mc-selected';
+    cell.className = 'mem-cell'+(prevState ? ' '+prevState : '');
     cell.textContent = prevVal;
   }
 
@@ -2324,8 +2290,6 @@ function editMemCell(addr) {
     const raw = inp.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
     const val = parseInt(raw || '0', 16) & 0xFF;
     writeMem(addr, val, 'mc-written');
-    const updated = memEl(addr);
-    if(updated) updated.classList.add('mc-selected');
     if(addr < 64) buildAsmTrace();
     buildStackView();
     lg('sys', `[0x${fmtMemA(addr)}] ← 0x${hex8(val)} (edição manual)`);
@@ -4216,12 +4180,7 @@ function setPC(addr, opts={}){
   const ai=$('addrInput');
   if(ai && document.activeElement!==ai) {
     ai.value=fmtA(S.pc);
-    S.memSelectedAddr = S.pc;
     if(revealMem) revealMemAddr(S.pc, { select:true, scroll:true });
-    else {
-      clearSel({ keepState:true });
-      memEl(S.pc)?.classList.add('mc-selected');
-    }
     refreshBreakdown();
   }
   if(syncTrace) {
@@ -4408,7 +4367,6 @@ function loadSim(e){
       S.stackState = Array.isArray(d.stackState) ? new Map(d.stackState) : new Map();
       syncLowMemoryToStack();
       Object.assign(S.stats,d.stats); S.pc=d.pc;
-      S.memSelectedAddr = clamp(S.pc || 0, 0, Math.max(memSpaceSize() - 1, 0));
       applySidebarPanelWidth();
       persistSidebarPanelWidth();
       applyStackPanelWidth();

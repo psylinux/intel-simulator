@@ -2231,17 +2231,20 @@ function buildMemGrid() {
   a.appendChild(addrFrag);
   g.appendChild(gridFrag);
 
-  // Rodapé de breakpoint atingido
+  // Rodapé de breakpoints — lista todos, destaca o atingido
   const bpStatus = $('memBpStatus');
   if(bpStatus) {
-    if(S.breakpointHit !== null && S.paused) {
-      const num = bpNumber(S.breakpointHit);
-      bpStatus.textContent = `⏸ BP #${num} atingido em 0x${fmtA(S.breakpointHit)}`;
-      bpStatus.className = 'mem-bp-status mem-bp-status-hit';
-    } else if(S.breakpoints.size > 0) {
-      const list = [...S.breakpoints].sort((a,b)=>a-b)
-        .map((a,i) => `BP #${i+1} → 0x${fmtA(a)}`).join('  ·  ');
-      bpStatus.textContent = list;
+    if(S.breakpoints.size > 0) {
+      const sorted = [...S.breakpoints].sort((a, b) => a - b);
+      bpStatus.innerHTML = sorted.map((a, i) => {
+        const num = i + 1;
+        const isHit = S.breakpointHit === a && S.paused;
+        return `<span class="bp-status-item${isHit ? ' bp-status-item-hit' : ''}">`
+          + `<span class="bp-status-num">BP #${num}</span>`
+          + `<span class="bp-status-addr">0x${fmtA(a)}</span>`
+          + (isHit ? '<span class="bp-status-hit-lbl">⏸ PARADO</span>' : '')
+          + '</span>';
+      }).join('');
       bpStatus.className = 'mem-bp-status mem-bp-status-list';
     } else {
       bpStatus.textContent = '';
@@ -3234,6 +3237,7 @@ async function doRun() {
   if(S.paused) {
     setCpuState('paused');
     buildMemGrid();
+    buildAsmTrace({ autoScroll: true });
   } else {
     S.progRunning=false;
     setCpuState('idle');
@@ -3273,6 +3277,7 @@ async function doResume() {
   if(S.paused) {
     setCpuState('paused');
     buildMemGrid();
+    buildAsmTrace({ autoScroll: true });
   } else {
     S.progRunning = false;
     setCpuState('idle');

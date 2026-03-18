@@ -566,26 +566,52 @@ input[type=range]::-webkit-slider-thumb {
 /* Rodapé de status de breakpoint no mapa de memória */
 .mem-bp-status {
   display: none;
-  font-size: var(--fs-ui-xs);
-  padding: 4px 6px;
-  border-radius: var(--r);
-  margin-top: 4px;
-  line-height: 1.4;
   font-family: var(--mono);
+  margin-top: 4px;
+  border-radius: var(--r);
+  overflow: hidden;
+  border: 1px solid rgba(239,68,68,.2);
+  background: rgba(239,68,68,.04);
 }
 .mem-bp-status-list {
-  display: block;
-  color: rgba(239,68,68,.7);
-  background: rgba(239,68,68,.06);
-  border: 1px solid rgba(239,68,68,.2);
+  display: flex;
+  flex-direction: column;
 }
-.mem-bp-status-hit {
-  display: block;
+.bp-status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(239,68,68,.1);
+  font-size: var(--fs-ui-xs);
+  color: rgba(239,68,68,.65);
+  transition: background .12s;
+}
+.bp-status-item:last-child { border-bottom: none; }
+.bp-status-num {
+  font-weight: 700;
+  letter-spacing: .5px;
+  min-width: 36px;
+}
+.bp-status-addr {
+  opacity: .85;
+}
+.bp-status-hit-lbl {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
   color: #fff;
-  background: rgba(239,68,68,.18);
-  border: 1px solid rgba(239,68,68,.5);
-  font-weight: 600;
-  letter-spacing: .01em;
+  background: var(--red);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+/* Item atingido — destaque sem esconder os demais */
+.bp-status-item-hit {
+  background: rgba(239,68,68,.13);
+  color: #fff;
+  border-left: 3px solid var(--red);
+  padding-left: 5px;
 }
 
 .cpu-cycle-hint {

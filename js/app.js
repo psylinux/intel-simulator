@@ -2230,15 +2230,15 @@ function buildMemGrid() {
   if(bpStatus) {
     if(S.breakpoints.size > 0) {
       const sorted = [...S.breakpoints].sort((a, b) => a - b);
-      bpStatus.innerHTML = sorted.map((a, i) => {
+      bpStatus.innerHTML = '<div class="mem-bp-status-list">' + sorted.map((a, i) => {
         const num = i + 1;
         const isHit = S.breakpointHit === a && S.paused;
-        return `<span class="bp-status-item${isHit ? ' bp-status-item-hit' : ''}">`
+        return `<div class="bp-status-item${isHit ? ' bp-status-item-hit' : ''}">`
           + `<span class="bp-status-num">BP #${num}</span>`
           + `<span class="bp-status-addr">0x${fmtA(a)}</span>`
-          + (isHit ? '<span class="bp-status-hit-lbl">⏸</span>' : '')
-          + '</span>';
-      }).join('');
+          + (isHit ? '<span class="bp-status-hit-lbl">PAUSA</span>' : '')
+          + '</div>';
+      }).join('') + '</div>';
     } else {
       bpStatus.innerHTML = '';
     }

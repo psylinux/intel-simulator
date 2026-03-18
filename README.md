@@ -22,6 +22,18 @@ python3 -m http.server 8080
 # Acesse: http://localhost:8080
 ```
 
+## Testes
+
+```bash
+npm test
+```
+
+Para rodar só a suíte de breakpoint/regressão:
+
+```bash
+npm run test:breakpoint
+```
+
 ---
 
 ## Funcionalidades (v0.1)

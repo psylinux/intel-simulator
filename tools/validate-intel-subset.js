@@ -1999,6 +1999,49 @@ test('RESUME também para em breakpoint', async () => {
   assert.equal(api.S.halt,   false);
 });
 
+test('[REGRESSION] RESUME não deve rearmar imediatamente o mesmo breakpoint sem executar a instrução atual', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP 0x00, NOP 0x01 [BP], HLT 0x02
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x01);
+
+  await api.doRun();
+  assert.equal(api.S.paused, true, 'RUN deve pausar no breakpoint');
+  assert.equal(api.S.pc, 0x01, 'PC deve ficar na instrução com breakpoint');
+  assert.equal(api.S.breakpointHit, 0x01, 'breakpointHit deve registrar o endereço pausado');
+  assert.ok(api.S.breakpoints.has(0x01), 'o breakpoint deve continuar armado');
+
+  await api.doResume();
+  assert.equal(api.S.paused, false, 'RESUME não deve pausar novamente no mesmo endereço');
+  assert.equal(api.S.halt, true, 'após executar a instrução atual, a CPU deve alcançar o HLT');
+  assert.equal(api.S.pc, 0x03, 'PC deve avançar além do HLT depois de executar 0x01 e 0x02');
+  assert.equal(api.S.breakpointHit, null, 'sem novo hit, breakpointHit deve permanecer limpo');
+  assert.ok(api.S.breakpoints.has(0x01), 'o breakpoint deve permanecer cadastrado para hits futuros');
+});
+
+test('[REGRESSION] RESUME ignora o breakpoint atual só uma vez e volta a disparar se o fluxo retornar', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // 0x00: NOP [BP]
+  // 0x01: JMP SHORT -3 -> volta para 0x00
+  writeBytes(api, 0, [0x90, 0xEB, 0xFD]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x00);
+
+  await api.doRun();
+  assert.equal(api.S.paused, true, 'RUN deve pausar no breakpoint inicial');
+  assert.equal(api.S.pc, 0x00, 'PC deve permanecer no breakpoint inicial');
+  assert.equal(api.S.breakpointHit, 0x00);
+
+  await api.doResume();
+  assert.equal(api.S.paused, true, 'ao retornar para 0x00, o breakpoint deve disparar novamente');
+  assert.equal(api.S.halt, false, 'o loop deve ser interrompido pelo breakpoint, não por HLT');
+  assert.equal(api.S.pc, 0x00, 'o fluxo deve voltar a pausar em 0x00');
+  assert.equal(api.S.breakpointHit, 0x00, 'o segundo hit deve registrar o mesmo breakpoint');
+});
+
 test('breakpoint no PC inicial dispara imediatamente no RUN', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');

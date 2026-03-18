@@ -1,0 +1,8 @@
+{
+  "name": "intel-simulator",
+  "private": true,
+  "scripts": {
+    "test": "node tools/validate-intel-subset.js",
+    "test:breakpoint": "node tools/validate-intel-subset.js --filter breakpoint"
+  }
+}

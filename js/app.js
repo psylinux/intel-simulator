@@ -3096,7 +3096,6 @@ function restoreSnapshot(snap) {
   S.stackMem   = snap.stackMem.slice();
   S.stackState = new Map(snap.stackState);
   S.memState   = [...snap.memState];
-  S.pc         = snap.pc;
   S.callFrames = snap.callFrames.map(f => ({ ...f }));
   S.halt       = false;
   markRegistersChanged(Object.keys(S.regs));
@@ -3107,6 +3106,7 @@ function restoreSnapshot(snap) {
   refreshStats();
   refreshPreview();
   refreshBreakdown();
+  setPC(snap.pc, { traceAutoScroll: true });
 }
 
 async function doExecute(opts={}) {
@@ -3196,11 +3196,28 @@ async function doStepForward() {
   S.busy = false; setBusy(false);
 }
 
-function doStepBackward() {
+async function _executeOneReverse(fromAddr) {
+  const instr = decodeAt(fromAddr);
+  // EXECUTE → DECODE → FETCH (ordem inversa)
+  setStatus(`EXECUTE: ${instr.mnem} — revertendo`,'lbl-load',{log:false});
+  await sleep(S.speed * 0.2);
+  setStatus(`DECODE: ${instr.mnem} — revertendo`,'lbl-fetch',{log:false});
+  await sleep(S.speed * 0.2);
+  setStatus(`FETCH  IP=0x${fmtA(fromAddr)} — revertendo`,'lbl-fetch',{log:false});
+  for(let i=0;i<instr.size;i++){const ma=(fromAddr+i)&0x3F; setMemSt(ma,'mc-pc');}
+  await sleep(S.speed * 0.25);
+  for(let i=0;i<instr.size;i++){const ma=(fromAddr+i)&0x3F; setMemSt(ma,S.memState[ma]||'');}
+  setStatus(`BACK concluído — IP = 0x${fmtA(fromAddr)}`,'lbl-done',{log:false});
+}
+
+async function doStepBackward() {
   if(!S.paused) return;
   if(S.history.length === 0) return;
   const snap = S.history.pop();
+  S.busy = true; setBusy(true);
+  await _executeOneReverse(snap.pc);
   restoreSnapshot(snap);
+  S.busy = false; setBusy(false);
 }
 
 // ─────────────────────────────────────────────────────────

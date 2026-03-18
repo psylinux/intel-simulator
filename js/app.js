@@ -720,6 +720,11 @@ function applyStackSize() {
 // INIT
 // ─────────────────────────────────────────────────────────
 function init() {
+  if(window.APP_VERSION) {
+    const vEl = document.getElementById('appVersion');
+    if(vEl) vEl.textContent = window.APP_VERSION;
+    document.title = `Intel x86/x64 Memory & Stack Lab ${window.APP_VERSION}`;
+  }
   loadSidebarPanelWidth();
   loadStackPanelWidth();
   loadCodeMemSplit();
@@ -1406,7 +1411,7 @@ function currentReturnInfo() {
 
 function stackTraceExtra(frameCall) {
   if(!frameCall) return 'Frame raiz: nenhuma chamada ativa e nenhum endereco de retorno pendente.';
-  return `RET 0x${fmtA(frameCall.returnTo)} · slot [0x${fmtStackA(frameCall.slot)}] · entrou via ${frameCall.callAsm} @ 0x${fmtA(frameCall.callSite)}`;
+  return `<span class="stack-trace-ret-addr">RET → 0x${fmtA(frameCall.returnTo)}</span> · slot [0x${fmtStackA(frameCall.slot)}] · entrou via ${frameCall.callAsm} @ 0x${fmtA(frameCall.callSite)}`;
 }
 
 function stackTraceFrames() {
@@ -1479,9 +1484,9 @@ function stackTraceFrames() {
 
 function buildStackTrace() {
   const items = stackTraceFrames();
-  const rows = items.map(item => `
+  const rows = [...items].reverse().map((item, i) => `
     <div class="stack-trace-row stack-trace-row-${item.kind}">
-      <span class="stack-trace-depth">#${item.depth}</span>
+      <span class="stack-trace-depth">#${i}</span>
       <span class="stack-trace-kind">${item.label}</span>
       <span class="stack-trace-addr">0x${fmtA(item.addr)}</span>
       <span class="stack-trace-asm">${item.asm}</span>

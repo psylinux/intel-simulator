@@ -27,6 +27,14 @@ python3 -m http.server 8080
 
 ## 🎮 Como usar
 
+### Dicas
+
+- Clique em qualquer célula de memória para selecionar aquele endereço
+- Use DWORD para ver a diferença completa entre Little e Big Endian
+- Reduza a velocidade para acompanhar cada byte individualmente
+- O registrador de destino no LOAD vai se preenchendo byte a byte ao vivo
+- Salve (💾) e carregue (📂) simulações como arquivos JSON
+
 ### Painel Esquerdo (controles)
 
 | Controle    | Descrição                                     |
@@ -45,13 +53,6 @@ python3 -m http.server 8080
 - **STEP** → Executa o ciclo completo FETCH → DECODE → EXECUTE
 - **CLEAR** → Reinicia tudo
 
-### Dicas
-
-- Clique em qualquer célula de memória para selecionar aquele endereço
-- Use DWORD para ver a diferença completa entre Little e Big Endian
-- Reduza a velocidade para acompanhar cada byte individualmente
-- O registrador de destino no LOAD vai se preenchendo byte a byte ao vivo
-- Salve (💾) e carregue (📂) simulações como arquivos JSON
 
 ---
 

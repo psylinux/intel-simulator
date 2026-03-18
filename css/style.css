@@ -128,6 +128,11 @@ body::before {
   font-size: var(--fs-ui-xs); color: var(--tx2); letter-spacing: 1px; margin-top: 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px;
 }
+.tb-version {
+  font-size: 11px; font-weight: 500; letter-spacing: .6px;
+  color: var(--tx2); opacity: .7;
+  vertical-align: middle; margin-left: 4px;
+}
 
 .tb-nav { display: flex; gap: 12px; flex: 1; justify-content: center; }
 
@@ -2076,6 +2081,18 @@ body.code-mem-resizing #codeMemSplitHandle {
   border: 1px dashed rgba(148,163,184,.18);
   border-radius: var(--r);
   padding: 8px;
+}
+.stack-trace-ret-addr {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: var(--fs-ui-xs);
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--role-ret);
+  background: rgba(192,38,255,.14);
+  border: 1px solid rgba(192,38,255,.40);
 }
 .stack-list {
   display: flex;

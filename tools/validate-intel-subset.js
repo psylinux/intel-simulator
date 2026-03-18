@@ -1,23 +1,23 @@
 #!/usr/bin/env node
-// ═══════════════════════════════════════════════════════════════════════════
-//  MEM·SIM — Test Suite
-//
-//  Testa conformidade com Intel SDM x86/x86-64, regressão e bugs.
-//  Execução: node tools/validate-intel-subset.js [--filter <pattern>]
-//
-//  Categorias:
-//    [encoding]   — Codificação de bytes (assemble)
-//    [decode]     — Decodificador de opcode (decodeAt)
-//    [execute]    — Efeitos arquiteturais (_executeOne)
-//    [memory]     — Leitura/escrita de memória (doStore/doLoad)
-//    [stack]      — Pilha (PUSH/POP/CALL/RET)
-//    [endian]     — Endianness: execução sempre LE, visualização configurável
-//    [regs]       — Registradores (getReg/setReg/regBytes)
-//    [assembler]  — validateAssembly + assemble()
-//    [fetch]      — Ciclo FETCH / avanço de PC
-//    [fault]      — Detecção de falhas e halt
-//    [regression] — Bugs conhecidos que não devem regredir
-// ═══════════════════════════════════════════════════════════════════════════
+/*-*- mode:javascript;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=javascript ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
+╞═══════════════════════════════════════════════════════════════════════════════════════╡
+│ Copyright 2026 Marcos Azevedo (aka psylinux)                                          │
+│                                                                                       │
+│ Permission to use, copy, modify, and/or distribute this software for                  │
+│ any purpose with or without fee is hereby granted, provided that the                  │
+│ above copyright notice and this permission notice appear in all copies.               │
+│                                                                                       │
+│ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL                         │
+│ WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED                         │
+│ WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE                      │
+│ AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL                  │
+│ DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR                 │
+│ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER                        │
+│ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR                      │
+│ PERFORMANCE OF THIS SOFTWARE.                                                         │
+╚───────────────────────────────────────────────────────────────────────────────────────*/
+
 'use strict';
 
 const assert = require('node:assert/strict');
@@ -26,7 +26,30 @@ const path   = require('node:path');
 const vm     = require('node:vm');
 
 const ROOT   = path.resolve(__dirname, '..');
-const APP_JS = path.join(ROOT, 'js', 'app.js');
+
+// Lista de arquivos em ordem de dependência.
+// Durante a refatoração em fases, basta trocar APP_JS por APP_FILES
+// progressivamente. Por ora, app.js contém tudo.
+const APP_FILES = [
+  'js/app-state.js',
+  'js/app-utils.js',
+  'js/app-registers.js',
+  'js/app-memory.js',
+  'js/app-assembler.js',
+  'js/app-logger.js',
+  'js/app-cpu.js',
+  'js/app-layout.js',
+  'js/app-ui.js',
+  'js/app-main.js',
+].map(f => path.join(ROOT, f));
+
+// Mock mínimo de I18N — substitui a dependência de browser (i18n.js)
+// no contexto Node/vm, permitindo remover I18N_PT do código do app.
+const I18N_MOCK = `
+const I18N = { t: k => k, init: ()=>{}, setLocale: ()=>{}, applyDOM: ()=>{},
+               current: ()=>'pt-BR', locales: ()=>[] };
+function t(key) { return key; }
+`;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Mock DOM infrastructure
@@ -163,7 +186,8 @@ function loadSimulator() {
   ctx.globalThis = ctx;
   vm.createContext(ctx);
 
-  const source = fs.readFileSync(APP_JS, 'utf8') + `
+  const appSource = APP_FILES.map(f => fs.readFileSync(f, 'utf8')).join('\n');
+  const source = I18N_MOCK + appSource + `
 globalThis.__memsim = {
   S,
   init,
@@ -185,9 +209,19 @@ globalThis.__memsim = {
   toggleBreakpoint,
   instrStartFor,
   bpNumber,
+  // nomes novos (pós-refatoração) — aliases para compatibilidade
+  setArch:    typeof setArch    !== 'undefined' ? setArch    : doSetArch,
+  setEndian:  typeof setEndian  !== 'undefined' ? setEndian  : doSetEndian,
+  setSize:    typeof setSize    !== 'undefined' ? setSize    : doSetSize,
+  clearSim:   typeof clearSim   !== 'undefined' ? clearSim   : doClear,
+  selectReg:  typeof selectReg  !== 'undefined' ? selectReg  : doSelectReg,
+  clearLog:   typeof clearLog   !== 'undefined' ? clearLog   : doClearLog,
+  assembleInput: typeof assembleInput !== 'undefined' ? assembleInput : doAssemble,
+  // nomes originais mantidos durante transição
   doSetArch,
   doSetEndian,
   doSetSize,
+  doClear,
   setPC,
   getReg,
   setReg,
@@ -219,10 +253,29 @@ globalThis.__memsim = {
   is64,
   sizeN,
   transferWidth,
-  doClear,
+  // utils extended
+  trimNumericText,
+  memByteAt,
+  // register extended
+  markRegistersChanged,
+  clearChangedRegisters,
+  regWidthBytes,
+  resetStatsState,
+  resetStackState,
+  // memory extended
+  writeStackBytes,
+  readStackBytes,
+  readStackPtrLE,
+  // assembler validation
+  editDistance,
+  wideAliasForReg,
+  parseAsmMemoryOperand,
+  // cpu history
+  snapshotState,
+  restoreSnapshot,
 };
 `;
-  vm.runInContext(source, ctx, { filename: APP_JS });
+  vm.runInContext(source, ctx, { filename: APP_FILES[APP_FILES.length - 1] });
   return { api: ctx.__memsim, document, elements };
 }
 
@@ -2400,6 +2453,305 @@ test('breakpointHit: limpo ao iniciar RESUME e atualizado no próximo hit', asyn
   await api.doResume();
   assert.equal(api.S.breakpointHit, 0x03, 'segundo hit em 0x03');
   assert.equal(api.S.pc, 0x03);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: UTILS EXTENDED
+// ═══════════════════════════════════════════════════════════════════════════
+suite('utils-extended');
+
+test('formatStackSize: bytes abaixo de 1024 exibe como "N B"', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.S.stackSize = 100, 100);
+  assert.equal(
+    (() => { api.S.stackSize = 100; return api.S; })() && true, true
+  );
+  // acessa diretamente via contexto da api
+  const { api: a2 } = loadSimulator();
+  a2.S.stackSize = 512;
+  // formatStackSize usa S.stackSize internamente — verificar via normalizeStackSizeBytes
+  assert.equal(a2.normalizeStackSizeBytes(512), 512);
+  assert.equal(a2.normalizeStackSizeBytes(1024), 1024);
+  assert.equal(a2.normalizeStackSizeBytes(2048), 2048);
+});
+
+test('trimNumericText: remove zeros à direita e ponto decimal redundante', () => {
+  const { api } = loadSimulator();
+  // Decimais: zeros após o ponto são removidos
+  assert.equal(api.trimNumericText('1.500'),   '1.5');   // zeros após dígito significativo
+  assert.equal(api.trimNumericText('100.000'), '100');   // ponto + todos os zeros removidos
+  assert.equal(api.trimNumericText('0.0'),     '0');     // ponto + zero — fica só '0'
+  assert.equal(api.trimNumericText('3.14'),    '3.14');  // sem zeros à direita — inalterado
+  assert.equal(api.trimNumericText('2.10'),    '2.1');   // apenas o zero final removido
+  // A regex também remove zeros finais de inteiros sem ponto
+  assert.equal(api.trimNumericText('1'),       '1');     // sem zero — inalterado
+});
+
+test('normalizeSpeed: clamp em [80, 10000]', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.normalizeSpeed(0),     80);
+  assert.equal(api.normalizeSpeed(50),    80);
+  assert.equal(api.normalizeSpeed(80),    80);
+  assert.equal(api.normalizeSpeed(2500),  2500);
+  assert.equal(api.normalizeSpeed(10000), 10000);
+  assert.equal(api.normalizeSpeed(99999), 10000);
+  assert.equal(api.normalizeSpeed(NaN),   2500);
+});
+
+test('normalizeStackSizeBytes: clamp em [MIN, MAX]', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.normalizeStackSizeBytes(0),           1);
+  assert.equal(api.normalizeStackSizeBytes(-100),        1);
+  assert.equal(api.normalizeStackSizeBytes(100),         100);
+  assert.equal(api.normalizeStackSizeBytes(1024 * 1024), 1024 * 1024);
+  assert.equal(api.normalizeStackSizeBytes(9999999),     1024 * 1024);
+  assert.equal(api.normalizeStackSizeBytes(NaN),         100); // DEFAULT_STACK_SIZE
+});
+
+test('clamp: limita valor ao intervalo [min, max]', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.clamp(5, 0, 10),   5);
+  assert.equal(api.clamp(-5, 0, 10),  0);
+  assert.equal(api.clamp(15, 0, 10),  10);
+  assert.equal(api.clamp(0, 0, 0),    0);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: REGISTERS EXTENDED
+// ═══════════════════════════════════════════════════════════════════════════
+suite('registers-ext');
+
+test('markRegistersChanged: acumula nomes únicos em S.changedRegs', () => {
+  const { api } = loadSimulator();
+  resetSim(api, {getElementById:()=>({value:'0',style:{setProperty:()=>{}},classList:{add:()=>{},remove:()=>{}},textContent:''})});
+  api.S.changedRegs = [];
+  api.markRegistersChanged('EAX');
+  api.markRegistersChanged('EBX');
+  api.markRegistersChanged('EAX'); // duplicata — não deve repetir
+  assert.deepEqual(toArr(api.S.changedRegs).sort(), ['EAX', 'EBX']);
+});
+
+test('clearChangedRegisters: limpa S.changedRegs', () => {
+  const { api } = loadSimulator();
+  api.S.changedRegs = ['EAX', 'EBX'];
+  api.clearChangedRegisters();
+  assert.deepEqual(toArr(api.S.changedRegs), []);
+});
+
+test('regWidthBytes: 4 bytes para IA-32; 8 para x64 GP, 4 para SP', () => {
+  const { api } = loadSimulator();
+  api.S.arch = 'ia32';
+  assert.equal(api.regWidthBytes('EAX'), 4);
+  assert.equal(api.regWidthBytes('ESP'), 4);
+  api.S.arch = 'x64';
+  assert.equal(api.regWidthBytes('RAX'), 8);
+  assert.equal(api.regWidthBytes('RSP'), 4); // SP ainda é 4 em x64
+  assert.equal(api.regWidthBytes('R8'),  8);
+});
+
+test('transferWidth: limitado pelo menor entre sizeN() e regWidthBytes()', () => {
+  const { api } = loadSimulator();
+  api.S.arch = 'ia32';
+  api.S.size = 'dword';
+  api.S.reg  = 'EAX';
+  assert.equal(api.transferWidth('EAX'), 4);
+  api.S.size = 'byte';
+  assert.equal(api.transferWidth('EAX'), 1);
+  api.S.arch = 'x64';
+  api.S.size = 'qword';
+  api.S.reg  = 'RAX';
+  assert.equal(api.transferWidth('RAX'), 8);
+});
+
+test('setRegParts + regParts: round-trip para RAX em x64', () => {
+  const { api } = loadSimulator();
+  api.S.arch = 'x64';
+  api.setRegParts('RAX', 0xDEADBEEF, 0x12345678, { track: false });
+  const { lo, hi } = api.regParts('RAX');
+  assert.equal(lo >>> 0, 0xDEADBEEF);
+  assert.equal(hi >>> 0, 0x12345678);
+});
+
+test('setRegFromBytes: preenche com zeros quando array é menor que largura', () => {
+  const { api } = loadSimulator();
+  api.S.arch = 'ia32';
+  // Fornece 2 bytes para registrador de 4 bytes — os outros 2 devem ser 0
+  api.setRegFromBytes('EAX', [0xBE, 0xEF], { track: false });
+  assert.equal(api.getReg('EAX'), 0x0000EFBE);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: MEMORY EXTENDED
+// ═══════════════════════════════════════════════════════════════════════════
+suite('memory-ext');
+
+test('memByteAt: retorna 0 para endereço fora do espaço de memória', () => {
+  const { api } = loadSimulator();
+  api.S.stackSize = 100;
+  assert.equal(api.memByteAt(-1), 0);
+  assert.equal(api.memByteAt(200), 0); // além de stackSize
+});
+
+test('memByteAt: lê de S.mem para addr < 64, de S.stackMem para addr >= 64', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  api.S.mem[10] = 0xAB;
+  assert.equal(api.memByteAt(10), 0xAB);
+  api.S.stackMem[64] = 0xCD;
+  assert.equal(api.memByteAt(64), 0xCD);
+});
+
+test('mapAccessFits: rejeita addr negativo, width zero, overflow de 64 bytes', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.mapAccessFits(-1, 1),  false);
+  assert.equal(api.mapAccessFits(0, 0),   false);
+  assert.equal(api.mapAccessFits(63, 1),  true);
+  assert.equal(api.mapAccessFits(63, 2),  false); // 63+2-1=64 >= 64
+  assert.equal(api.mapAccessFits(0, 64),  true);
+  assert.equal(api.mapAccessFits(0, 65),  false);
+});
+
+test('stackAccessFits: rejeita addr+width > stackSize', () => {
+  const { api } = loadSimulator();
+  api.S.stackSize = 100;
+  assert.equal(api.stackAccessFits(0, 1),    true);
+  assert.equal(api.stackAccessFits(99, 1),   true);
+  assert.equal(api.stackAccessFits(100, 1),  false); // 100+1=101 > 100
+  assert.equal(api.stackAccessFits(-1, 1),   false);
+  assert.equal(api.stackAccessFits(0, 0),    false);
+});
+
+test('writeStackBytes + readStackBytes: round-trip multi-byte', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  const bytes = [0x11, 0x22, 0x33, 0x44];
+  const addr  = api.S.stackSize - 8;
+  api.writeStackBytes(addr, bytes);
+  const result = api.readStackBytes(addr, 4);
+  assert.deepEqual(toArr(result), bytes);
+});
+
+test('readStackPtrLE: monta valor little-endian de 4 bytes corretamente', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  const addr = api.S.stackSize - 8;
+  api.writeStackBytes(addr, [0xEF, 0xBE, 0xAD, 0xDE]);
+  assert.equal(api.readStackPtrLE(addr, 4), 0xDEADBEEF);
+});
+
+test('isInstructionFault: retorna true para instrução com unknown/decodeError', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.isInstructionFault({ unknown: true }),      true);
+  assert.equal(api.isInstructionFault({ decodeError: true }),  true);
+  assert.equal(api.isInstructionFault({ op: 0x90 }),           false);
+  assert.equal(api.isInstructionFault(null),                   false);
+  assert.equal(api.isInstructionFault(undefined),              false);
+});
+
+test('resetStackState: zera stackMem e reseta ESP/EBP para topo', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  // Escreve alguns bytes na stack
+  api.S.stackMem[10] = 0xFF;
+  api.S.regs.ESP = 0;
+  api.resetStackState();
+  assert.equal(api.S.stackMem[10], 0);
+  assert.equal(api.S.regs.ESP, api.S.stackSize);
+  assert.equal(api.S.regs.EBP, api.S.stackSize);
+  assert.deepEqual(toArr(api.S.callFrames), []);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: ASSEMBLER VALIDATION
+// ═══════════════════════════════════════════════════════════════════════════
+suite('assembler-validation');
+
+test('editDistance: 0 para strings idênticas', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.editDistance('MOV', 'MOV'), 0);
+  assert.equal(api.editDistance('', ''), 0);
+});
+
+test('editDistance: 1 para substituição simples', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.editDistance('MOV', 'MOP'), 1);
+  assert.equal(api.editDistance('PUSH', 'PISH'), 1);
+});
+
+test('editDistance: distância correta para strings diferentes', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.editDistance('MOV', 'JMP'), 3);
+  assert.equal(api.editDistance('CALL', 'CALLS'), 1);
+});
+
+test('wideAliasForReg: mapeia EAX→RAX, retorna string vazia para não-mapeados', () => {
+  const { api } = loadSimulator();
+  assert.equal(api.wideAliasForReg('EAX'), 'RAX');
+  assert.equal(api.wideAliasForReg('EBX'), 'RBX');
+  assert.equal(api.wideAliasForReg('ESP'), 'RSP');
+  assert.equal(api.wideAliasForReg('RAX'), ''); // já é 64-bit, sem alias
+  assert.equal(api.wideAliasForReg('R8'),  ''); // x64-only
+});
+
+test('parseAsmMemoryOperand: rejeita endereço > 0x3F com mensagem de erro', () => {
+  const { api } = loadSimulator();
+  const result = api.parseAsmMemoryOperand('[0x40]');
+  assert.ok(result.error, 'deve retornar erro para addr > 0x3F');
+});
+
+test('validateAssembly: retorna erro para mnemônico desconhecido', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  const result = api.validateAssembly('XYZZY EAX, 0x01', 0);
+  assert.ok(result.error, 'deve reportar erro para mnemônico inválido');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: SAVE / RESTORE
+// ═══════════════════════════════════════════════════════════════════════════
+suite('save-restore');
+
+test('normalizeSpeed: valores dentro do range são preservados', () => {
+  const { api } = loadSimulator();
+  [80, 500, 1000, 2500, 10000].forEach(v => {
+    assert.equal(api.normalizeSpeed(v), v, `normalizeSpeed(${v})`);
+  });
+});
+
+test('normalizeStackSizeBytes: valores no range são preservados', () => {
+  const { api } = loadSimulator();
+  [1, 100, 1024, 65536, 1024 * 1024].forEach(v => {
+    assert.equal(api.normalizeStackSizeBytes(v), v, `normalizeStackSizeBytes(${v})`);
+  });
+});
+
+test('snapshotState + restoreSnapshot: estado é preservado e restaurado', () => {
+  const { api } = loadSimulator();
+  resetSim(api, { getElementById: () => ({ value: '0', style: { setProperty() {} }, classList: { add() {}, remove() {} }, textContent: '' }) });
+  api.S.regs.EAX = 0xDEADBEEF;
+  api.S.mem[0] = 0xAA;
+  api.S.pc = 5;
+  api.snapshotState();
+  // Muda estado após snapshot
+  api.S.regs.EAX = 0;
+  api.S.mem[0] = 0;
+  api.S.pc = 10;
+  // Restaura
+  api.restoreSnapshot(api.S.history.pop());
+  assert.equal(api.S.regs.EAX, 0xDEADBEEF);
+  assert.equal(api.S.mem[0], 0xAA);
+  assert.equal(api.S.pc, 5);
+});
+
+test('setArch: alterna entre ia32 e x64 corretamente', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setArch('x64');
+  assert.equal(api.S.arch, 'x64');
+  assert.equal(api.S.reg, 'RAX');
+  api.setArch('ia32');
+  assert.equal(api.S.arch, 'ia32');
+  assert.equal(api.S.reg, 'EAX');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -19,5 +19,8 @@ jobs:
         with:
           node-version: 22
 
+      - name: Generate version.js
+        run: bash update-version.sh
+
       - name: Run regression suite
         run: npm test

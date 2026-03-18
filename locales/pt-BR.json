@@ -4,9 +4,7 @@
     "name": "Português (Brasil)",
     "dir": "ltr"
   },
-
   "page.title": "Intel x86/x64 Memory & Stack Lab",
-
   "topbar.subtitle": "Simulador didático de memória, registradores e stack",
   "topbar.pc.title": "Edite o PC manualmente",
   "topbar.btn.help": "Ajuda / Tutorial",
@@ -16,13 +14,11 @@
   "topbar.chip.ops": "OPS",
   "topbar.chip.arch": "ARCH",
   "topbar.chip.pc": "PC",
-
   "sidebar.arch.label": "ARQUITETURA",
   "sidebar.arch.ia32.name": "IA-32",
   "sidebar.arch.ia32.sub": "32-bit · EAX..EDI",
   "sidebar.arch.x64.name": "x86-64",
   "sidebar.arch.x64.sub": "64-bit · RAX..R15",
-
   "sidebar.endian.label": "ENDIANNESS (EXPERIMENTAL)",
   "sidebar.endian.little.name": "LITTLE",
   "sidebar.endian.little.sub": "LSB primeiro",
@@ -30,7 +26,6 @@
   "sidebar.endian.big.sub": "MSB primeiro",
   "sidebar.endian.hint.little": "← byte menos significativo (LSB)",
   "sidebar.endian.hint.big": "← byte mais significativo (MSB)",
-
   "sidebar.size.label": "TAMANHO",
   "sidebar.size.byte": "BYTE",
   "sidebar.size.byte.sub": "8 bit",
@@ -40,21 +35,16 @@
   "sidebar.size.dword.sub": "32 bit",
   "sidebar.size.qword": "QWORD",
   "sidebar.size.qword.sub": "64 bit",
-
   "sidebar.reg.label": "REGISTRADOR",
-
   "sidebar.speed.label": "VELOCIDADE",
   "sidebar.speed.fast": "RÁPIDO",
   "sidebar.speed.slow": "LENTO",
-
   "editguide.title": "EDICAO RAPIDA",
   "editguide.hint1": "Clique no <strong>PC</strong> e nos <strong>valores dos registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.",
   "editguide.hint2": "Edite o programa direto na <strong>LISTAGEM ASM</strong> com <strong>2× clique</strong> em qualquer instrucao.",
-
   "regs.gp.label": "REGISTRADORES DE USO GERAL",
   "regs.ext.label": "R8 — R15  (x86-64)",
   "regs.sp.label": "PONTEIROS DE PILHA",
-
   "ctrlbar.cpu.title": "CPU",
   "ctrlbar.mem.title": "MEMÓRIA",
   "ctrlbar.btn.step": "STEP",
@@ -69,7 +59,6 @@
   "ctrlbar.btn.load": "LOAD",
   "ctrlbar.btn.push": "PUSH",
   "ctrlbar.btn.pop": "POP",
-
   "mem.section.label": "MAPA DE MEMÓRIA",
   "mem.addrdir": "0x{0}..0x{1} · cresce ↓",
   "mem.legend.active": "Ativo",
@@ -81,7 +70,6 @@
   "mem.bp.none": "Nenhum breakpoint definido",
   "mem.bp.clr.title": "Limpar todos os breakpoints",
   "mem.bp.clr.btn": "LIMPAR",
-
   "asm.section.label": "LISTAGENS DE CODIGO",
   "asm.trace.head.asm": "LISTAGEM ASM",
   "asm.trace.head.pseudo": "PSEUDO-CÓDIGO",
@@ -91,7 +79,6 @@
   "asm.bp.remove": "BP #{0} — clique para remover",
   "asm.nav.title": "Clique para navegar · 2× clique para editar",
   "asm.pseudocode.title": "Clique para navegar",
-
   "log.section.label": "LOG DE OPERAÇÕES",
   "log.clear.btn": "limpar",
   "log.kind.step": "STEP",
@@ -100,7 +87,6 @@
   "log.kind.info": "CPU",
   "log.kind.error": "ERRO",
   "log.kind.sys": "SISTEMA",
-
   "stack.label.ia32": "STACK  ESP/EBP",
   "stack.label.x64": "STACK  RSP/RBP",
   "stack.cfg.toggle.title": "Configurações da stack",
@@ -118,12 +104,10 @@
   "stack.cfg.gran.word": "Word",
   "stack.cfg.gran.dword": "DWord",
   "stack.cfg.gran.qword": "QWord",
-
   "resize.sidebar": "Arraste para ajustar a largura da coluna esquerda",
   "resize.section": "Arraste para ajustar a altura desta seção",
   "resize.codemem": "Arraste para ajustar a largura entre mapa e listagens",
   "resize.stack": "Arraste para ajustar a largura da stack",
-
   "ui.reg.edit.title": "Clique para editar",
   "ui.reg.picker.title": "Clique para editar",
   "ui.stack.row.title": "Clique para localizar no mapa de memoria · 2× clique para editar",
@@ -131,21 +115,15 @@
   "ui.section.expand": "Expandir seção",
   "ui.asm.valid": "Instrucao valida ({0} byte(s))",
   "ui.asm.write.title": "Grava bytes no PC atual. Enter para confirmar.",
-
   "help.modal.title": "GUIA DE ENDIANNESS",
   "help.tab.intro": "Introdução",
   "help.tab.little": "Little Endian",
   "help.tab.big": "Big Endian",
   "help.tab.ops": "Operações",
-
   "help.intro": "<h3>O QUE É ENDIANNESS?</h3><p>Endianness define a <strong>ordem dos bytes</strong> na qual um valor multi-byte é armazenado na memória. A questão central é: qual byte vai para o endereço mais baixo?</p><p>Os dois formatos principais são <span class=\"hl\">Little Endian</span> e <span class=\"hl-b\">Big Endian</span>.</p><div class=\"info-box\">💡 O nome vem de \"As Viagens de Gulliver\" — a guerra entre os que quebram o ovo pelo lado pequeno (<em>little-endians</em>) e os que o quebram pelo lado grande (<em>big-endians</em>).</div><p><strong>CPUs x86/x64</strong> (Intel, AMD) → Little Endian<br><strong>Protocolos TCP/IP</strong> → Big Endian (\"network byte order\")<br><strong>ARM</strong> → bi-endian (configurável)</p>",
-
   "help.little": "<h3>LITTLE ENDIAN</h3><p>O byte <span class=\"hl\">menos significativo (LSB)</span> fica no <strong>menor endereço</strong> de memória.</p><p>Exemplo: valor <span class=\"hl\">0xDEADBEEF</span> a partir de 0x0000:</p><div class=\"mem-diagram\"><div class=\"md-cell md-addr\"></div><div class=\"md-cell md-hdr\">+0</div><div class=\"md-cell md-hdr\">+1</div><div class=\"md-cell md-hdr\">+2</div><div class=\"md-cell md-hdr\">+3</div><div class=\"md-cell md-addr\">0x0000</div><div class=\"md-cell md-lsb\">EF</div><div class=\"md-cell md-mid\">BE</div><div class=\"md-cell md-mid\">AD</div><div class=\"md-cell md-msb\">DE</div></div><p><strong style=\"color:var(--grn)\">EF</strong> (LSB) → 0x0000 &nbsp;|&nbsp; <strong style=\"color:var(--blu)\">DE</strong> (MSB) → 0x0003</p><div class=\"info-box\">✓ Usado por: x86, x64, ARM (padrão), RISC-V<br>✓ Vantagem: extensão de inteiros sem alterar o endereço base</div>",
-
   "help.big": "<h3>BIG ENDIAN</h3><p>O byte <span class=\"hl-b\">mais significativo (MSB)</span> fica no <strong>menor endereço</strong> de memória.</p><p>Exemplo: valor <span class=\"hl-b\">0xDEADBEEF</span> a partir de 0x0000:</p><div class=\"mem-diagram\"><div class=\"md-cell md-addr\"></div><div class=\"md-cell md-hdr\">+0</div><div class=\"md-cell md-hdr\">+1</div><div class=\"md-cell md-hdr\">+2</div><div class=\"md-cell md-hdr\">+3</div><div class=\"md-cell md-addr\">0x0000</div><div class=\"md-cell md-msb\">DE</div><div class=\"md-cell md-mid\">AD</div><div class=\"md-cell md-mid\">BE</div><div class=\"md-cell md-lsb\">EF</div></div><p><strong style=\"color:var(--blu)\">DE</strong> (MSB) → 0x0000 &nbsp;|&nbsp; <strong style=\"color:var(--grn)\">EF</strong> (LSB) → 0x0003</p><div class=\"info-box\">✓ Usado por: SPARC, PowerPC, TCP/IP<br>✓ No simulador: modo comparativo/visual; a execução Intel real continua little-endian</div>",
-
   "help.ops": "<h3>OPERAÇÕES</h3><p><span class=\"hl\">STORE</span> — Grava o valor do registrador na memória, byte a byte. O nibble sendo enviado fica destacado e um pacote animado voa até a célula de memória.</p><p><span class=\"hl-b\">LOAD</span> — Lê bytes da memória para o registrador. O registrador começa em zero e é preenchido byte a byte em tempo real — você vê o valor se construindo!</p><p><span style=\"color:var(--amb)\">STEP</span> — Executa o ciclo completo <strong>FETCH → DECODE → EXECUTE</strong>, atualizando PC, registradores, memória e stack conforme a instrução.</p><p><span style=\"color:var(--red)\">CLEAR</span> — Reinicia memória e registradores.</p><div class=\"info-box\">💡 Clique em qualquer célula de memória para selecionar aquele endereço.<br>💡 Use DWORD para ver o efeito completo Little vs Big Endian.<br>💡 Reduza a velocidade para acompanhar cada byte com calma.<br>💡 Salve 💾 e carregue 📂 simulações para compartilhar.</div>",
-
   "log.sys.stack_size": "Tamanho da stack ajustado para {0}. {1} reiniciados em 0x{2}. Mapa de memoria agora cobre 0x0000..0x{3}.",
   "log.sys.pc_manual": "PC definido manualmente: 0x{0}",
   "log.sys.stack_located": "Stack 0x{0} localizada no mapa de memoria.",
@@ -166,16 +144,13 @@
   "log.sys.demo_reset": "Reiniciado com programa demo.",
   "log.sys.sim_saved": "Simulação salva.",
   "log.sys.sim_loaded": "Simulação carregada.",
-
   "log.store.start": "STORE {0}=0x{1} → [0x{2}] ({3}, execucao Intel little-endian; visualizacao {4})",
   "log.store.byte": "  [0x{0}] ← 0x{1}  (byte {2}/{3})",
   "log.store.done": "STORE completo em {0}ms",
   "log.store.exec_ok": "EXEC OK: {0}",
-
   "log.load.start": "LOAD [0x{0}] → {1} ({2}, execucao Intel little-endian; visualizacao {3})",
   "log.load.byte": "  {0}[+{1}] ← [0x{2}]=0x{3}  → {0}=0x{4}",
   "log.load.done": "LOAD completo: {0}=0x{1} em {2}ms",
-
   "log.info.fetch1": "FETCH  IP=0x{0} | opcode=0x{1} | {2} byte(s) · Intel SDM Vol.1 §6.3",
   "log.info.fetch2": "FETCH  IP ← 0x{0}  (incrementado durante o fetch, Intel SDM Vol.1 §6.3)",
   "log.info.decode": "DECODE → {0}",
@@ -183,7 +158,6 @@
   "log.info.fetch_ip": "{0} avança para 0x{1} após o FETCH, antes do efeito da instrução.",
   "log.info.decode_desc": "Os bytes buscados são decodificados como {0}.",
   "log.info.execute_desc": "Aplica os efeitos arquiteturais da instrução decodificada sobre PC, registradores, memória e stack quando necessário.",
-
   "log.error.addr_range": "Endereço 0x{0} fora do range",
   "log.error.asm_invalid_listing": "ASM inválido na listagem @ 0x{0} — {1}",
   "log.error.asm_grew": "Instrucao em 0x{0} cresceu de {1}B para {2}B e sobrescreveu o fluxo seguinte.",
@@ -192,10 +166,8 @@
   "log.error.asm_invalid": "ASM inválido em 0x{0} — {1}",
   "log.error.asm_unknown": "ASM: não reconhecido — \"{0}\"",
   "log.error.fail": "Falha: {0}",
-
   "log.push": "PUSH {0}=0x{1}: {2} decrementa para 0x{3} e o dado segue para o topo da pilha [0x{3}].",
   "log.pop": "POP [0x{0}] → {1}: o dado sai do topo da pilha e {2} sera incrementado apos a leitura.",
-
   "status.demo_loaded": "Programa demo carregado — main em 0x0000",
   "status.demo_arch": "Programa demo {0} carregado — PC em 0x0000",
   "status.asm_invalid": "ASM inválido em 0x{0} — {1}",

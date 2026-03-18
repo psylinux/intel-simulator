@@ -1,106 +1,22 @@
 #!/usr/bin/env node
-/**
- * assemble-verify.js
- *
- * Assembles two small x86 programs (IA-32 and x64) from scratch,
- * patches all CALL rel32 and JMP rel8 offsets, then verifies:
- *   - every encoded offset matches the expected arithmetic value
- *   - total byte count fits within 64 bytes
- *
- * IA-32 encoding rules used
- * ─────────────────────────
- *  MOV r32, imm32     0xB8+rd  imm32-LE              (5 B)
- *  MOV r/m32, r32     0x89     ModRM=0xC0|(src<<3)|dst (2 B)
- *  PUSH r/m32         0xFF     ModRM=0xF0|reg          (2 B)
- *  POP  r/m32         0x8F     ModRM=0xC0|reg          (2 B)
- *  CALL rel32         0xE8     rel32-LE                (5 B)
- *  JMP  rel8          0xEB     rel8                    (2 B)
- *  RET                0xC3                             (1 B)
- *  HLT                0xF4                             (1 B)
- *
- * x64 additions
- * ─────────────
- *  MOV r64, imm64     REX.W(0x48) 0xB8+rd imm64-LE   (10 B)
- *  MOV r/m64, r64     REX.W(0x48) 0x89    ModRM       (3 B)
- *  PUSH/POP r64       same opcodes as IA-32, 64-bit default mode (2 B each)
- *
- * Register indices (shared by both modes)
- *   RAX/EAX=0  RCX/ECX=1  RDX/EDX=2  RBX/EBX=3
- *   RSP/ESP=4  RBP/EBP=5  RSI/ESI=6  RDI/EDI=7
- *
- * ── Program layouts ──────────────────────────────────────────────────────
- *
- * IA-32 (63 bytes, fits in 64)
- * ────────────────────────────
- *  main:
- *   0000  MOV EAX, 0xAABBCCDD        (5)
- *   0005  MOV EBX, 0x11223344        (5)
- *   000A  CALL sub1                  (5)  → sub1 @ 0x001C  offset=0x0D
- *   000F  PUSH EAX                   (2)
- *   0011  MOV EAX, EBX               (2)  89 D8
- *   0013  CALL sub2                  (5)  → sub2 @ 0x0027  offset=0x0F
- *   0018  POP ECX                    (2)
- *   001A  JMP sub3                   (2)  → sub3 @ 0x0036  offset=0x1A
- *
- *  sub1 @ 001C  (11 bytes)
- *   001C  PUSH EBP                   (2)
- *   001E  MOV EBP, ESP               (2)  89 E5
- *   0020  PUSH EAX                   (2)
- *   0022  POP ECX                    (2)
- *   0024  POP EBP                    (2)
- *   0026  RET                        (1)
- *
- *  sub2 @ 0027  (15 bytes)
- *   0027  PUSH EBP                   (2)
- *   0029  MOV EBP, ESP               (2)
- *   002B  PUSH EAX                   (2)
- *   002D  PUSH EBX                   (2)
- *   002F  POP EDX                    (2)
- *   0031  POP ECX                    (2)
- *   0033  POP EBP                    (2)
- *   0035  RET                        (1)
- *
- *  sub3 @ 0036  (9 bytes, ends with HLT)
- *   0036  PUSH EBP                   (2)
- *   0038  MOV EBP, ESP               (2)
- *   003A  PUSH ECX                   (2)
- *   003C  POP EDX                    (2)
- *   003E  HLT                        (1)
- *
- * x64 (63 bytes, fits in 64)
- * ──────────────────────────
- *  main:
- *   0000  MOV RCX, 0x00000000AABBCCDD (10)
- *   000A  CALL sub1                   (5)  → sub1 @ 0x001D  offset=0x0E
- *   000F  PUSH RAX                    (2)
- *   0011  MOV RAX, RCX               (3)  48 89 C8
- *   0014  CALL sub2                   (5)  → sub2 @ 0x0029  offset=0x10
- *   0019  POP RBX                     (2)
- *   001B  JMP sub3                    (2)  → sub3 @ 0x0035  offset=0x18
- *
- *  sub1 @ 001D  (12 bytes)
- *   001D  PUSH RBP                   (2)
- *   001F  MOV RBP, RSP               (3)  48 89 E5
- *   0022  PUSH RCX                   (2)
- *   0024  POP RAX                    (2)
- *   0026  POP RBP                    (2)
- *   0028  RET                        (1)
- *
- *  sub2 @ 0029  (12 bytes)
- *   0029  PUSH RBP                   (2)
- *   002B  MOV RBP, RSP               (3)
- *   002E  PUSH RAX                   (2)
- *   0030  POP RSI                    (2)
- *   0032  POP RBP                    (2)
- *   0034  RET                        (1)
- *
- *  sub3 @ 0035  (10 bytes, ends with HLT)
- *   0035  PUSH RBP                   (2)
- *   0037  MOV RBP, RSP               (3)
- *   003A  PUSH RBX                   (2)
- *   003C  POP RDI                    (2)
- *   003E  HLT                        (1)
- */
+/*-*- mode:javascript;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=javascript ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
+╞═══════════════════════════════════════════════════════════════════════════════════════╡
+│ Copyright 2026 Marcos Azevedo (aka psylinux)                                          │
+│                                                                                       │
+│ Permission to use, copy, modify, and/or distribute this software for                  │
+│ any purpose with or without fee is hereby granted, provided that the                  │
+│ above copyright notice and this permission notice appear in all copies.               │
+│                                                                                       │
+│ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL                         │
+│ WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED                         │
+│ WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE                      │
+│ AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL                  │
+│ DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR                 │
+│ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER                        │
+│ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR                      │
+│ PERFORMANCE OF THIS SOFTWARE.                                                         │
+╚───────────────────────────────────────────────────────────────────────────────────────*/
 
 'use strict';
 

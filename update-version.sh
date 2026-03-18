@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gera version.js e atualiza cache-busting do app.js no index.html.
+# Gera version.js e atualiza cache-busting dos módulos JS no index.html.
 # Uso: ./update-version.sh          (usa o commit atual)
 #      ./update-version.sh v0.2     (altera o semver base)
 set -euo pipefail
@@ -13,7 +13,7 @@ cat > version.js <<EOF
 window.APP_VERSION = '${VERSION}';
 EOF
 
-# Atualiza o ?v= no script tag do app.js para forçar reload no browser
-sed -i "s|js/app\.js?v=[^\"]*|js/app.js?v=${COMMIT}|g" index.html
+# Atualiza (ou adiciona) ?v= em todos os módulos js/app-*.js no index.html
+sed -i -E "s|(js/app-[^.]+\.js)(\?v=[^\"]*)?\"|\1?v=${COMMIT}\"|g" index.html
 
 echo "Atualizado: ${VERSION}"

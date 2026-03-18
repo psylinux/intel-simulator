@@ -329,7 +329,7 @@ async function doPush() {
   for (let i = 0; i < width; i++) {
     const ma = sp + i;
     const hexPos = displayPosForTransferByte(reg, i, width);
-    storeHighlight(reg, hexPos, width);
+    storeHighlight(reg, hexPos, width, i);
     setMemSt(ma, 'mc-active');
     await animPacket('store', bs[i], ma, { surface: 'stack', regName: reg, byteIdx: i, transferCount: width });
     writeMem(ma, bs[i], 'mc-active');

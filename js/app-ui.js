@@ -692,13 +692,12 @@ function renderByteStrip(name, opts = {}) {
   }).join('');
 }
 
-function registerByteAnchor(name, byteIdx, transferCount = transferWidth(name)) {
+function registerByteAnchor(name, byteIdx) {
   const strip = $('rpb-' + name);
   if (!strip || !Number.isInteger(byteIdx)) return null;
-  const displayPos = displayPosForTransferByte(name, byteIdx, transferCount);
-  if (displayPos < 0) return null;
+  // O picker usa memoryOrder: bytes A+0, A+1, ... portanto byteIdx == posição direta
   const bytes = strip.querySelectorAll('.rp-byte');
-  return bytes[displayPos] || null;
+  return bytes[byteIdx] || null;
 }
 
 function updateRegCard(name) {
@@ -759,32 +758,39 @@ function liveUpdate(name, partial, byteIdx, transferCount = transferWidth(name))
   }
   if (s) s.innerHTML = renderRegisterEncapsulation(name);
 
+  // display-order para o reg card
   const hexPos = displayPosForTransferByte(name, byteIdx, transferCount);
   const done = new Set();
   for (let i = 0; i < byteIdx; i++) done.add(displayPosForTransferByte(name, i, transferCount));
 
-  // Update reg card bytes (visualização)
+  // Update reg card bytes (visualização, display order)
   const b = $('rcb-' + name);
   if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, doneSet: done, transferCount });
 
-  // Update picker bytes (âncora de animação + highlight)
+  // memory-order para o picker: byteIdx == posição direta em A+0, A+1, ...
+  const pickerDone = new Set();
+  for (let i = 0; i < byteIdx; i++) pickerDone.add(i);
+
+  // Update picker bytes (âncora de animação, memory order)
   const pb = $('rpb-' + name);
   if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
-    activePos: hexPos, doneSet: done,
+    activePos: byteIdx, doneSet: pickerDone,
     byteCount: regWidthBytes(name), transferCount });
   updatePickerVal(name);
 }
 
 // Highlight byte being SENT during STORE
-function storeHighlight(name, hexPos, transferCount = transferWidth(name)) {
-  // Update reg card bytes (visualização)
+// hexPos  = display-order index (para o reg card)
+// byteIdx = memory-order index A+i (para o picker)
+function storeHighlight(name, hexPos, transferCount = transferWidth(name), byteIdx = hexPos) {
+  // Update reg card bytes (visualização, display order)
   const b = $('rcb-' + name);
   if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, transferCount });
 
-  // Update picker bytes (âncora de animação + highlight)
+  // Update picker bytes (âncora de animação, memory order)
   const pb = $('rpb-' + name);
   if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
-    activePos: hexPos, byteCount: regWidthBytes(name), transferCount });
+    activePos: byteIdx, byteCount: regWidthBytes(name), transferCount });
   pulseRegister(name);
 }
 
@@ -1245,7 +1251,7 @@ async function doStore() {
     const ma = addr + i;
     if (ma >= 64) { lg('error', t('log.error.addr_range', fmtA(ma))); break; }
     const hexPos = displayPosForTransferByte(reg, i, n);
-    storeHighlight(reg, hexPos, n);
+    storeHighlight(reg, hexPos, n, i);
     setPC(ma, { traceAutoScroll: false });
     setMemSt(ma, 'mc-active');
     await animPacket('store', ord[i], ma, { regName: reg, byteIdx: i, transferCount: n });

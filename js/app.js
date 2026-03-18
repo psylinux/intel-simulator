@@ -1001,7 +1001,8 @@ function applyCodeMemSplit() {
 
   handle.hidden = false;
   if(!S.codeMemSplitManual) {
-    split.style.gridTemplateColumns = `minmax(${minPane}px, 1fr) ${handleW}px minmax(${minPane}px, 1fr)`;
+    // Painel de memória usa largura natural (fit-content); listagem ocupa o resto
+    split.style.gridTemplateColumns = `auto ${handleW}px minmax(${minPane}px, 1fr)`;
     return;
   }
 
@@ -2191,9 +2192,11 @@ function buildMemGrid() {
   if(tag) tag.textContent=`0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · total ${formatStackSize(totalBytes)}`;
   a.style.setProperty('--mem-row-count', String(rowCount));
   a.style.setProperty('--mem-cell-h', `${cellPx}px`);
+  a.style.setProperty('--mem-cell-w', `${cellPx}px`);
   a.style.minHeight = `${addrHeightPx}px`;
   g.style.setProperty('--mem-row-count', String(rowCount));
   g.style.setProperty('--mem-cell-h', `${cellPx}px`);
+  g.style.setProperty('--mem-cell-w', `${cellPx}px`);
   g.style.minHeight = `${gridHeightPx}px`;
 
   for(let r=0;r<rowCount;r++) {

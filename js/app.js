@@ -3114,6 +3114,10 @@ function snapshotState() {
 }
 
 function restoreSnapshot(snap) {
+  // Calcula quais registradores efetivamente mudaram antes de restaurar
+  const prevRegs = S.regs;
+  const actuallyChanged = Object.keys(snap.regs).filter(k => snap.regs[k] !== prevRegs[k]);
+
   S.regs       = { ...snap.regs };
   S.mem        = snap.mem.slice();
   S.stackMem   = snap.stackMem.slice();
@@ -3121,7 +3125,8 @@ function restoreSnapshot(snap) {
   S.memState   = [...snap.memState];
   S.callFrames = snap.callFrames.map(f => ({ ...f }));
   S.halt       = false;
-  markRegistersChanged(Object.keys(S.regs));
+  if (actuallyChanged.length > 0) markRegistersChanged(actuallyChanged);
+  else clearChangedRegisters();
   buildRegCards();
   buildMemGrid();
   buildStackView();

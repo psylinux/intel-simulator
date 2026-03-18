@@ -1342,15 +1342,18 @@ body.pane-resizing .canvas-pane-handle {
   border-color: var(--acc-dim);
 }
 
-.rc-byte.byte-active {
+.rc-byte.byte-active,
+.rp-byte.byte-active {
   background: var(--grn-dim); border-color: var(--grn); color: var(--grn);
 }
-.rc-byte.byte-arriving {
+.rc-byte.byte-arriving,
+.rp-byte.byte-arriving {
   background: var(--grn); border-color: var(--grn); color: var(--bg0);
   font-weight: 700;
   animation: byte-pop .35s var(--ease) forwards;
 }
-.rc-byte.byte-done {
+.rc-byte.byte-done,
+.rp-byte.byte-done {
   background: rgba(96,165,250,.12); border-color: var(--blu-dim); color: var(--blu);
 }
 @keyframes byte-pop {
@@ -1358,7 +1361,8 @@ body.pane-resizing .canvas-pane-handle {
   60%  { transform: scale(1.1); }
   100% { transform: scale(1); box-shadow: none; }
 }
-.reg-card.rc-loading::after {
+.reg-card.rc-loading::after,
+.rpbtn.rc-loading::after {
   content: '●';
   position: absolute; right: 10px; top: 12px;
   color: var(--blu); font-size: var(--fs-ui-xs);

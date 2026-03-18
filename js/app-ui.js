@@ -676,8 +676,8 @@ function renderByteStrip(name, opts = {}) {
   return displaySigIdxs.map((sigIdx, idx) => {
     const byte = hex8(littleBytes[sigIdx] || 0);
     let cls = byteCls;
-    if (!compact && idx === activePos) cls += ' byte-arriving';
-    else if (!compact && doneSet.has(idx)) cls += ' byte-done';
+    if (idx === activePos) cls += ' byte-arriving';
+    else if (doneSet.has(idx)) cls += ' byte-done';
     if (idx === basePos && idx >= transferStart) cls += ' rc-byte-base';
     if (transferCount > 1 && idx === lastPos && idx >= transferStart) cls += ' rc-byte-last';
 
@@ -693,11 +693,11 @@ function renderByteStrip(name, opts = {}) {
 }
 
 function registerByteAnchor(name, byteIdx, transferCount = transferWidth(name)) {
-  const strip = $('rcb-' + name);
+  const strip = $('rpb-' + name);
   if (!strip || !Number.isInteger(byteIdx)) return null;
   const displayPos = displayPosForTransferByte(name, byteIdx, transferCount);
   if (displayPos < 0) return null;
-  const bytes = strip.querySelectorAll('.rc-byte');
+  const bytes = strip.querySelectorAll('.rp-byte');
   return bytes[displayPos] || null;
 }
 
@@ -763,20 +763,34 @@ function liveUpdate(name, partial, byteIdx, transferCount = transferWidth(name))
   const done = new Set();
   for (let i = 0; i < byteIdx; i++) done.add(displayPosForTransferByte(name, i, transferCount));
 
+  // Update reg card bytes (visualização)
   const b = $('rcb-' + name);
   if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, doneSet: done, transferCount });
+
+  // Update picker bytes (âncora de animação + highlight)
+  const pb = $('rpb-' + name);
+  if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
+    activePos: hexPos, doneSet: done,
+    byteCount: regWidthBytes(name), transferCount });
+  updatePickerVal(name);
 }
 
 // Highlight byte being SENT during STORE
 function storeHighlight(name, hexPos, transferCount = transferWidth(name)) {
+  // Update reg card bytes (visualização)
   const b = $('rcb-' + name);
-  if (!b) return;
-  b.innerHTML = renderByteStrip(name, { activePos: hexPos, transferCount });
+  if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, transferCount });
+
+  // Update picker bytes (âncora de animação + highlight)
+  const pb = $('rpb-' + name);
+  if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
+    activePos: hexPos, byteCount: regWidthBytes(name), transferCount });
   pulseRegister(name);
 }
 
 function setLoading(name, on) {
   $('rc-' + name)?.classList.toggle('rc-loading', on);
+  $('r' + name)?.classList.toggle('rc-loading', on);
   if (!on) updateRegCard(name);
 }
 
@@ -1499,11 +1513,11 @@ function activeRegisterAnchor(dir, opts = {}) {
   const regName = opts.regName || S.reg;
   const transferCount = opts.transferCount || transferWidth(regName);
   const exactByte = registerByteAnchor(regName, opts.byteIdx, transferCount);
-  const bytes = $('rcb-' + regName);
+  const bytes = $('rpb-' + regName);
   if (dir === 'store') {
-    return exactByte || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-' + regName) || $('rc-' + regName);
+    return exactByte || bytes?.querySelector('.rp-byte-arriving, .rp-byte-done') || $('rpv-' + regName) || $('r' + regName);
   }
-  return exactByte || bytes?.querySelector('.byte-arriving, .byte-active, .byte-done') || $('rcv-' + regName) || $('rc-' + regName);
+  return exactByte || bytes?.querySelector('.rp-byte-arriving, .rp-byte-done') || $('rpv-' + regName) || $('r' + regName);
 }
 
 function setMemOpIndicator(addr, dir) {

@@ -481,10 +481,8 @@ function renderRegCards() {
   g.style.gridTemplateColumns = gp.length > 1 ? 'repeat(2, minmax(0, 1fr))' : `repeat(${gp.length}, 1fr)`;
   for (const name of gp) {
     const d = document.createElement('div');
-    const sel = name === S.reg;
-    d.className = 'reg-card' + (sel ? ' rc-selected' : '');
+    d.className = 'reg-card';
     d.id = 'rc-' + name;
-    d.onclick = (e) => { if (!e.target.closest('.rc-edit-input')) App.selectReg(name); };
     const valueHex = regHex(name);
     if (is64()) {
       d.innerHTML = `<div class="rc-name">${name}</div>
@@ -510,9 +508,8 @@ function renderRegCards() {
     eg.style.gridTemplateColumns = ext.length ? 'repeat(4, minmax(0, 1fr))' : '';
     for (const name of ext) {
       const d = document.createElement('div');
-      d.className = 'reg-card rc-ext' + (name === S.reg ? ' rc-selected' : '');
+      d.className = 'reg-card rc-ext';
       d.id = 'rc-' + name;
-      d.onclick = (e) => { if (!e.target.closest('.rc-edit-input')) App.selectReg(name); };
       const valueHex = regHex(name);
       d.innerHTML = `<div class="rc-name">${name}</div>
         <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}"><span class="rc-hi">${valueHex.slice(0, 8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
@@ -1127,7 +1124,6 @@ function setSize(s) {
 function selectReg(name) {
   S.reg = name;
   [...gpRegs(), ...extRegs(), ...spRegs()].forEach(r => {
-    $('rc-' + r)?.classList.toggle('rc-selected', r === name);
     $('r' + r)?.classList.toggle('active', r === name);
   });
   const maxHex = Math.min(sizeN() * 2, regWidthBytes(name) * 2);

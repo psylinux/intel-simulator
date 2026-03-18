@@ -1973,6 +1973,89 @@ test('múltiplos breakpoints: para no primeiro encontrado', async () => {
   assert.equal(api.S.paused, true);
 });
 
+test('RESUME também para em breakpoint', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP 0x00, NOP 0x01, NOP 0x02, HLT 0x03
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0xF4]);
+  api.setPC(0);
+  // Breakpoint em 0x01 para parar o RUN inicial
+  api.toggleBreakpoint(0x01);
+  await api.doRun();
+  assert.equal(api.S.pc, 0x01, 'RUN deve parar em 0x01');
+
+  // Adiciona breakpoint em 0x02 e remove o de 0x01
+  api.toggleBreakpoint(0x01);
+  api.toggleBreakpoint(0x02);
+  await api.doResume();
+  assert.equal(api.S.pc,     0x02, 'RESUME deve parar em 0x02');
+  assert.equal(api.S.paused, true);
+  assert.equal(api.S.halt,   false);
+});
+
+test('breakpoint no PC inicial dispara imediatamente no RUN', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xF4]);
+  api.setPC(0);
+  // Breakpoint exatamente no endereço inicial
+  api.toggleBreakpoint(0x00);
+  await api.doRun();
+  assert.equal(api.S.pc,     0x00, 'PC deve permanecer em 0x00');
+  assert.equal(api.S.paused, true,  'deve pausar imediatamente');
+  assert.equal(api.S.halt,   false);
+});
+
+test('STEP via _executeOne não é bloqueado por breakpoint', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00, NOP em 0x01
+  writeBytes(api, 0, [0x90, 0x90]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x00);  // breakpoint na instrução atual
+  // _executeOne (base do STEP) deve executar normalmente
+  await api._executeOne({ traceMode: 'step' });
+  assert.equal(api.S.pc, 0x01, 'STEP deve avançar PC mesmo com breakpoint no endereço');
+  assert.equal(api.S.halt, false);
+});
+
+test('breakpoint em instrução de 5 bytes (MOV EAX, imm32) — para no início da instrução', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00; MOV EAX, 0x12345678 em 0x01 (5 bytes); HLT em 0x06
+  writeBytes(api, 0, [0x90, 0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x01);
+  await api.doRun();
+  assert.equal(api.S.pc,     0x01, 'deve parar no início da instrução MOV');
+  assert.equal(api.S.paused, true);
+});
+
+test('breakpoint removido: RUN não para mais naquele endereço', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x01);
+  api.toggleBreakpoint(0x01);  // remove imediatamente
+  await api.doRun();
+  assert.equal(api.S.halt,   true,  'deve haltar no HLT, não pausar no breakpoint removido');
+  assert.equal(api.S.paused, false);
+});
+
+test('breakpoint não afeta estado de registradores: EAX correto após pausa', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EAX, 0xDEAD (5 bytes) em 0x00; NOP em 0x05
+  writeBytes(api, 0, [0xB8, 0xAD, 0xDE, 0x00, 0x00, 0x90, 0xF4]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x05);  // breakpoint após o MOV
+  await api.doRun();
+  assert.equal(api.S.pc,          0x05,   'deve parar no NOP após MOV');
+  assert.equal(api.S.regs.EAX,    0xDEAD, 'EAX deve ter sido atualizado pelo MOV antes do breakpoint');
+  assert.equal(api.S.paused,      true);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  RUNNER
 // ═══════════════════════════════════════════════════════════════════════════

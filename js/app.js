@@ -797,7 +797,7 @@ function init() {
     if(!c) return;
     if(c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
     const addr = +c.dataset.addr;
-    if(e.ctrlKey || e.metaKey) {
+    if(e.shiftKey) {
       toggleBreakpoint(addr);
       return;
     }
@@ -2196,7 +2196,7 @@ function buildMemGrid() {
       if(addr>=totalBytes) break;
       const cell=document.createElement('div');
       cell.className='mem-cell'; cell.dataset.addr=addr;
-      cell.title=`Endereco 0x${fmtMemA(addr)}`;
+      cell.title=`Endereco 0x${fmtMemA(addr)} · Shift+Clique para breakpoint`;
       cell.textContent=hex8(memByteAt(addr));
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);

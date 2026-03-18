@@ -1372,7 +1372,7 @@ body.pane-resizing .canvas-pane-handle {
 #ctrlBar {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: 0;
   padding: 10px 20px;
@@ -1423,6 +1423,8 @@ body.pane-resizing .canvas-pane-handle {
   gap: 8px;
   padding: 8px 12px;
   min-width: 160px;
+  flex: 1;
+  align-items: center;
 }
 .cb-speed-icon {
   width: 15px;
@@ -1492,6 +1494,7 @@ body.pane-resizing .canvas-pane-handle {
   justify-content: center;
   gap: 6px;
   padding: 8px 10px;
+  flex: 1;
 }
 
 /* ── botão base ── */

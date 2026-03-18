@@ -578,26 +578,27 @@ input[type=range]::-webkit-slider-thumb {
   flex-direction: column;
 }
 .bp-status-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 42px 54px 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 4px 8px;
   border-bottom: 1px solid rgba(239,68,68,.1);
   font-size: var(--fs-ui-xs);
   color: rgba(239,68,68,.65);
   transition: background .12s;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .bp-status-item:last-child { border-bottom: none; }
 .bp-status-num {
   font-weight: 700;
   letter-spacing: .5px;
-  min-width: 36px;
 }
 .bp-status-addr {
   opacity: .85;
 }
 .bp-status-hit-lbl {
-  margin-left: auto;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 1px;
@@ -605,6 +606,8 @@ input[type=range]::-webkit-slider-thumb {
   background: var(--red);
   border-radius: 3px;
   padding: 1px 5px;
+  justify-self: end;
+  flex-shrink: 0;
 }
 /* Item atingido — destaque sem esconder os demais */
 .bp-status-item-hit {

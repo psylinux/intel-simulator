@@ -15,6 +15,7 @@ const S = {
   size:   'dword',
   reg:    'EAX',
   stackMode: 'full',
+  stackGranularity: 'byte',  // 'byte' | 'word' | 'dword' | 'qword'
   stackSize: DEFAULT_STACK_SIZE,
   stackSizeInputUnit: 'B',
   changedRegs: [],
@@ -3951,6 +3952,22 @@ function stackRowMeta(addr) {
   return {primary, tags};
 }
 
+function stackGranBytes() {
+  switch(S.stackGranularity) {
+    case 'word':  return 2;
+    case 'dword': return 4;
+    case 'qword': return 8;
+    default:      return 1;
+  }
+}
+
+function stackGroupHex(baseAddr, n) {
+  // Lê n bytes a partir de baseAddr em little-endian e retorna string hex
+  let val = 0;
+  for(let i = n - 1; i >= 0; i--) val = (val * 256) + (S.stackMem[baseAddr + i] || 0);
+  return val.toString(16).padStart(n * 2, '0').toUpperCase();
+}
+
 function buildStackView() {
   const view = $('stackView');
   if(!view) return;
@@ -3961,18 +3978,39 @@ function buildStackView() {
   const bp = S.regs.EBP >>> 0;
   const retInfo = currentReturnInfo();
   const mode = S.stackMode === 'frame' ? 'FRAME' : 'FULL';
-  const list = S.stackMode === 'frame'
+  const gran = stackGranBytes();
+
+  // Lista de endereços base para cada linha (granulados, alinhados ao tamanho do grupo)
+  let rawList = S.stackMode === 'frame'
     ? frameAddressesDesc()
     : Array.from({length:Math.min(64, S.stackSize)}, (_,i)=>(S.stackSize - 1) - i);
 
+  // Ao agrupar, filtrar para que apenas o endereço base de cada grupo apareça
+  let list;
+  if(gran === 1) {
+    list = rawList;
+  } else {
+    const seen = new Set();
+    list = [];
+    for(const addr of rawList) {
+      const base = addr - (addr % gran);
+      if(!seen.has(base)) { seen.add(base); list.push(base); }
+    }
+  }
+
   const rows = list.map(addr => {
+    // Para granularidade > 1, verifica se todos os bytes do grupo estão na lista original
     const meta = stackRowMeta(addr);
     const tags = meta.tags.length
       ? meta.tags.map(tag => `<span class="stack-tag stack-tag-${tag.cls}">${tag.text}</span>`).join('')
       : '<span class="stack-row-empty">livre</span>';
-    return `<div class="stack-row stack-row-${meta.primary}" data-stack-addr="${addr}" title="Clique para localizar no mapa de memoria · 2× clique para editar">
+    const valHex = gran === 1
+      ? hex8(S.stackMem[addr] || 0)
+      : stackGroupHex(addr, gran);
+    const granLabel = gran === 1 ? '' : ` stack-row-gran-${S.stackGranularity}`;
+    return `<div class="stack-row${granLabel} stack-row-${meta.primary}" data-stack-addr="${addr}" title="Clique para localizar no mapa de memoria · 2× clique para editar">
       <span class="stack-row-addr">0x${fmtStackA(addr)}</span>
-      <span class="stack-row-byte">${hex8(S.stackMem[addr] || 0)}</span>
+      <span class="stack-row-byte">${valHex}</span>
       <span class="stack-row-tags">${tags}</span>
     </div>`;
   }).join('');
@@ -3999,6 +4037,13 @@ function buildStackView() {
 
 function toggleStackMode() {
   S.stackMode = S.stackMode === 'frame' ? 'full' : 'frame';
+  buildStackView();
+}
+
+function setStackGranularity(val) {
+  const valid = ['byte','word','dword','qword'];
+  if(!valid.includes(val)) return;
+  S.stackGranularity = val;
   buildStackView();
 }
 
@@ -4432,6 +4477,7 @@ const App = {
   doPop,
   doAssemble,
   toggleStackMode,
+  setStackGranularity,
   applyStackSize,
   clearLog:   doClearLog,
   showHelp,

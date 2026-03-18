@@ -1590,7 +1590,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   align-items: stretch;
   min-height: auto;
   padding: 0 14px 10px;
-  gap: 10px;
+  gap: 3px;
   overflow-x: auto;
   overflow-y: visible;
 }
@@ -1617,7 +1617,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 
 #memGrid {
-  flex: 1; display: grid; grid-template-columns: repeat(8, 1fr);
+  flex: 0 0 auto; display: grid; grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px));
   gap: 2px;
   align-content: start;

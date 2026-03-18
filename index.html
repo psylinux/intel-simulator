@@ -160,19 +160,6 @@
       <input type="hidden" id="valInput" value="DEADBEEF" />
       <input type="hidden" id="addrInput" value="0000" />
 
-      <!-- SPEED -->
-      <section class="ctrl-section">
-        <div class="ctrl-label ctrl-label-stacked">
-          <span data-i18n="sidebar.speed.label">VELOCIDADE</span>
-          <span class="ctrl-label-subvalue"><span id="speedVal">2500ms</span></span>
-        </div>
-        <div class="speed-wrap">
-          <span class="sp-fast" data-i18n="sidebar.speed.fast">RÁPIDO</span>
-          <input type="range" id="speedSlider" min="80" max="10000" value="2500" step="40">
-          <span class="sp-slow" data-i18n="sidebar.speed.slow">LENTO</span>
-        </div>
-      </section>
-
 
     </aside>
 
@@ -284,6 +271,29 @@
               </button>
             </div>
 
+          </div>
+        </div>
+
+        <!-- Separador entre cards -->
+        <div class="cb-gap"></div>
+
+        <!-- Card SPEED -->
+        <div class="cb-card cb-card-speed" id="speedCard">
+          <div class="cb-card-title" data-i18n="ctrlbar.speed.title">SPEED</div>
+          <div class="cb-card-body cb-speed-body">
+            <svg class="cb-speed-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M3 13a7 7 0 1 1 4.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+              <line x1="10" y1="10" x2="14" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="10" cy="10" r="1.5" fill="currentColor"/>
+            </svg>
+            <div class="cb-speed-track">
+              <input type="range" id="speedSlider" min="80" max="10000" value="2500" step="40">
+              <div class="cb-speed-labels">
+                <span data-i18n="ctrlbar.speed.fast">FAST</span>
+                <span id="speedVal">2500ms</span>
+                <span data-i18n="ctrlbar.speed.slow">SLOW</span>
+              </div>
+            </div>
           </div>
         </div>
 

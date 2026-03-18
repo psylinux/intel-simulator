@@ -502,16 +502,14 @@ body.code-mem-resizing {
 .vp-byte.lsb { background: rgba(74,222,128,.12); border-color: var(--grn); color: var(--grn); }
 .vp-byte.msb { background: rgba(96,165,250,.12); border-color: var(--blu); color: var(--blu); }
 
-/* Speed */
-.speed-wrap { display: flex; align-items: center; gap: 5px; }
-.sp-fast, .sp-slow { font-size: var(--fs-ui-xs); color: var(--tx2); letter-spacing: .8px; white-space: nowrap; }
+/* Speed slider base */
 input[type=range] {
   flex: 1; -webkit-appearance: none; appearance: none;
   height: 3px; background: var(--bdr-hi); border-radius: 2px; outline: none;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
-  background: var(--acc); cursor: pointer; box-shadow: 0 0 6px var(--acc-glow);
+  background: var(--amb); cursor: pointer; box-shadow: 0 0 6px rgba(251,191,36,.4);
 }
 
 /* Operations */
@@ -1408,6 +1406,54 @@ body.pane-resizing .canvas-pane-handle {
   border-color: rgba(56,189,248,.22);
   background: rgba(56,189,248,.04);
   box-shadow: 0 0 0 1px rgba(56,189,248,.05) inset;
+}
+
+/* Card SPEED — acento âmbar */
+.cb-card-speed {
+  border-color: rgba(251,191,36,.22);
+  background: rgba(251,191,36,.04);
+  box-shadow: 0 0 0 1px rgba(251,191,36,.05) inset;
+}
+.cb-card-speed .cb-card-title {
+  color: var(--amb);
+  border-color: rgba(251,191,36,.18);
+  background: rgba(251,191,36,.08);
+}
+.cb-speed-body {
+  gap: 8px;
+  padding: 8px 12px;
+  min-width: 160px;
+}
+.cb-speed-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--amb);
+  opacity: .75;
+}
+.cb-speed-track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.cb-speed-track input[type=range] {
+  width: 100%;
+  flex: none;
+}
+.cb-speed-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: .6px;
+  color: var(--tx2);
+  user-select: none;
+}
+.cb-speed-labels span:nth-child(2) {
+  color: var(--amb);
+  font-weight: 700;
+  letter-spacing: .8px;
 }
 
 /* Card MEMÓRIA — acento branco/neutro */

@@ -1992,7 +1992,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-trace-list {
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 6px;
 }
 .stack-trace-row {

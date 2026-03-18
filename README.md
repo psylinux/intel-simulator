@@ -1,67 +1,82 @@
 # Intel x86/x64 Memory & Stack Lab
 
-Simulador visual interativo de memoria, registradores e stack para arquiteturas Intel x86/x64. A execucao do subset Intel implementado segue little-endian; 
-Implementei uma feature experimental para fazer o toggle `BIG/LITTLE` que existe apenas como modo comparativo/visual da interface.
+Simulador visual interativo de memoria, registradores, stack e execucao de instrucoes para arquiteturas Intel IA-32 e x86-64. A execucao segue little-endian; existe um toggle `BIG/LITTLE` experimental apenas para fins comparativos/visuais.
 
 Auditoria tecnica e escopo validado: [INTEL_SUBSET_AUDIT.md](INTEL_SUBSET_AUDIT.md)
 
 ---
-## Opção 1: Use online
+
+## Opcao 1: Use online
 
 https://psylinux.github.io/intel-simulator/
 
-
-## Opção 2: Faça o download do projeto e rode localmente
+## Opcao 2: Rode localmente
 
 ```bash
 # Windows: clique duplo em index.html
 # Mac/Linux:
 open index.html
 
-# OU usar Python para servir localmente:
+# OU servir via Python:
 python3 -m http.server 8080
 # Acesse: http://localhost:8080
 ```
 
 ---
 
-## 🎮 Como usar
+## Features (v0.1)
 
-### Dicas
+### Arquitetura e CPU
+- Suporte a **IA-32** e **x86-64** com conjunto de registradores dinamico
+- Registradores de uso geral: EAX/RAX, EBX/RBX, ECX/RCX, EDX/RDX, ESI/RSI, EDI/RDI, ESP/RSP, EBP/RBP
+- Registrador de instrucao (EIP/RIP) atualizado a cada passo
+- Flags de CPU: ZF, SF, CF, OF, PF
 
-- Clique em qualquer célula de memória para selecionar aquele endereço
-- Use DWORD para ver a diferença completa entre Little e Big Endian
-- Reduza a velocidade para acompanhar cada byte individualmente
-- O registrador de destino no LOAD vai se preenchendo byte a byte ao vivo
-- Salve (💾) e carregue (📂) simulações como arquivos JSON
+### Assembler e Execucao
+- Editor de assembly inline com syntax highlighting
+- Assembler proprio para o subset Intel implementado
+- Modos de execucao: **FETCH**, **STEP** (instrucao a instrucao) e **RUN** (continuo com velocidade ajustavel)
+- Halt automatico em erros de bounds de stack
 
-### Painel Esquerdo (controles)
+### Instrucoes suportadas
+- Movimentacao: `MOV`, `XCHG`
+- Aritmetica: `ADD`, `SUB`, `INC`, `DEC`, `MUL`, `IMUL`, `DIV`, `IDIV`, `NEG`
+- Logica: `AND`, `OR`, `XOR`, `NOT`, `SHL`, `SHR`
+- Controle de fluxo: `JMP`, `JE`, `JNE`, `JL`, `JLE`, `JG`, `JGE`, `CALL`, `RET`
+- Stack: `PUSH`, `POP`
+- Outros: `NOP`, `HLT`, `CMP`, `TEST`
 
-| Controle    | Descrição                                     |
-| ----------- | --------------------------------------------- |
-| FORMATO     | Alterna entre Little Endian e Big Endian      |
-| TAMANHO     | BYTE (8-bit), WORD (16-bit), DWORD (32-bit)   |
-| REGISTRADOR | Seleciona EAX, EBX, ECX ou EDX (default: EAX) |
-| VALOR       | Digite o valor hex a armazenar                |
-| ENDEREÇO    | Endereço de memória destino/fonte             |
-| VELOCIDADE  | Ajusta a velocidade da animação               |
+### Memoria
+- Espaco de memoria dedicado com visualizacao celula a celula
+- Stack memory separada com tamanho configuravel (B ou KB)
+- Animacoes byte a byte para operacoes STORE e LOAD
+- Highlight de celulas ativas durante operacoes de memoria e stack
+- Exibicao dos bytes de cada instrucao como chips individuais
 
-### Operações
+### Backtrace e Call Frames
+- **BACKTRACE** visual com pilha de chamadas (cresce para cima, como uma pilha de pratos)
+- Rastreamento de call frames com enderecos de retorno, slots de stack e site de chamada
+- Identificacao visual por cor: enderecos de retorno em **vermelho**, pseudo-instrucoes em **roxo**
+- Profundidade maxima de 9 frames rastreados
 
-- **STORE** → Escreve o registrador na memória, byte a byte com animação
-- **LOAD** → Lê da memória para o registrador, construindo o valor em tempo real
-- **STEP** → Executa o ciclo completo FETCH → DECODE → EXECUTE
-- **CLEAR** → Reinicia tudo
-
+### Interface
+- Layout com paineis redimensionaveis (sidebar, stack, trace, memoria)
+- Assembly trace com scroll automatico para a instrucao atual
+- Animacoes de transferencia de dados entre registradores byte a byte
+- Highlight de registradores alterados apos cada instrucao
+- Visualizacao pseudo-codigo (C-like) para cada instrucao
+- Salvar/carregar simulacoes como JSON
+- Versionamento com cache busting automatico
 
 ---
 
-## 📁 Estrutura
+## Estrutura
 
 ```
-memsim/
-├── index.html          ← Interface HTML
-├── css/style.css       ← Estilos (blueprint técnico azul-aço)
-├── js/app.js           ← Lógica completa do simulador
+intel-simulator/
+├── index.html              <- Interface HTML
+├── css/style.css           <- Estilos
+├── js/app.js               <- Logica completa do simulador
+├── INTEL_SUBSET_AUDIT.md   <- Auditoria do subset implementado
 └── README.md
 ```

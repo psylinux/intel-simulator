@@ -4,5 +4,8 @@
   "scripts": {
     "test": "node tools/validate-intel-subset.js",
     "test:breakpoint": "node tools/validate-intel-subset.js --filter breakpoint"
+  },
+  "devDependencies": {
+    "nyc": "^18.0.0"
   }
 }

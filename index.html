@@ -274,22 +274,35 @@
       <div class="canvas-pane-body">
         <div id="codeMemSplit">
           <section id="memSection" class="split-pane">
-            <div class="split-pane-body">
-              <div class="section-badge">
-                MAPA DE MEMÓRIA
-                <span class="addr-dir-tag" id="addrDirTag">0x0000..0x003F · cresce ↓</span>
-              </div>
-              <div id="memWrapper">
-                <div id="memAddrBar"></div>
-                <div id="memGrid"></div>
-                <div id="memLegend">
-                  <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
-                  <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
-                  <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
-                  <span class="ml-item"><span class="ml-dot ml-bp"></span>Breakpoint</span>
+            <div class="split-pane-body mem-split-body">
+
+              <!-- Coluna esquerda: mapa de memória -->
+              <div class="mem-col-map">
+                <div class="section-badge">
+                  MAPA DE MEMÓRIA
+                  <span class="addr-dir-tag" id="addrDirTag">0x0000..0x003F · cresce ↓</span>
                 </div>
-                <div id="memBpStatus" class="mem-bp-status"></div>
+                <div id="memWrapper">
+                  <div id="memAddrBar"></div>
+                  <div id="memGrid"></div>
+                  <div id="memLegend">
+                    <span class="ml-item"><span class="ml-dot ml-active"></span>Ativo</span>
+                    <span class="ml-item"><span class="ml-dot ml-written"></span>Escrito</span>
+                    <span class="ml-item"><span class="ml-dot ml-pc"></span>PC</span>
+                    <span class="ml-item"><span class="ml-dot ml-bp"></span>Breakpoint</span>
+                  </div>
+                </div>
               </div>
+
+              <!-- Divider vertical interno -->
+              <div class="mem-inner-divider"></div>
+
+              <!-- Coluna direita: lista de breakpoints -->
+              <div class="mem-col-bp">
+                <div class="section-badge">BREAKPOINTS</div>
+                <div id="memBpStatus" class="mem-bp-status mem-bp-always"></div>
+              </div>
+
             </div>
           </section>
 

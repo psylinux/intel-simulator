@@ -2225,7 +2225,7 @@ function buildMemGrid() {
   a.appendChild(addrFrag);
   g.appendChild(gridFrag);
 
-  // Rodapé de breakpoints — lista todos, destaca o atingido
+  // Painel de breakpoints — sempre visível, lista todos, destaca o atingido
   const bpStatus = $('memBpStatus');
   if(bpStatus) {
     if(S.breakpoints.size > 0) {
@@ -2236,13 +2236,11 @@ function buildMemGrid() {
         return `<span class="bp-status-item${isHit ? ' bp-status-item-hit' : ''}">`
           + `<span class="bp-status-num">BP #${num}</span>`
           + `<span class="bp-status-addr">0x${fmtA(a)}</span>`
-          + (isHit ? '<span class="bp-status-hit-lbl">⏸ PARADO</span>' : '')
+          + (isHit ? '<span class="bp-status-hit-lbl">⏸</span>' : '')
           + '</span>';
       }).join('');
-      bpStatus.className = 'mem-bp-status mem-bp-status-list';
     } else {
-      bpStatus.textContent = '';
-      bpStatus.className = 'mem-bp-status';
+      bpStatus.innerHTML = '';
     }
   }
 

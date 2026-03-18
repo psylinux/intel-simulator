@@ -3210,7 +3210,7 @@ async function _executeOneReverse(fromAddr) {
   setStatus(`BACK concluído — IP = 0x${fmtA(fromAddr)}`,'lbl-done',{log:false});
 }
 
-async function doStepBackward() {
+async function doStepBack() {
   if(!S.paused) return;
   if(S.history.length === 0) return;
   const snap = S.history.pop();
@@ -4328,7 +4328,7 @@ const App = {
   doResume,
   doStop,
   doStepForward,
-  doStepBackward,
+  doStepBack,
   doPush,
   doPop,
   doAssemble,

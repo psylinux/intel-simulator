@@ -520,20 +520,66 @@ input[type=range]::-webkit-slider-thumb {
 
 /* ── Breakpoints ─────────────────────────────────────── */
 .bp-dot {
-  width: 10px; height: 10px;
+  width: 14px; height: 14px;
   border-radius: 50%;
   border: 1.5px solid rgba(239,68,68,.30);
   flex-shrink: 0;
   cursor: pointer;
   transition: background .12s, border-color .12s;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; color: transparent;
+  line-height: 1;
 }
 .bp-dot:hover { border-color: var(--red); background: rgba(239,68,68,.22); }
-.bp-dot-active { background: var(--red); border-color: var(--red); box-shadow: 0 0 5px rgba(239,68,68,.5); }
+.bp-dot-active {
+  background: var(--red); border-color: var(--red);
+  box-shadow: 0 0 5px rgba(239,68,68,.5);
+  color: #fff;
+}
+.bp-dot-hit {
+  animation: bp-pulse .7s ease-in-out infinite alternate;
+  box-shadow: 0 0 8px 2px rgba(239,68,68,.7);
+}
+@keyframes bp-pulse {
+  from { box-shadow: 0 0 5px 1px rgba(239,68,68,.5); }
+  to   { box-shadow: 0 0 12px 4px rgba(239,68,68,.9); }
+}
 
 .trace-row-bp .asm-line,
 .trace-row-bp .c-line { border-left: 2px solid rgba(239,68,68,.45); }
 
+.trace-row-bp-hit .asm-line,
+.trace-row-bp-hit .c-line {
+  border-left: 2px solid var(--red);
+  background: rgba(239,68,68,.07);
+}
+
 .mem-cell.mc-bp { box-shadow: inset 0 0 0 1.5px var(--red); color: var(--red); }
+
+/* Rodapé de status de breakpoint no mapa de memória */
+.mem-bp-status {
+  display: none;
+  font-size: var(--fs-ui-xs);
+  padding: 4px 6px;
+  border-radius: var(--r);
+  margin-top: 4px;
+  line-height: 1.4;
+  font-family: var(--mono);
+}
+.mem-bp-status-list {
+  display: block;
+  color: rgba(239,68,68,.7);
+  background: rgba(239,68,68,.06);
+  border: 1px solid rgba(239,68,68,.2);
+}
+.mem-bp-status-hit {
+  display: block;
+  color: #fff;
+  background: rgba(239,68,68,.18);
+  border: 1px solid rgba(239,68,68,.5);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
 
 .cpu-cycle-hint {
   margin-bottom: 6px;

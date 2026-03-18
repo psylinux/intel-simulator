@@ -76,6 +76,7 @@ class MockElement {
   }
   appendChild(c)            { this.children.push(c); this.scrollHeight = this.children.length * 24; return c; }
   append(...ns)             { ns.forEach(n => this.appendChild(n)); }
+  get childNodes()          { return this.children; }
   querySelector()           { return new MockElement(); }
   querySelectorAll()        { return []; }
   addEventListener(t, h)   { (this.listeners[t] = this.listeners[t] || []).push(h); }
@@ -183,6 +184,7 @@ globalThis.__memsim = {
   doStepBack,
   toggleBreakpoint,
   instrStartFor,
+  bpNumber,
   doSetArch,
   doSetEndian,
   doSetSize,
@@ -217,6 +219,7 @@ globalThis.__memsim = {
   is64,
   sizeN,
   transferWidth,
+  doClear,
 };
 `;
   vm.runInContext(source, ctx, { filename: APP_JS });
@@ -256,8 +259,10 @@ function resetSim(api, document, arch = 'ia32') {
   api.S.paused       = false;
   api.S.faulted      = false;
   api.S.progRunning  = false;
-  api.S.history      = [];
-  api.S.callFrames   = [];
+  api.S.history        = [];
+  api.S.callFrames     = [];
+  api.S.breakpoints    = new (Object.getPrototypeOf(api.S.breakpoints).constructor)();
+  api.S.breakpointHit  = null;
   api.resetCoreRegisters();
   api.S.stackMem     = new Uint8Array(api.S.stackSize);
   api.S.regs.ESP     = defaultStackTop(api);
@@ -2241,6 +2246,117 @@ test('[INVARIANT] RUN com S.breakpoints vazio nunca entra em paused por breakpoi
   await api.doRun();
   assert.equal(api.S.paused,  false, 'não deve pausar sem breakpoints');
   assert.equal(api.S.halt,    true,  'deve haltar no HLT');
+});
+
+// ─── bpNumber e breakpointHit ─────────────────────────────────────────────
+
+test('bpNumber: retorna 1-based index ordenado por endereço', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0xF4]);
+  // Adiciona breakpoints fora de ordem
+  api.S.breakpoints.add(0x02);
+  api.S.breakpoints.add(0x00);
+  api.S.breakpoints.add(0x03);
+  // Ordem crescente: 0x00=#1, 0x02=#2, 0x03=#3
+  assert.equal(api.bpNumber(0x00), 1, '0x00 deve ser BP #1');
+  assert.equal(api.bpNumber(0x02), 2, '0x02 deve ser BP #2');
+  assert.equal(api.bpNumber(0x03), 3, '0x03 deve ser BP #3');
+});
+
+test('bpNumber: retorna 0 para endereço sem breakpoint', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.breakpoints.add(0x05);
+  assert.equal(api.bpNumber(0x00), 0, 'endereço sem bp deve retornar 0');
+  assert.equal(api.bpNumber(0x05), 1, 'endereço com bp deve retornar 1');
+});
+
+test('bpNumber: funciona com breakpoint único', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.breakpoints.add(0x0A);
+  assert.equal(api.bpNumber(0x0A), 1);
+});
+
+test('bpNumber: renumera corretamente após remoção de breakpoint', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0x90, 0xF4]);
+  api.S.breakpoints.add(0x00);
+  api.S.breakpoints.add(0x02);
+  api.S.breakpoints.add(0x04);
+  assert.equal(api.bpNumber(0x00), 1);
+  assert.equal(api.bpNumber(0x02), 2);
+  assert.equal(api.bpNumber(0x04), 3);
+  // Remove o do meio
+  api.S.breakpoints.delete(0x02);
+  assert.equal(api.bpNumber(0x00), 1, 'após remover #2, 0x00 continua #1');
+  assert.equal(api.bpNumber(0x04), 2, 'após remover #2, 0x04 passa a ser #2');
+});
+
+test('breakpointHit: null antes de RUN', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.S.breakpointHit, null);
+});
+
+test('breakpointHit: setado com endereço correto ao atingir breakpoint', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);  // NOP; NOP; HLT
+  api.toggleBreakpoint(0x01);  // breakpoint no segundo NOP
+  await api.doRun();
+  assert.equal(api.S.breakpointHit, 0x01, 'breakpointHit deve ser 0x01');
+  assert.equal(api.S.paused, true);
+});
+
+test('breakpointHit: limpo ao iniciar novo RUN', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xF4]);
+  api.toggleBreakpoint(0x00);
+  await api.doRun();
+  assert.equal(api.S.breakpointHit, 0x00);
+  // Segundo RUN — limpa o hit antes de começar
+  api.S.paused = false;
+  api.S.progRunning = false;
+  api.S.breakpoints.clear();
+  writeBytes(api, 0, [0xF4]);
+  await api.doRun();
+  assert.equal(api.S.breakpointHit, null, 'breakpointHit deve ser null após RUN sem breakpoint');
+});
+
+test('breakpointHit: limpo pelo doClear', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xF4]);
+  api.toggleBreakpoint(0x00);
+  await api.doRun();
+  assert.equal(api.S.breakpointHit, 0x00);
+  api.doClear();
+  assert.equal(api.S.breakpointHit, null, 'doClear deve limpar breakpointHit');
+});
+
+test('breakpointHit: limpo ao iniciar RESUME e atualizado no próximo hit', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP(0x00); NOP(0x01) BP; NOP(0x02); NOP(0x03) BP; HLT(0x04)
+  // RUN: sem BP no 0x00, para em 0x01.
+  // Remove BP@0x01, RESUME: avança, para em 0x03.
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0x90, 0xF4]);
+  api.toggleBreakpoint(0x01);
+  api.toggleBreakpoint(0x03);
+  await api.doRun();
+  assert.equal(api.S.breakpointHit, 0x01, 'primeiro hit em 0x01');
+  assert.equal(api.S.pc, 0x01);
+  // Remove o BP do PC atual para o RESUME poder avançar
+  api.toggleBreakpoint(0x01);
+  assert.ok(!api.S.breakpoints.has(0x01), 'BP@0x01 deve ter sido removido');
+  // RESUME — breakpointHit é limpo, executa 0x01, 0x02, para no BP@0x03
+  await api.doResume();
+  assert.equal(api.S.breakpointHit, 0x03, 'segundo hit em 0x03');
+  assert.equal(api.S.pc, 0x03);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

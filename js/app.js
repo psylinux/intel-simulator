@@ -70,6 +70,7 @@ const S = {
   history: [],
   historyMax: 100,
   breakpoints: new Set(),
+  breakpointHit: null,   // endereço do último breakpoint atingido (null = nenhum)
 };
 
 const CENTER_PANE_CONFIG = {
@@ -1555,10 +1556,12 @@ function buildAsmTrace(opts={}) {
         if(line.separator) return '<div class="trace-separator">PC atual fora do fluxo principal. Abaixo, decode local a partir do PC.</div>';
         const byteChips = renderTraceByteChips(line.bytes);
         const hasBp = S.breakpoints.has(line.addr);
-        return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}${hasBp ? ' trace-row-bp' : ''}">
+        const bpNum = hasBp ? bpNumber(line.addr) : 0;
+        const isHit = hasBp && S.breakpointHit === line.addr && S.paused;
+        return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}${hasBp ? ' trace-row-bp' : ''}${isHit ? ' trace-row-bp-hit' : ''}">
           <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="Clique para navegar · 2× clique para editar">
             <div class="asm-line-head">
-              <span class="bp-dot${hasBp ? ' bp-dot-active' : ''}" data-addr="${fmtA(line.addr)}" title="Clique para definir/remover breakpoint"></span>
+              <span class="bp-dot${hasBp ? ' bp-dot-active' : ''}${isHit ? ' bp-dot-hit' : ''}" data-addr="${fmtA(line.addr)}" title="${hasBp ? `BP #${bpNum} — clique para remover` : 'Clique para definir breakpoint'}">${hasBp ? bpNum : ''}</span>
               <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
               <span class="asm-line-size">${line.size || 1}B</span>
             </div>
@@ -2226,6 +2229,25 @@ function buildMemGrid() {
 
   a.appendChild(addrFrag);
   g.appendChild(gridFrag);
+
+  // Rodapé de breakpoint atingido
+  const bpStatus = $('memBpStatus');
+  if(bpStatus) {
+    if(S.breakpointHit !== null && S.paused) {
+      const num = bpNumber(S.breakpointHit);
+      bpStatus.textContent = `⏸ BP #${num} atingido em 0x${fmtA(S.breakpointHit)}`;
+      bpStatus.className = 'mem-bp-status mem-bp-status-hit';
+    } else if(S.breakpoints.size > 0) {
+      const list = [...S.breakpoints].sort((a,b)=>a-b)
+        .map((a,i) => `BP #${i+1} → 0x${fmtA(a)}`).join('  ·  ');
+      bpStatus.textContent = list;
+      bpStatus.className = 'mem-bp-status mem-bp-status-list';
+    } else {
+      bpStatus.textContent = '';
+      bpStatus.className = 'mem-bp-status';
+    }
+  }
+
   scheduleCenterPaneLayout();
   syncAsmTraceHeight();
 }
@@ -3161,6 +3183,13 @@ function toggleBreakpoint(addr) {
   buildMemGrid();
 }
 
+// Retorna o número 1-based do breakpoint em addr (ordenado por endereço), ou 0 se não existe.
+function bpNumber(addr) {
+  const sorted = [...S.breakpoints].sort((a, b) => a - b);
+  const idx = sorted.indexOf(addr & 0x3F);
+  return idx < 0 ? 0 : idx + 1;
+}
+
 async function doExecute(opts={}) {
   if(S.busy) return;
   clearFaultLatch();
@@ -3179,13 +3208,15 @@ async function doRun() {
   if(S.busy||S.progRunning) return;
   clearFaultLatch();
   S.halt=false; S.paused=false; S.stopped=false; S.progRunning=true;
+  S.breakpointHit = null;
   S.busy=true;
   setCpuState('running');
 
   while(!S.halt && !S.paused && !S.stopped) {
     if(S.breakpoints.has(S.pc & 0x3F)) {
       S.paused = true;
-      lg('sys', `Breakpoint atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      S.breakpointHit = S.pc & 0x3F;
+      lg('sys', `BP #${bpNumber(S.pc)} atingido em 0x${fmtA(S.pc & 0x3F)}.`);
       break;
     }
     snapshotState();
@@ -3198,6 +3229,7 @@ async function doRun() {
   setBusy(false);
   if(S.paused) {
     setCpuState('paused');
+    buildMemGrid();
   } else {
     S.progRunning=false;
     setCpuState('idle');
@@ -3214,13 +3246,16 @@ async function doResume() {
   if(!S.progRunning || !S.paused) return;
   S.paused = false;
   S.stopped = false;
+  S.breakpointHit = null;
   S.busy = true;
   setCpuState('running');
+  buildMemGrid();
 
   while(!S.halt && !S.paused && !S.stopped) {
     if(S.breakpoints.has(S.pc & 0x3F)) {
       S.paused = true;
-      lg('sys', `Breakpoint atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      S.breakpointHit = S.pc & 0x3F;
+      lg('sys', `BP #${bpNumber(S.pc)} atingido em 0x${fmtA(S.pc & 0x3F)}.`);
       break;
     }
     snapshotState();
@@ -3233,6 +3268,7 @@ async function doResume() {
   setBusy(false);
   if(S.paused) {
     setCpuState('paused');
+    buildMemGrid();
   } else {
     S.progRunning = false;
     setCpuState('idle');
@@ -3843,7 +3879,7 @@ async function doAssemble() {
 function doClear() {
   resetStatsState();
   resetCoreRegisters();
-  S.halt=false; S.stopped=false; S.progRunning=false; S.breakpoints.clear();
+  S.halt=false; S.stopped=false; S.progRunning=false; S.breakpoints.clear(); S.breakpointHit=null;
   // Reset selected register to arch default
   S.reg = is64() ? 'RAX' : 'EAX';
   loadDefaultProgram(false);

@@ -3244,6 +3244,9 @@ function doPause() {
 
 async function doResume() {
   if(!S.progRunning || !S.paused) return;
+  let skipBreakpointOnce = S.breakpointHit === (S.pc & 0x3F)
+    ? (S.pc & 0x3F)
+    : null;
   S.paused = false;
   S.stopped = false;
   S.breakpointHit = null;
@@ -3252,9 +3255,12 @@ async function doResume() {
   buildMemGrid();
 
   while(!S.halt && !S.paused && !S.stopped) {
-    if(S.breakpoints.has(S.pc & 0x3F)) {
+    const pc = S.pc & 0x3F;
+    const shouldPauseOnBreakpoint = S.breakpoints.has(pc) && pc !== skipBreakpointOnce;
+    skipBreakpointOnce = null;
+    if(shouldPauseOnBreakpoint) {
       S.paused = true;
-      S.breakpointHit = S.pc & 0x3F;
+      S.breakpointHit = pc;
       lg('sys', `BP #${bpNumber(S.pc)} atingido em 0x${fmtA(S.pc & 0x3F)}.`);
       break;
     }

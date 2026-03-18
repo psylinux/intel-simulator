@@ -49,9 +49,11 @@
   --role-ebp:       #3b82ff;
   --role-ebp-dim:   #1d4ed8;
   --role-ebp-bg:    rgba(59,130,255,.18);
-  --role-ret:       #c026ff;
-  --role-ret-dim:   #7e22ce;
-  --role-ret-bg:    rgba(192,38,255,.18);
+  --role-ret:       #ef4444;
+  --role-ret-dim:   #b91c1c;
+  --role-ret-bg:    rgba(239,68,68,.18);
+  --role-pseudo:    #c026ff;
+  --role-pseudo-bg: rgba(192,38,255,.18);
 
   /* Red – error */
   --red:        #f87171;
@@ -1267,8 +1269,8 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .asm-line-editing {
   border-color: var(--role-ret);
-  background: rgba(192,38,255,.08);
-  box-shadow: inset 0 0 0 1px rgba(192,38,255,.24), 0 0 14px rgba(192,38,255,.08);
+  background: rgba(239,68,68,.08);
+  box-shadow: inset 0 0 0 1px rgba(239,68,68,.24), 0 0 14px rgba(239,68,68,.08);
 }
 .asm-line-head,
 .c-line-head {
@@ -1366,7 +1368,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   border-color: rgba(74,222,128,.24);
 }
 .c-line-kind-pseudo {
-  color: var(--role-ret);
+  color: var(--role-pseudo);
   background: rgba(192,38,255,.10);
   border-color: rgba(192,38,255,.24);
 }
@@ -1392,7 +1394,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid rgba(192,38,255,.36);
+  border: 1px solid rgba(239,68,68,.36);
   border-radius: 6px;
   background: rgba(12,18,28,.96);
   color: #f8fbff;
@@ -1400,11 +1402,11 @@ body.code-mem-resizing #codeMemSplitHandle {
   font-size: var(--fs-ui-sm);
   line-height: 1.35;
   outline: none;
-  box-shadow: 0 0 0 1px rgba(192,38,255,.12);
+  box-shadow: 0 0 0 1px rgba(239,68,68,.12);
 }
 .asm-edit-input:focus {
   border-color: var(--role-ret);
-  box-shadow: 0 0 0 1px rgba(192,38,255,.24), 0 0 18px rgba(192,38,255,.12);
+  box-shadow: 0 0 0 1px rgba(239,68,68,.24), 0 0 18px rgba(239,68,68,.12);
 }
 .asm-edit-input.is-invalid {
   border-color: var(--red);
@@ -1955,8 +1957,8 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-meta-row-ret .stack-meta-pill {
   background: var(--role-ret-bg);
-  border-color: rgba(192,38,255,.34);
-  box-shadow: 0 0 14px rgba(192,38,255,.10);
+  border-color: rgba(239,68,68,.34);
+  box-shadow: 0 0 14px rgba(239,68,68,.10);
 }
 .stack-meta-row-pc .stack-meta-key,
 .stack-meta-row-pc .stack-meta-pill {
@@ -2053,16 +2055,16 @@ body.code-mem-resizing #codeMemSplitHandle {
 .stack-trace-row-ret,
 .stack-trace-row-caller {
   background: var(--role-ret-bg);
-  border-color: rgba(192,38,255,.34);
-  box-shadow: inset 0 0 16px rgba(192,38,255,.05);
+  border-color: rgba(239,68,68,.34);
+  box-shadow: inset 0 0 16px rgba(239,68,68,.05);
 }
 .stack-trace-row-ret .stack-trace-kind,
 .stack-trace-row-ret .stack-trace-addr,
 .stack-trace-row-caller .stack-trace-kind,
 .stack-trace-row-caller .stack-trace-addr {
   color: var(--role-ret);
-  background: rgba(192,38,255,.14);
-  border-color: rgba(192,38,255,.34);
+  background: rgba(239,68,68,.14);
+  border-color: rgba(239,68,68,.34);
 }
 .stack-trace-row-root {
   background: rgba(148,163,184,.08);
@@ -2091,8 +2093,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   font-weight: 700;
   letter-spacing: .5px;
   color: var(--role-ret);
-  background: rgba(192,38,255,.14);
-  border: 1px solid rgba(192,38,255,.40);
+  background: rgba(239,68,68,.14);
+  border: 1px solid rgba(239,68,68,.40);
 }
 .stack-list {
   display: flex;
@@ -2211,8 +2213,8 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-row-ret {
   background: var(--role-ret-bg);
-  border-color: rgba(192,38,255,.38);
-  box-shadow: inset 0 0 14px rgba(192,38,255,.06);
+  border-color: rgba(239,68,68,.38);
+  box-shadow: inset 0 0 14px rgba(239,68,68,.06);
 }
 .stack-row-ret .stack-row-byte,
 .stack-tag-ret {

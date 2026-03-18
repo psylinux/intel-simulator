@@ -691,7 +691,7 @@ function setCpuState(state) {
   if(grid) grid.dataset.cpuState = state;
   // Botões de operação fora da CPU (desabilitar durante running/paused)
   const frozen = (state === 'running' || state === 'paused');
-  ['opStore','opLoad','opClear','opPush','opPop'].forEach(id=>{
+  ['opStore','opLoad','opPush','opPop'].forEach(id=>{
     const b=$(id); if(b) b.disabled = frozen;
   });
 }

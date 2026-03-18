@@ -484,23 +484,39 @@ input[type=range]::-webkit-slider-thumb {
 .ops-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
 .ops-grid-cpu { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-/* CPU state-driven button visibility */
-.cpu-btn-idle,
-.cpu-btn-running,
-.cpu-btn-paused { display: none; }
+/* ── CPU ops wrapper ─────────────────────────────────── */
+.cpu-ops-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cpu-row {
+  display: flex;
+  gap: 5px;
+}
+.cpu-row .op-btn { flex: 1; min-height: 62px; }
+.cpu-row .op-full { flex: 1; min-height: 44px; }
 
-#cpuOpsGrid[data-cpu-state="idle"]   .cpu-btn-idle    { display: flex; }
-#cpuOpsGrid[data-cpu-state="running"] .cpu-btn-running { display: flex; }
-#cpuOpsGrid[data-cpu-state="paused"]  .cpu-btn-paused  { display: flex; }
+/* nav buttons (BACK/NEXT) são mais estreitos que RESUME */
+.cpu-row .op-nav      { flex: 0 0 auto; min-width: 64px; }
+.cpu-row .op-resume-main { flex: 1; }
+.cpu-row .op-run-main { flex: 1; }
 
-/* paused layout: BACK · RESUME · NEXT (3 cols) */
-#cpuOpsGrid[data-cpu-state="paused"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* state-driven row visibility */
+.cpu-row-idle,
+.cpu-row-running,
+.cpu-row-paused { display: none; }
 
-.op-pause    { background: rgba(251,191,36,.10); border-color: var(--amb);  color: var(--amb);  }
-.op-stop     { background: rgba(248,113,113,.10); border-color: var(--red); color: var(--red);  }
-.op-resume   { background: rgba(56,189,248,.10);  border-color: var(--acc); color: var(--acc);  }
-.op-step-fwd { background: rgba(56,189,248,.07);  border-color: var(--acc); color: var(--acc);  }
-.op-step-bwd { background: rgba(148,163,184,.07); border-color: #94a3b8;   color: #94a3b8;     }
+#cpuOpsGrid[data-cpu-state="idle"]    .cpu-row-idle    { display: flex; }
+#cpuOpsGrid[data-cpu-state="running"] .cpu-row-running { display: flex; }
+#cpuOpsGrid[data-cpu-state="paused"]  .cpu-row-paused  { display: flex; }
+
+/* button colors */
+.op-pause    { background: rgba(251,191,36,.10);  border-color: var(--amb); color: var(--amb); }
+.op-stop     { background: rgba(248,113,113,.10); border-color: var(--red); color: var(--red); }
+.op-resume   { background: rgba(56,189,248,.12);  border-color: var(--acc); color: var(--acc); font-weight: 800; }
+.op-step-fwd { background: rgba(56,189,248,.07);  border-color: var(--acc); color: var(--acc); }
+.op-step-bwd { background: rgba(148,163,184,.07); border-color: #94a3b8;   color: #94a3b8;    }
 .cpu-cycle-hint {
   margin-bottom: 6px;
   padding: 5px 7px;

@@ -169,42 +169,56 @@
     <!-- CPU CONTROL -->
     <section class="ctrl-section ops-section">
       <div class="ctrl-label">CPU</div>
-      <div class="ops-grid ops-grid-cpu" id="cpuOpsGrid" data-cpu-state="idle">
-        <!-- idle -->
-        <button class="op-btn op-execute op-step-main cpu-btn-idle" id="opStep" onclick="App.doStep()">
-          <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>STEP</span>
-        </button>
-        <button class="op-btn op-run cpu-btn-idle" id="opRun" onclick="App.doRun()">
-          <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
-          <span>RUN</span>
-        </button>
-        <button class="op-btn op-clear cpu-btn-idle cpu-btn-paused" id="opClear" onclick="App.doClear()">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span>CLEAR</span>
-        </button>
-        <!-- running -->
-        <button class="op-btn op-pause cpu-btn-running" id="opPause" onclick="App.doPause()">
-          <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
-          <span>PAUSE</span>
-        </button>
-        <button class="op-btn op-stop cpu-btn-running cpu-btn-paused" id="opStop" onclick="App.doStop()">
-          <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
-          <span>STOP</span>
-        </button>
-        <!-- paused -->
-        <button class="op-btn op-step-bwd cpu-btn-paused" id="opStepBwd" onclick="App.doStepBackward()">
-          <svg viewBox="0 0 20 20" fill="none"><polygon points="13,4 4,10 13,16" fill="currentColor" opacity=".7"/><line x1="15" y1="4" x2="15" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>BACK</span>
-        </button>
-        <button class="op-btn op-resume cpu-btn-paused" id="opResume" onclick="App.doResume()">
-          <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
-          <span>RESUME</span>
-        </button>
-        <button class="op-btn op-step-fwd cpu-btn-paused" id="opStepFwd" onclick="App.doStepForward()">
-          <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>NEXT</span>
-        </button>
+      <div class="cpu-ops-wrap" id="cpuOpsGrid" data-cpu-state="idle">
+        <!-- idle: STEP + RUN em cima, CLEAR abaixo -->
+        <div class="cpu-row cpu-row-idle">
+          <button class="op-btn op-execute op-step-main" id="opStep" onclick="App.doStep()">
+            <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>STEP</span>
+          </button>
+          <button class="op-btn op-run op-run-main" id="opRun" onclick="App.doRun()">
+            <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
+            <span>RUN</span>
+          </button>
+        </div>
+        <div class="cpu-row cpu-row-idle">
+          <button class="op-btn op-clear op-full" id="opClear" onclick="App.doClear()">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>CLEAR</span>
+          </button>
+        </div>
+        <!-- running: PAUSE + STOP -->
+        <div class="cpu-row cpu-row-running">
+          <button class="op-btn op-pause" id="opPause" onclick="App.doPause()">
+            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
+            <span>PAUSE</span>
+          </button>
+          <button class="op-btn op-stop" id="opStop" onclick="App.doStop()">
+            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
+            <span>STOP</span>
+          </button>
+        </div>
+        <!-- paused: BACK · RESUME · NEXT em cima, STOP abaixo -->
+        <div class="cpu-row cpu-row-paused">
+          <button class="op-btn op-step-bwd op-nav" id="opStepBwd" onclick="App.doStepBackward()">
+            <svg viewBox="0 0 20 20" fill="none"><polygon points="13,4 4,10 13,16" fill="currentColor" opacity=".7"/><line x1="15" y1="4" x2="15" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>BACK</span>
+          </button>
+          <button class="op-btn op-resume op-resume-main" id="opResume" onclick="App.doResume()">
+            <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
+            <span>RESUME</span>
+          </button>
+          <button class="op-btn op-step-fwd op-nav" id="opStepFwd" onclick="App.doStepForward()">
+            <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>NEXT</span>
+          </button>
+        </div>
+        <div class="cpu-row cpu-row-paused">
+          <button class="op-btn op-stop op-full" id="opStopPaused" onclick="App.doStop()">
+            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
+            <span>STOP</span>
+          </button>
+        </div>
       </div>
     </section>
 

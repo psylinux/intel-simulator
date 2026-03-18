@@ -69,6 +69,7 @@ const S = {
   callFrames: [],
   history: [],
   historyMax: 100,
+  breakpoints: new Set(),
 };
 
 const CENTER_PANE_CONFIG = {
@@ -796,6 +797,10 @@ function init() {
     if(!c) return;
     if(c.classList.contains('is-editing') || e.target.closest('.mem-edit-input')) return;
     const addr = +c.dataset.addr;
+    if(e.ctrlKey || e.metaKey) {
+      toggleBreakpoint(addr);
+      return;
+    }
     if(c.classList.contains('mc-selected') && !S.busy) {
       editMemCell(addr);
       return;
@@ -832,6 +837,12 @@ function init() {
   });
   $('asmTrace')?.addEventListener('click', e => {
     if(e.target.closest('.asm-edit-input')) return;
+    const bpDot = e.target.closest('.bp-dot');
+    if(bpDot) {
+      const addr = parseInt(bpDot.dataset.addr || '0', 16) & 0x3F;
+      toggleBreakpoint(addr);
+      return;
+    }
     const line = e.target.closest('.asm-line, .c-line');
     if(!line) return;
     const addr = parseInt(line.dataset.addr || '0', 16) & 0x3F;
@@ -1538,9 +1549,11 @@ function buildAsmTrace(opts={}) {
     ? lines.map(line => {
         if(line.separator) return '<div class="trace-separator">PC atual fora do fluxo principal. Abaixo, decode local a partir do PC.</div>';
         const byteChips = renderTraceByteChips(line.bytes);
-        return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}">
+        const hasBp = S.breakpoints.has(line.addr);
+        return `<div class="trace-row${line.addr===S.pc ? ' trace-row-current' : ''}${hasBp ? ' trace-row-bp' : ''}">
           <div class="asm-line${line.addr===S.pc ? ' asm-line-current' : ''}" data-addr="${fmtA(line.addr)}" data-size="${line.size || 1}" title="Clique para navegar · 2× clique para editar">
             <div class="asm-line-head">
+              <span class="bp-dot${hasBp ? ' bp-dot-active' : ''}" data-addr="${fmtA(line.addr)}" title="Clique para definir/remover breakpoint"></span>
               <span class="asm-line-addr">0x${fmtA(line.addr)}</span>
               <span class="asm-line-size">${line.size || 1}B</span>
             </div>
@@ -2188,6 +2201,7 @@ function buildMemGrid() {
       const st = memStateAt(addr);
       if(st) cell.classList.add(st);
       if(addr===S.memSelectedAddr) cell.classList.add('mc-selected');
+      if(S.breakpoints.has(addr & 0x3F)) cell.classList.add('mc-bp');
       memCellRefs[addr] = cell;
       gridFrag.appendChild(cell);
     }
@@ -3110,6 +3124,14 @@ function restoreSnapshot(snap) {
   setPC(snap.pc, { traceAutoScroll: true });
 }
 
+function toggleBreakpoint(addr) {
+  const a = addr & 0x3F;
+  if(S.breakpoints.has(a)) S.breakpoints.delete(a);
+  else S.breakpoints.add(a);
+  buildAsmTrace();
+  buildMemGrid();
+}
+
 async function doExecute(opts={}) {
   if(S.busy) return;
   clearFaultLatch();
@@ -3132,6 +3154,11 @@ async function doRun() {
   setCpuState('running');
 
   while(!S.halt && !S.paused && !S.stopped) {
+    if(S.breakpoints.has(S.pc & 0x3F)) {
+      S.paused = true;
+      lg('sys', `Breakpoint atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      break;
+    }
     snapshotState();
     await _executeOne({ traceMode:'run' });
     if(S.halt || S.paused || S.stopped) break;
@@ -3162,6 +3189,11 @@ async function doResume() {
   setCpuState('running');
 
   while(!S.halt && !S.paused && !S.stopped) {
+    if(S.breakpoints.has(S.pc & 0x3F)) {
+      S.paused = true;
+      lg('sys', `Breakpoint atingido em 0x${fmtA(S.pc & 0x3F)}.`);
+      break;
+    }
     snapshotState();
     await _executeOne({ traceMode:'run' });
     if(S.halt || S.paused || S.stopped) break;
@@ -3782,7 +3814,7 @@ async function doAssemble() {
 function doClear() {
   resetStatsState();
   resetCoreRegisters();
-  S.halt=false; S.stopped=false; S.progRunning=false;
+  S.halt=false; S.stopped=false; S.progRunning=false; S.breakpoints.clear();
   // Reset selected register to arch default
   S.reg = is64() ? 'RAX' : 'EAX';
   loadDefaultProgram(false);

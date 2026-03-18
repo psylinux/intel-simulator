@@ -122,6 +122,7 @@ function createDocument() {
     createElement(t)   { return new MockElement('', t); },
     createElementNS(_, t) { return new MockElement('', t); },
     createTextNode(text)  { return { nodeType: 3, nodeValue: String(text) }; },
+    createDocumentFragment() { return new MockElement('', 'fragment'); },
     addEventListener(t, h) { this._listeners[t] = h; },
   };
   return { document: doc, elements };
@@ -180,6 +181,7 @@ globalThis.__memsim = {
   doResume,
   doStepForward,
   doStepBack,
+  toggleBreakpoint,
   doSetArch,
   doSetEndian,
   doSetSize,
@@ -1888,6 +1890,87 @@ test('RUN→STOP não deixa CPU em estado que impede novo RUN', async () => {
   api.setPC(0);
   await api.doRun();
   assert.equal(api.S.halt, true, 'segundo RUN deve haltar novamente');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: BREAKPOINTS
+// ═══════════════════════════════════════════════════════════════════════════
+suite('breakpoint');
+
+test('toggleBreakpoint adiciona endereço ao Set', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  assert.equal(api.S.breakpoints.size, 0);
+  api.toggleBreakpoint(0x05);
+  assert.ok(api.S.breakpoints.has(0x05), 'deve ter 0x05 após toggle');
+  assert.equal(api.S.breakpoints.size, 1);
+});
+
+test('toggleBreakpoint remove endereço já existente', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.toggleBreakpoint(0x0A);
+  assert.ok(api.S.breakpoints.has(0x0A));
+  api.toggleBreakpoint(0x0A);
+  assert.ok(!api.S.breakpoints.has(0x0A), 'deve remover após segundo toggle');
+});
+
+test('toggleBreakpoint mascara endereço com 0x3F', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.toggleBreakpoint(0xFF);  // 0xFF & 0x3F = 0x3F
+  assert.ok(api.S.breakpoints.has(0x3F), 'deve armazenar 0x3F (mascarado)');
+});
+
+test('RUN para em breakpoint e entra em paused', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00, NOP em 0x01, HLT em 0x02
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);
+  api.setPC(0);
+  // Breakpoint no segundo NOP (0x01)
+  api.toggleBreakpoint(0x01);
+  await api.doRun();
+  assert.equal(api.S.paused, true,  'deve estar paused ao atingir breakpoint');
+  assert.equal(api.S.halt,   false, 'não deve estar halted');
+  assert.equal(api.S.pc,     0x01,  'PC deve estar no endereço do breakpoint');
+});
+
+test('RUN não para em endereço sem breakpoint', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00, HLT em 0x01
+  writeBytes(api, 0, [0x90, 0xF4]);
+  api.setPC(0);
+  // Breakpoint em endereço que não será alcançado
+  api.toggleBreakpoint(0x10);
+  await api.doRun();
+  assert.equal(api.S.halt,   true,  'deve haltar no HLT');
+  assert.equal(api.S.paused, false, 'não deve estar paused');
+});
+
+test('doClear limpa todos os breakpoints', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.toggleBreakpoint(0x00);
+  api.toggleBreakpoint(0x05);
+  api.toggleBreakpoint(0x0A);
+  assert.equal(api.S.breakpoints.size, 3);
+  api.S.breakpoints.clear();  // simula doClear
+  assert.equal(api.S.breakpoints.size, 0);
+});
+
+test('múltiplos breakpoints: para no primeiro encontrado', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // três NOPs seguidos
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0xF4]);
+  api.setPC(0);
+  api.toggleBreakpoint(0x01);
+  api.toggleBreakpoint(0x02);
+  await api.doRun();
+  assert.equal(api.S.pc,     0x01, 'deve parar no primeiro breakpoint');
+  assert.equal(api.S.paused, true);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

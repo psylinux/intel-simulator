@@ -1333,6 +1333,153 @@ body.pane-resizing .canvas-pane-handle {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
 
+/* ══════════════════════════════════════════════════════════
+   BARRA DE CONTROLES (entre Registradores e Mapa de Memória)
+   ══════════════════════════════════════════════════════════ */
+#ctrlBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 10px 20px;
+  background: linear-gradient(180deg,
+    rgba(14,22,32,.85) 0%,
+    rgba(14,22,32,.95) 100%);
+  border-top:    1px solid rgba(56,189,248,.08);
+  border-bottom: 1px solid rgba(56,189,248,.08);
+  box-sizing: border-box;
+}
+
+/* ── gap entre os dois cards ── */
+.cb-gap {
+  width: 20px;
+  flex-shrink: 0;
+}
+
+/* ── card base (caixa com título + botões) ── */
+.cb-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border-radius: 10px;
+  border: 1px solid;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Card CPU — acento ciano */
+.cb-card-cpu {
+  border-color: rgba(56,189,248,.22);
+  background: rgba(56,189,248,.04);
+  box-shadow: 0 0 0 1px rgba(56,189,248,.05) inset;
+}
+
+/* Card MEMÓRIA — acento branco/neutro */
+.cb-card-mem {
+  border-color: rgba(255,255,255,.12);
+  background: rgba(255,255,255,.02);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.03) inset;
+}
+
+/* ── título do card ── */
+.cb-card-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-align: center;
+  padding: 5px 12px 4px;
+  border-bottom: 1px solid;
+  user-select: none;
+}
+.cb-card-cpu  .cb-card-title {
+  color: var(--acc);
+  border-color: rgba(56,189,248,.18);
+  background: rgba(56,189,248,.09);
+}
+.cb-card-mem .cb-card-title {
+  color: rgba(248,251,255,.6);
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+}
+
+/* ── área dos botões dentro do card ── */
+.cb-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+/* ── botão base ── */
+.cb-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 46px;
+  min-width: 54px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all .13s var(--ease);
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cb-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.cb-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.cb-btn:hover::before  { opacity: .09; }
+.cb-btn:active { transform: scale(.95); }
+.cb-btn:disabled { opacity: .28; cursor: not-allowed; }
+
+/* ── cores CPU ── */
+.cb-step   { background: rgba(56,189,248,.07);   border-color: rgba(56,189,248,.4);  color: var(--acc); }
+.cb-run    { background: rgba(56,189,248,.16);   border-color: var(--acc);           color: var(--acc); font-weight: 900; min-width: 64px; }
+.cb-clear  { background: rgba(248,113,113,.07);  border-color: rgba(239,68,68,.4);   color: var(--red); }
+.cb-pause  { background: rgba(251,191,36,.10);   border-color: rgba(251,191,36,.5);  color: var(--amb); }
+.cb-stop   { background: rgba(248,113,113,.10);  border-color: rgba(239,68,68,.5);   color: var(--red); }
+.cb-resume { background: rgba(56,189,248,.16);   border-color: var(--acc);           color: var(--acc); font-weight: 900; min-width: 76px; }
+.cb-back   { background: rgba(52,211,153,.08);   border-color: rgba(52,211,153,.4);  color: #34d399; }
+.cb-next   { background: rgba(52,211,153,.08);   border-color: rgba(52,211,153,.4);  color: #34d399; }
+
+/* ── cores MEMÓRIA ── */
+.cb-store  { background: rgba(251,146,60,.09);   border-color: rgba(251,146,60,.45);  color: #fb923c; }
+.cb-load   { background: rgba(45,212,191,.09);   border-color: rgba(45,212,191,.45);  color: #2dd4bf; }
+.cb-push   { background: rgba(250,204,21,.09);   border-color: rgba(250,204,21,.45);  color: #facc15; }
+.cb-pop    { background: rgba(167,139,250,.09);  border-color: rgba(167,139,250,.45); color: #a78bfa; }
+
+/* ── visibilidade por estado CPU ── */
+.cb-state-idle,
+.cb-state-running,
+.cb-state-paused { display: none; }
+
+#cpuOpsGrid[data-cpu-state="idle"]    .cb-state-idle    { display: contents; }
+#cpuOpsGrid[data-cpu-state="running"] .cb-state-running { display: contents; }
+#cpuOpsGrid[data-cpu-state="paused"]  .cb-state-paused  { display: contents; }
+
 /* ── Anim Stage ── */
 #animStage {
   position: fixed;
@@ -1706,10 +1853,11 @@ body.code-mem-resizing #codeMemSplitHandle {
   width: 148px;
   flex: 0 0 148px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+  padding: 0 8px 8px;
 }
 .mem-col-bp .section-badge {
-  margin: 8px 10px 0;
+  margin: 8px 0 0;
   padding: 7px 10px;
   margin-bottom: 0;
   border-radius: 10px 10px 0 0;

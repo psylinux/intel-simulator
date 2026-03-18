@@ -143,84 +143,6 @@
       </div>
     </section>
 
-    <!-- OPERATIONS -->
-    <section class="ctrl-section ops-section">
-      <div class="ctrl-label">MEMÓRIA</div>
-      <div class="ops-grid">
-        <button class="op-btn op-store" id="opStore" onclick="App.doStore()">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
-          STORE
-        </button>
-        <button class="op-btn op-load" id="opLoad" onclick="App.doLoad()">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 17V7M10 7l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="14" height="2" rx="1" fill="currentColor"/></svg>
-          LOAD
-        </button>
-        <button class="op-btn op-push" id="opPush" onclick="App.doPush()">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          PUSH
-        </button>
-        <button class="op-btn op-pop" id="opPop" onclick="App.doPop()">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          POP
-        </button>
-      </div>
-    </section>
-
-    <!-- CPU CONTROL -->
-    <section class="ctrl-section ops-section">
-      <div class="ctrl-label">CPU</div>
-      <div class="cpu-ops-wrap" id="cpuOpsGrid" data-cpu-state="idle">
-        <!-- idle: STEP + RUN em cima, CLEAR abaixo -->
-        <div class="cpu-row cpu-row-idle">
-          <button class="op-btn op-execute op-step-main" id="opStep" onclick="App.doStep()">
-            <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span>STEP</span>
-          </button>
-          <button class="op-btn op-run op-run-main" id="opRun" onclick="App.doRun()">
-            <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
-            <span>RUN</span>
-          </button>
-        </div>
-        <div class="cpu-row cpu-row-idle">
-          <button class="op-btn op-clear op-full" id="opClear" onclick="App.doClear()">
-            <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <span>CLEAR</span>
-          </button>
-        </div>
-        <!-- running: PAUSE + STOP -->
-        <div class="cpu-row cpu-row-running">
-          <button class="op-btn op-pause" id="opPause" onclick="App.doPause()">
-            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
-            <span>PAUSE</span>
-          </button>
-          <button class="op-btn op-stop" id="opStop" onclick="App.doStop()">
-            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
-            <span>STOP</span>
-          </button>
-        </div>
-        <!-- paused: BACK · RESUME · NEXT em cima, STOP abaixo -->
-        <div class="cpu-row cpu-row-paused">
-          <button class="op-btn op-step-back op-nav" id="opStepBack" onclick="App.doStepBack()">
-            <svg viewBox="0 0 20 20" fill="none"><polygon points="13,4 4,10 13,16" fill="currentColor" opacity=".7"/><line x1="15" y1="4" x2="15" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span>BACK</span>
-          </button>
-          <button class="op-btn op-resume op-resume-main" id="opResume" onclick="App.doResume()">
-            <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
-            <span>RESUME</span>
-          </button>
-          <button class="op-btn op-step-fwd op-nav" id="opStepFwd" onclick="App.doStepForward()">
-            <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span>NEXT</span>
-          </button>
-        </div>
-        <div class="cpu-row cpu-row-paused">
-          <button class="op-btn op-stop op-full" id="opStopPaused" onclick="App.doStop()">
-            <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
-            <span>STOP</span>
-          </button>
-        </div>
-      </div>
-    </section>
 
   </aside>
 
@@ -246,6 +168,93 @@
         <div id="spCards"><!-- injected by JS --></div>
       </div>
       <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" title="Arraste para ajustar a altura desta seção"></div>
+    </div>
+
+    <!-- ─── BARRA DE CONTROLES ─── -->
+    <div id="ctrlBar">
+
+      <!-- Card CPU -->
+      <div class="cb-card cb-card-cpu" id="cpuOpsGrid" data-cpu-state="idle">
+        <div class="cb-card-title">CPU</div>
+        <div class="cb-card-body">
+
+          <!-- idle: STEP · RUN · CLEAR -->
+          <div class="cb-state cb-state-idle">
+            <button class="cb-btn cb-step" id="opStep" onclick="App.doStep()">
+              <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              STEP
+            </button>
+            <button class="cb-btn cb-run" id="opRun" onclick="App.doRun()">
+              <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
+              RUN
+            </button>
+            <button class="cb-btn cb-clear" id="opClear" onclick="App.doClear()">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              CLEAR
+            </button>
+          </div>
+
+          <!-- running: PAUSE · STOP -->
+          <div class="cb-state cb-state-running">
+            <button class="cb-btn cb-pause" id="opPause" onclick="App.doPause()">
+              <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
+              PAUSE
+            </button>
+            <button class="cb-btn cb-stop" id="opStop" onclick="App.doStop()">
+              <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
+              STOP
+            </button>
+          </div>
+
+          <!-- paused: BACK · RESUME · NEXT · STOP -->
+          <div class="cb-state cb-state-paused">
+            <button class="cb-btn cb-back" id="opStepBack" onclick="App.doStepBack()">
+              <svg viewBox="0 0 20 20" fill="none"><polygon points="13,4 4,10 13,16" fill="currentColor" opacity=".7"/><line x1="15" y1="4" x2="15" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              BACK
+            </button>
+            <button class="cb-btn cb-resume" id="opResume" onclick="App.doResume()">
+              <svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg>
+              RESUME
+            </button>
+            <button class="cb-btn cb-next" id="opStepFwd" onclick="App.doStepForward()">
+              <svg viewBox="0 0 20 20" fill="none"><polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7"/><line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              NEXT
+            </button>
+            <button class="cb-btn cb-stop" id="opStopPaused" onclick="App.doStop()">
+              <svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg>
+              STOP
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Separador entre cards -->
+      <div class="cb-gap"></div>
+
+      <!-- Card MEMÓRIA -->
+      <div class="cb-card cb-card-mem">
+        <div class="cb-card-title">MEMÓRIA</div>
+        <div class="cb-card-body">
+          <button class="cb-btn cb-store" id="opStore" onclick="App.doStore()">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            STORE
+          </button>
+          <button class="cb-btn cb-load" id="opLoad" onclick="App.doLoad()">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 17V7M10 7l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            LOAD
+          </button>
+          <button class="cb-btn cb-push" id="opPush" onclick="App.doPush()">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            PUSH
+          </button>
+          <button class="cb-btn cb-pop" id="opPop" onclick="App.doPop()">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            POP
+          </button>
+        </div>
+      </div>
+
     </div>
 
     <!-- SVG ANIMATION STAGE -->

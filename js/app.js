@@ -61,7 +61,8 @@ const S = {
     loadTimes:[], storeTimes:[], littleOps:0, bigOps:0,
   },
   pc:   0,
-  halt: false,   // HLT foi executado
+  halt: false,    // HLT foi executado (instrução HLT)
+  stopped: false, // STOP pressionado pelo usuário (não bloqueia STEP)
   faulted: false,
   progRunning: false,
   paused: false,
@@ -3126,14 +3127,14 @@ async function doStep() { await doExecute({ traceMode:'step' }); }
 async function doRun() {
   if(S.busy||S.progRunning) return;
   clearFaultLatch();
-  S.halt=false; S.paused=false; S.progRunning=true;
+  S.halt=false; S.paused=false; S.stopped=false; S.progRunning=true;
   S.busy=true;
   setCpuState('running');
 
-  while(!S.halt && !S.paused) {
+  while(!S.halt && !S.paused && !S.stopped) {
     snapshotState();
     await _executeOne({ traceMode:'run' });
-    if(S.halt || S.paused) break;
+    if(S.halt || S.paused || S.stopped) break;
     await sleep(S.speed * 0.1);
   }
 
@@ -3156,13 +3157,14 @@ function doPause() {
 async function doResume() {
   if(!S.progRunning || !S.paused) return;
   S.paused = false;
+  S.stopped = false;
   S.busy = true;
   setCpuState('running');
 
-  while(!S.halt && !S.paused) {
+  while(!S.halt && !S.paused && !S.stopped) {
     snapshotState();
     await _executeOne({ traceMode:'run' });
-    if(S.halt || S.paused) break;
+    if(S.halt || S.paused || S.stopped) break;
     await sleep(S.speed * 0.1);
   }
 
@@ -3177,7 +3179,7 @@ async function doResume() {
 }
 
 function doStop() {
-  S.halt = true;
+  S.stopped = true;
   S.paused = false;
   S.progRunning = false;
   S.busy = false;
@@ -3780,7 +3782,7 @@ async function doAssemble() {
 function doClear() {
   resetStatsState();
   resetCoreRegisters();
-  S.halt=false; S.progRunning=false;
+  S.halt=false; S.stopped=false; S.progRunning=false;
   // Reset selected register to arch default
   S.reg = is64() ? 'RAX' : 'EAX';
   loadDefaultProgram(false);

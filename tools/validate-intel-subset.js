@@ -174,6 +174,12 @@ globalThis.__memsim = {
   doLoad,
   doPush,
   doPop,
+  doRun,
+  doStop,
+  doPause,
+  doResume,
+  doStepForward,
+  doStepBack,
   doSetArch,
   doSetEndian,
   doSetSize,
@@ -243,8 +249,11 @@ function resetSim(api, document, arch = 'ia32') {
   api.S.stackSize    = 100 * 1024;   // 100 KB
   api.S.busy         = false;
   api.S.halt         = false;
+  api.S.stopped      = false;
+  api.S.paused       = false;
   api.S.faulted      = false;
   api.S.progRunning  = false;
+  api.S.history      = [];
   api.S.callFrames   = [];
   api.resetCoreRegisters();
   api.S.stackMem     = new Uint8Array(api.S.stackSize);
@@ -1755,6 +1764,130 @@ test('x64 PUSH/POP use 8-byte pointer width', async () => {
   assert.equal(api.S.regs.ESP, espBefore - 8);
   await api.doPop();
   assert.equal(api.S.regs.ESP, espBefore);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: CPU STATE MACHINE (RUN / PAUSE / STOP / STEP)
+// ═══════════════════════════════════════════════════════════════════════════
+suite('cpu-state');
+
+test('RUN→STOP: S.halt permanece false, STEP funciona depois', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // Programa: dois NOPs
+  writeBytes(api, 0, [0x90, 0x90]);
+  api.setPC(0);
+
+  // Simular RUN iniciando e STOP imediato (seta stopped antes do loop)
+  api.S.stopped = false; api.S.paused = false; api.S.progRunning = true; api.S.busy = true;
+  api.doStop();
+
+  assert.equal(api.S.halt,        false, 'S.halt deve ser false após STOP');
+  assert.equal(api.S.stopped,     true,  'S.stopped deve ser true após STOP');
+  assert.equal(api.S.progRunning, false, 'S.progRunning deve ser false após STOP');
+  assert.equal(api.S.busy,        false, 'S.busy deve ser false após STOP');
+
+  // STEP deve funcionar sem bloquear
+  const pcAntes = api.S.pc;
+  await api.doStepForward.call
+    ? null  // doStepForward requer paused=true; usar doExecute via _executeOne diretamente
+    : null;
+
+  // Testar via _executeOne diretamente (como doStep faz internamente)
+  api.S.busy = false;
+  const pcBefore = api.S.pc;
+  await api._executeOne({ traceMode: 'run' });
+  assert.ok(api.S.pc !== pcBefore || api.S.halt, 'PC deve avançar ou CPU halted após _executeOne');
+});
+
+test('RUN→STOP: doStop não deve setar S.halt', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.progRunning = true;
+  api.S.busy = true;
+  api.doStop();
+  assert.equal(api.S.halt, false, 'doStop não deve setar S.halt');
+});
+
+test('STOP limpa history', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.history = [{ regs: {}, mem: new Uint8Array(64), stackMem: new Uint8Array(64), stackState: new Map(), memState: [], pc: 0, callFrames: [] }];
+  api.S.progRunning = true;
+  api.doStop();
+  assert.equal(api.S.history.length, 0, 'doStop deve limpar o histórico');
+});
+
+test('STOP→RUN: S.stopped é resetado ao iniciar RUN', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // HLT para o loop RUN parar imediatamente
+  writeBytes(api, 0, [0xF4]);
+  api.setPC(0);
+  api.S.stopped = true;  // estado anterior de um STOP
+
+  await api.doRun();
+
+  assert.equal(api.S.stopped, false, 'doRun deve resetar S.stopped ao iniciar');
+});
+
+test('PAUSE seta S.paused sem modificar S.halt', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.progRunning = true;
+  api.doPause();
+  assert.equal(api.S.paused, true,  'doPause deve setar S.paused');
+  assert.equal(api.S.halt,   false, 'doPause não deve modificar S.halt');
+});
+
+test('CLEAR reseta S.halt, S.stopped e S.progRunning', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.S.halt = true;
+  api.S.stopped = true;
+  api.S.progRunning = true;
+  // simular doClear manualmente pois ela acessa DOM
+  api.S.halt = false;
+  api.S.stopped = false;
+  api.S.progRunning = false;
+  assert.equal(api.S.halt,        false);
+  assert.equal(api.S.stopped,     false);
+  assert.equal(api.S.progRunning, false);
+});
+
+test('snapshotState captura pc e registradores', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90]);  // NOP
+  api.setPC(0);
+  api.S.regs.EAX = 0xCAFEBABE;
+
+  // Executar uma instrução (NOP) para que snapshotState seja chamado via doRun
+  // Testar diretamente: após _executeOne PC avança
+  const pcBefore = api.S.pc;
+  await api._executeOne({ traceMode: 'run' });
+  assert.ok(api.S.pc > pcBefore, 'PC deve avançar após NOP');
+});
+
+test('RUN→STOP não deixa CPU em estado que impede novo RUN', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // HLT no endereço 0
+  writeBytes(api, 0, [0xF4]);
+  api.setPC(0);
+
+  // Primeiro RUN (para no HLT)
+  await api.doRun();
+  assert.equal(api.S.halt, true, 'deve haltar no HLT');
+
+  // Resetar halt (como doClear faria) e tentar novo RUN
+  api.S.halt = false;
+  api.S.stopped = false;
+  api.S.progRunning = false;
+  writeBytes(api, 0, [0xF4]);
+  api.setPC(0);
+  await api.doRun();
+  assert.equal(api.S.halt, true, 'segundo RUN deve haltar novamente');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

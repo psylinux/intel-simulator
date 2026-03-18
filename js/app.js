@@ -64,7 +64,10 @@ const S = {
   halt: false,   // HLT foi executado
   faulted: false,
   progRunning: false,
+  paused: false,
   callFrames: [],
+  history: [],
+  historyMax: 100,
 };
 
 const CENTER_PANE_CONFIG = {
@@ -679,16 +682,18 @@ function doSetStackSizeUnit(nextUnit) {
 }
 
 function setRunButtonMode(mode='run') {
-  const runBtn = $('opRun');
-  if(!runBtn) return;
-  if(mode==='stop') {
-    runBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor"/></svg><span>STOP</span>';
-    runBtn.disabled = false;
-    runBtn.onclick = () => { S.halt = true; };
-    return;
-  }
-  runBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none"><polygon points="5,3 18,10 5,17" fill="currentColor"/></svg><span>RUN</span>';
-  runBtn.onclick = doRun;
+  setCpuState(mode === 'stop' ? 'running' : 'idle');
+}
+
+// idle | running | paused
+function setCpuState(state) {
+  const grid = $('cpuOpsGrid');
+  if(grid) grid.dataset.cpuState = state;
+  // Botões de operação fora da CPU (desabilitar durante running/paused)
+  const frozen = (state === 'running' || state === 'paused');
+  ['opStore','opLoad','opClear','opPush','opPop'].forEach(id=>{
+    const b=$(id); if(b) b.disabled = frozen;
+  });
 }
 
 function applyStackSize() {
@@ -2491,7 +2496,7 @@ function doSetArch(arch) {
   doSelectReg(S.reg);
   $('clockDisplay').textContent='—';
   $('opsDisplay').textContent='0';
-  setRunButtonMode('run');
+  setCpuState('idle');
   const chip=$('archDisplay'); if(chip) chip.textContent=arch==='x64'?'x86-64':'IA-32';
   const stackLbl=$('stackArchLbl'); if(stackLbl) stackLbl.textContent=`STACK  ${arch==='x64'?'RSP/RBP':'ESP/EBP'}`;
   const asmPh=$('asmInput'); if(asmPh) asmPh.placeholder=arch==='x64'?'MOV RAX, 0x1234':'MOV EAX, 0x1234';
@@ -3071,6 +3076,39 @@ async function _executeOne(opts={}) {
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
 }
 
+function snapshotState() {
+  const snap = {
+    regs: { ...S.regs },
+    mem: S.mem.slice(),
+    stackMem: S.stackMem.slice(),
+    stackState: new Map(S.stackState),
+    memState: [...S.memState],
+    pc: S.pc,
+    callFrames: S.callFrames.map(f => ({ ...f })),
+  };
+  S.history.push(snap);
+  if(S.history.length > S.historyMax) S.history.shift();
+}
+
+function restoreSnapshot(snap) {
+  S.regs       = { ...snap.regs };
+  S.mem        = snap.mem.slice();
+  S.stackMem   = snap.stackMem.slice();
+  S.stackState = new Map(snap.stackState);
+  S.memState   = [...snap.memState];
+  S.pc         = snap.pc;
+  S.callFrames = snap.callFrames.map(f => ({ ...f }));
+  S.halt       = false;
+  markRegistersChanged(Object.keys(S.regs));
+  buildRegCards();
+  buildMemGrid();
+  buildStackView();
+  syncPicker();
+  refreshStats();
+  refreshPreview();
+  refreshBreakdown();
+}
+
 async function doExecute(opts={}) {
   if(S.busy) return;
   clearFaultLatch();
@@ -3088,24 +3126,81 @@ async function doStep() { await doExecute({ traceMode:'step' }); }
 async function doRun() {
   if(S.busy||S.progRunning) return;
   clearFaultLatch();
-  S.halt=false; S.progRunning=true;
+  S.halt=false; S.paused=false; S.progRunning=true;
   S.busy=true;
-  // Desabilita tudo EXCETO o botão STOP (opRun)
-  ['opStore','opLoad','opClear','opStep','opPush','opPop'].forEach(id=>{
-    const b=$(id); if(b) b.disabled=true;
-  });
-  const runBtn=$('opRun');
-  if(runBtn) setRunButtonMode('stop');
+  setCpuState('running');
 
-  while(!S.halt) {
+  while(!S.halt && !S.paused) {
+    snapshotState();
     await _executeOne({ traceMode:'run' });
-    if(S.halt) break;
+    if(S.halt || S.paused) break;
     await sleep(S.speed * 0.1);
   }
 
-  S.progRunning=false; S.busy=false;
+  S.busy=false;
   setBusy(false);
-  if(runBtn) setRunButtonMode('run');
+  if(S.paused) {
+    setCpuState('paused');
+  } else {
+    S.progRunning=false;
+    setCpuState('idle');
+  }
+}
+
+function doPause() {
+  if(!S.progRunning || S.paused) return;
+  S.paused = true;
+  // O loop doRun() detecta S.paused e chama setCpuState('paused')
+}
+
+async function doResume() {
+  if(!S.progRunning || !S.paused) return;
+  S.paused = false;
+  S.busy = true;
+  setCpuState('running');
+
+  while(!S.halt && !S.paused) {
+    snapshotState();
+    await _executeOne({ traceMode:'run' });
+    if(S.halt || S.paused) break;
+    await sleep(S.speed * 0.1);
+  }
+
+  S.busy = false;
+  setBusy(false);
+  if(S.paused) {
+    setCpuState('paused');
+  } else {
+    S.progRunning = false;
+    setCpuState('idle');
+  }
+}
+
+function doStop() {
+  S.halt = true;
+  S.paused = false;
+  S.progRunning = false;
+  S.busy = false;
+  S.history = [];
+  setBusy(false);
+  setCpuState('idle');
+}
+
+async function doStepForward() {
+  if(!S.paused) return;
+  if(S.halt) { lg('error','CPU halted. CLEAR para reiniciar.'); return; }
+  clearFaultLatch();
+  snapshotState();
+  S.busy = true; setBusy(true);
+  await _executeOne({ traceMode:'step' });
+  S.busy = false; setBusy(false);
+}
+
+function doStepBackward() {
+  if(!S.paused) return;
+  if(S.history.length === 0) return;
+  const snap = S.history.pop();
+  restoreSnapshot(snap);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -3678,7 +3773,7 @@ function doClear() {
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   $('clockDisplay').textContent='—';
   $('opsDisplay').textContent='0';
-  setRunButtonMode('run');
+  setCpuState('idle');
   setStatus('Programa demo restaurado — PC em 0x0000','lbl-done');
   lg('sys','Reiniciado com programa demo.', asmForOp('clear',{}));
   lg('sys', demoProgramForArch().listing.join(' | '));
@@ -4212,6 +4307,11 @@ const App = {
   doExecute,
   doStep,
   doRun,
+  doPause,
+  doResume,
+  doStop,
+  doStepForward,
+  doStepBackward,
   doPush,
   doPop,
   doAssemble,

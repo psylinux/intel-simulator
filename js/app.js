@@ -198,6 +198,122 @@ const DEMO_PROGRAMS = {
   },
 };
 
+const HELP_PAGES = {
+  intro: `
+    <h3>Introdução</h3>
+    <p>O simulador mostra como bytes, registradores, PC e stack mudam a cada instrução.</p>
+    <p>Use <strong>STEP</strong> para acompanhar FETCH, DECODE e EXECUTE em detalhe, ou <strong>RUN</strong> para fluxo contínuo.</p>
+  `,
+  little: `
+    <h3>Little Endian</h3>
+    <p>No padrão Intel, o byte menos significativo fica no menor endereço.</p>
+    <p>Ex.: 0x12345678 é armazenado como <code>78 56 34 12</code>.</p>
+  `,
+  big: `
+    <h3>Big Endian</h3>
+    <p>O modo BIG aqui é apenas visual/comparativo. A execução da CPU continua little-endian.</p>
+    <p>Ele ajuda a comparar a ordem dos bytes na interface, não muda a semântica do processador.</p>
+  `,
+  ops: `
+    <h3>Operações</h3>
+    <p><strong>STORE</strong> grava bytes do registrador na memória, <strong>LOAD</strong> lê memória para o registrador e <strong>PUSH/POP</strong> operam sobre a stack.</p>
+    <p><strong>RUN</strong>, <strong>PAUSE</strong>, <strong>RESUME</strong> e breakpoints controlam o fluxo do programa.</p>
+  `,
+};
+
+const I18N_PT = {
+  'asm.bp.remove': n => `BP #${n} - clique para remover`,
+  'asm.bp.set': 'Clique para definir breakpoint',
+  'asm.nav.title': 'Clique para mover o PC para esta instrucao',
+  'asm.pseudocode.title': 'Pseudo-codigo correspondente a instrucao',
+  'asm.hint.placeholder.ia32': 'Ex.: MOV EAX, 0x1234 | PUSH EAX | CALL 0x001C',
+  'asm.hint.placeholder.x64': 'Ex.: MOV RAX, 0x1234 | PUSH RAX | CALL 0x001D',
+  'help.intro': HELP_PAGES.intro,
+  'help.little': HELP_PAGES.little,
+  'help.big': HELP_PAGES.big,
+  'help.ops': HELP_PAGES.ops,
+  'log.error.addr_range': addr => `Endereco 0x${addr} fora do mapa de memoria.`,
+  'log.error.asm_grew': (addr, oldSize, newSize) => `ASM em 0x${addr} cresceu de ${oldSize} para ${newSize} byte(s).`,
+  'log.error.asm_invalid': (addr, err) => `ASM invalido em 0x${addr} - ${err}`,
+  'log.error.asm_invalid_listing': (addr, err) => `ASM invalido em 0x${addr} - ${err}`,
+  'log.error.cpu_halted': 'CPU halted. CLEAR para reiniciar.',
+  'log.error.hlt': 'HLT executado. CPU parada.',
+  'log.info.decode': mnem => `DECODE -> ${mnem}`,
+  'log.info.decode_desc': mnem => `Os bytes buscados foram decodificados como ${mnem}.`,
+  'log.info.execute_desc': 'Aplica os efeitos arquiteturais da instrucao sobre PC, registradores, memoria e stack.',
+  'log.info.fetch1': (addr, op, size) => `FETCH  IP=0x${addr} | opcode=0x${op} | ${size} byte(s)`,
+  'log.info.fetch2': np => `FETCH  IP <- 0x${np}`,
+  'log.info.fetch_desc': (size, addr) => `Busca ${size} byte(s) em 0x${addr} e carrega a instrucao no IR.`,
+  'log.info.fetch_ip': (ipName, np) => `${ipName} avanca para 0x${np} apos o FETCH.`,
+  'log.kind.error': 'ERRO',
+  'log.kind.info': 'INFO',
+  'log.kind.load': 'LOAD',
+  'log.kind.step': 'STEP',
+  'log.kind.store': 'STORE',
+  'log.kind.sys': 'SYS',
+  'log.load.byte': (reg, idx, addr, value, cur) => `${reg}[${idx}] <- MEM[0x${addr}] = 0x${value} (agora ${cur})`,
+  'log.load.done': (reg, value, ms) => `LOAD concluido: ${reg}=0x${value} - ${ms}ms`,
+  'log.load.start': (addr, reg, size, endian) => `LOAD em [0x${addr}] -> ${reg} (${size}, ${endian})`,
+  'log.pop': (addr, reg, spName) => `POP: topo [0x${addr}] -> ${reg} (${spName})`,
+  'log.push': (reg, value, spName, addr) => `PUSH ${reg}=0x${value} -> ${spName}=0x${addr}`,
+  'log.store.byte': (addr, value, idx, total) => `STORE byte ${idx}/${total} -> MEM[0x${addr}] = 0x${value}`,
+  'log.store.done': ms => `STORE concluido - ${ms}ms`,
+  'log.store.exec_ok': mnem => `EXEC OK: ${mnem}`,
+  'log.store.start': (reg, value, addr, size, endian) => `STORE ${reg}=0x${value} -> [0x${addr}] (${size}, ${endian})`,
+  'log.sys.arch': arch => `Arquitetura alterada para ${arch}.`,
+  'log.sys.asm_edit': (addr, src) => `Linha ASM em 0x${addr} atualizada para: ${src}`,
+  'log.sys.bp_hit': (num, addr) => `BP #${num} atingido em 0x${addr}.`,
+  'log.sys.demo_arch': arch => `Programa demo ${arch} carregado para a arquitetura atual.`,
+  'log.sys.demo_loaded': arch => `Programa demo ${arch} carregado.`,
+  'log.sys.demo_reset': 'Programa demo restaurado - PC em 0x0000',
+  'log.sys.format': fmt => `Formato visual ajustado para ${fmt}.`,
+  'log.sys.mem_edit': (addr, value) => `Memoria em 0x${addr} editada para 0x${value}.`,
+  'log.sys.nop_fill': (from, to) => `Bytes restantes preenchidos com NOP de 0x${from} ate 0x${to}.`,
+  'log.sys.pc_manual': addr => `PC ajustado manualmente para 0x${addr}.`,
+  'log.sys.pc_moved': addr => `PC movido para 0x${addr}.`,
+  'log.sys.reg_selected': name => `Registrador ${name} selecionado.`,
+  'log.sys.reg_set': (name, value) => `${name} ajustado para 0x${value}.`,
+  'log.sys.size': (size, bits) => `Tamanho ajustado para ${size} (${bits} bits).`,
+  'log.sys.stack_located': addr => `Stack 0x${addr} localizada no mapa de memoria.`,
+  'log.sys.stack_size': (size, regs, top, last) => `Tamanho da stack ajustado para ${size}. ${regs} reiniciados em 0x${top}. Mapa de memoria agora cobre 0x0000..0x${last}.`,
+  'log.sys.step_done': (ipName, addr) => `STEP concluido - ${ipName} agora aponta para 0x${addr}.`,
+  'log.sys.step_start': addr => `STEP em 0x${addr}.`,
+  'mem.cell.title': addr => `Endereco 0x${addr} - Shift+Clique para breakpoint`,
+  'stack.label.ia32': 'STACK  ESP/EBP',
+  'stack.label.x64': 'STACK  RSP/RBP',
+  'status.asm_invalid': (addr, err) => `ASM invalido em 0x${addr} - ${err}`,
+  'status.asm_invalid_short': err => `ASM invalido - ${err}`,
+  'status.back_done': addr => `BACK concluido - IP = 0x${addr}`,
+  'status.decode': mnem => `DECODE: ${mnem}`,
+  'status.decode_revert': mnem => `DECODE: ${mnem} - revertendo`,
+  'status.demo_arch': arch => `Programa demo ${arch} carregado - PC em 0x0000`,
+  'status.demo_loaded': 'Programa demo carregado - main em 0x0000',
+  'status.demo_reset': 'Programa demo restaurado - PC em 0x0000',
+  'status.execute': mnem => `EXECUTE: ${mnem}`,
+  'status.execute_done': addr => `EXECUTE concluido - IP = 0x${addr}`,
+  'status.execute_revert': mnem => `EXECUTE: ${mnem} - revertendo`,
+  'status.fetch1': (addr, size) => `FETCH: IP=0x${addr} -> lendo ${size} byte(s) -> IR`,
+  'status.fetch2': np => `FETCH: IP atualizado -> 0x${np} (instrucao no IR)`,
+  'status.fetch_decode_done': np => `FETCH+DECODE concluido - IP = 0x${np}`,
+  'status.fetch_revert': addr => `FETCH  IP=0x${addr} - revertendo`,
+  'status.fetch_short': (addr, size) => `FETCH  IP=0x${addr} | ${size}B -> IR`,
+  'status.hlt': 'HLT - CPU parada',
+  'status.load_done': (reg, value, ms) => `LOAD concluido: ${reg}=0x${value} - ${ms}ms`,
+  'status.load_start': (n, addr) => `LOAD: lendo ${n} byte(s) de [0x${addr}]...`,
+  'status.pop_done': (reg, value) => `POP concluido - ${reg}=0x${value}`,
+  'status.pop_start': (addr, reg) => `POP: topo da pilha [0x${addr}] -> ${reg}`,
+  'status.push_done': (spName, addr) => `PUSH concluido - ${spName}=0x${addr}`,
+  'status.push_start': (reg, addr) => `PUSH: ${reg} -> topo da pilha [0x${addr}]`,
+  'status.store_done': ms => `STORE concluido - ${ms}ms`,
+  'status.store_start': (n, addr) => `STORE: gravando ${n} byte(s) em [0x${addr}]...`,
+  'ui.asm.valid': bytes => `${bytes} byte(s) validos`,
+  'ui.reg.edit.title': 'Clique duas vezes para editar',
+  'ui.reg.picker.title': 'Clique para selecionar este registrador',
+  'ui.section.collapse': 'Recolher secao',
+  'ui.section.expand': 'Expandir secao',
+  'ui.stack.row.title': 'Clique para localizar no mapa de memoria - 2x clique para editar',
+};
+
 // ─────────────────────────────────────────────────────────
 // UTILITIES
 // ─────────────────────────────────────────────────────────
@@ -217,6 +333,15 @@ let lastStatusLog = '';
 const regPulseTimers = new Map();
 let centerPaneLayoutFrame = 0;
 let memCellRefs = [];
+
+function t(key, ...args) {
+  if(typeof key !== 'string' || !key) return '';
+  const entry = I18N_PT[key];
+  if(typeof entry === 'function') return entry(...args);
+  if(typeof entry === 'string') return entry;
+  if(key.startsWith('help.')) return HELP_PAGES[key.slice(5)] || '';
+  return args.length ? [key, ...args].join(' ') : key;
+}
 
 // Current register name set based on arch
 function gpRegs()  { return is64() ? ['RAX','RBX','RCX','RDX','RSI','RDI'] : ['EAX','EBX','ECX','EDX','ESI','EDI']; }

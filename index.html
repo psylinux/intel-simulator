@@ -332,14 +332,14 @@
     <section class="ctrl-section stack-section">
       <div class="ctrl-label stack-hd">
         <span id="stackArchLbl">STACK  ESP/EBP</span>
-        <button class="stack-cfg-toggle" id="stackCfgToggle" onclick="App.toggleStackCfg()" title="Configurações da stack" aria-expanded="false">
+        <button class="stack-cfg-toggle" id="stackCfgToggle" onclick="App.toggleStackCfg()" title="Configurações da stack" aria-expanded="true">
           <svg viewBox="0 0 20 20" fill="none"><path d="M10 3a1 1 0 01.993.883L11 4v1.17a5.002 5.002 0 012.83 1.657l1.014-.586a1 1 0 011.37.365l.003.005 1 1.732a1 1 0 01-.365 1.37l-.005.003-1.014.585c.1.39.152.8.152 1.22s-.052.83-.152 1.22l1.014.585a1 1 0 01.365 1.37l-.003.005-1 1.732a1 1 0 01-1.37.365l-.005-.003-1.014-.586A5.002 5.002 0 0111 14.83V16a1 1 0 01-2 0v-1.17a5.002 5.002 0 01-2.83-1.657l-1.014.586a1 1 0 01-1.37-.365l-.003-.005-1-1.732a1 1 0 01.365-1.37l.005-.003 1.014-.585A5.05 5.05 0 014 10c0-.42.052-.83.152-1.22L3.138 8.195a1 1 0 01-.365-1.37l.003-.005 1-1.732a1 1 0 011.37-.365l.005.003 1.014.586A5.002 5.002 0 019 5.17V4a1 1 0 011-1zm0 5a2 2 0 100 4 2 2 0 000-4z" fill="currentColor"/></svg>
           CFG
         </button>
       </div>
 
       <!-- Painel de configuração da stack -->
-      <div class="stack-cfg" id="stackCfg" aria-hidden="true">
+      <div class="stack-cfg stack-cfg-open" id="stackCfg" aria-hidden="false">
         <div class="stack-cfg-inner">
           <div class="stack-cfg-header">CONFIGURAÇÃO DA STACK</div>
 

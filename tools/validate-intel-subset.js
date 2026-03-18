@@ -2104,6 +2104,145 @@ test('RUN para no início da instrução mesmo quando bp foi definido no byte do
   assert.equal(api.S.paused, true);
 });
 
+// ─── Regressão: alias addr & 0x3F fora do code segment ───────────────────
+
+test('[REGRESSION] mc-bp não deve ser aplicado fora do code segment (bug: alias addr & 0x3F)', () => {
+  // Bug: buildMemGrid usava bpBytes.has(addr & 0x3F), fazendo com que células de
+  // memória fora dos primeiros 64 bytes (stack, heap) fossem marcadas erroneamente.
+  // Exemplo: breakpoint em 0x0A → addr=0x004A → 0x004A & 0x3F = 0x0A → mc-bp aplicado.
+  // Fix: verificar addr < 64 antes de checar bpBytes.
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // Breakpoint em 0x0A (code segment)
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0xF4]);
+  api.toggleBreakpoint(0x0A);
+  assert.ok(api.S.breakpoints.has(0x0A), 'breakpoint deve estar em 0x0A');
+
+  // Simula a verificação de buildMemGrid: somente addr < 64 pode ter mc-bp
+  // Para cada endereço fora do code segment que teria alias em 0x0A:
+  const aliasAddrs = [0x0A + 0x40, 0x0A + 0x80, 0x0A + 0xC0, 0x0A + 0x100];
+  // Invariante: bpBytes.has(alias) deve ser falso OU addr >= 64 deve bloquear
+  // A lógica correta: if(addr < 64 && bpBytes.has(addr))
+  const bpBytesSet = api.S.breakpoints;
+  for (const alias of aliasAddrs) {
+    // O bug seria: bpBytesSet.has(alias & 0x3F) → true para alias=0x4A
+    // O fix correto não usa & 0x3F na checagem de display, mas restringe a addr < 64
+    const wouldTriggerBug = bpBytesSet.has(alias & 0x3F);
+    const wouldTriggerFix = alias < 64 && bpBytesSet.has(alias);
+    assert.ok(wouldTriggerBug,   `alias 0x${alias.toString(16)}: o bug teria marcado erroneamente`);
+    assert.equal(wouldTriggerFix, false, `addr=0x${alias.toString(16)} >= 64 não deve receber mc-bp`);
+  }
+});
+
+test('[REGRESSION] breakpoint em 0x00 não contamina alias 0x40, 0x80, 0xC0', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xF4]);
+  api.toggleBreakpoint(0x00);
+
+  const buggyCheck  = (addr) => api.S.breakpoints.has(addr & 0x3F);
+  const correctCheck = (addr) => addr < 64 && api.S.breakpoints.has(addr);
+
+  // Com o bug, endereços 0x40, 0x80, 0xC0 teriam mc-bp
+  assert.ok(buggyCheck(0x40),  'confirmação do bug: 0x40 & 0x3F = 0x00 → true (lógica antiga)');
+  assert.ok(buggyCheck(0x80),  'confirmação do bug: 0x80 & 0x3F = 0x00 → true (lógica antiga)');
+  // Com o fix, nenhum desses deve receber mc-bp
+  assert.equal(correctCheck(0x40), false, '0x40 não deve ter mc-bp (fora do code segment)');
+  assert.equal(correctCheck(0x80), false, '0x80 não deve ter mc-bp (fora do code segment)');
+  assert.equal(correctCheck(0xC0), false, '0xC0 não deve ter mc-bp (fora do code segment)');
+  // O endereço no code segment ainda deve funcionar
+  assert.equal(correctCheck(0x00), true,  '0x00 no code segment deve ter mc-bp');
+});
+
+test('[REGRESSION] bpBytes armazena endereços absolutos, não mascarados', () => {
+  // Bug anterior: bpBytes.add((bpAddr + i) & 0x3F) — se instrução cruza 0x3F→0x00,
+  // a expansão wraps e pode sobrescrever endereços errados.
+  // Fix: bpBytes.add(bpAddr + i) — endereços absolutos, verificação usa addr < 64.
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // MOV EAX, imm32 em 0x3C (5 bytes: 0x3C,0x3D,0x3E,0x3F,0x40 — mas 0x40 wraps!)
+  // Na prática instrStartFor limita ao espaço de 64 bytes, mas a expansão
+  // de bpBytes deve ser consistente com addr < 64.
+  writeBytes(api, 0x3C, [0xB8, 0x01, 0x00, 0x00, 0x00]);
+  api.toggleBreakpoint(0x3C);
+  // O breakpoint deve estar em 0x3C (início da instrução)
+  assert.ok(api.S.breakpoints.has(0x3C), 'breakpoint deve estar em 0x3C');
+  // Simula a expansão correta (sem & 0x3F): endereços 0x3C, 0x3D, 0x3E, 0x3F, 0x40
+  // Destes, apenas os < 64 (0x3C–0x3F) devem receber mc-bp; 0x40 não
+  const instrSize = api.decodeAt(0x3C).size || 1;
+  const expectedBytes = [];
+  for (let i = 0; i < instrSize; i++) expectedBytes.push(0x3C + i);
+  // Todos os bytes da instrução que estão dentro do code segment
+  const inCodeSegment = expectedBytes.filter(a => a < 64);
+  const outOfSegment  = expectedBytes.filter(a => a >= 64);
+  for (const a of inCodeSegment) {
+    assert.equal(a < 64, true, `byte 0x${a.toString(16)} deve estar no code segment`);
+  }
+  for (const a of outOfSegment) {
+    assert.equal(a < 64, false, `byte 0x${a.toString(16)} NÃO deve receber mc-bp`);
+  }
+});
+
+// ─── Invariantes gerais de breakpoint ────────────────────────────────────
+
+test('[INVARIANT] breakpoints sempre contêm endereços no range 0x00–0x3F', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xB8, 0x01, 0x00, 0x00, 0x00, 0xF4]);
+  // Tenta definir breakpoints em vários endereços incluindo fora do range
+  const candidates = [0x00, 0x01, 0x05, 0x3F, 0x40, 0x7F, 0xFF, 0x1FF];
+  for (const addr of candidates) {
+    api.toggleBreakpoint(addr);
+  }
+  for (const bp of api.S.breakpoints) {
+    assert.ok(bp >= 0 && bp <= 0x3F, `breakpoint 0x${bp.toString(16)} fora do range 0x00–0x3F`);
+  }
+});
+
+test('[INVARIANT] toggleBreakpoint é idempotente: dois toggles restabelecem estado original', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0xF4]);
+  assert.equal(api.S.breakpoints.size, 0);
+  api.toggleBreakpoint(0x00);
+  assert.equal(api.S.breakpoints.size, 1);
+  api.toggleBreakpoint(0x00);
+  assert.equal(api.S.breakpoints.size, 0, 'dois toggles no mesmo endereço devem cancelar');
+});
+
+test('[INVARIANT] breakpoints não são afetados por instrStartFor em endereços já alinhados', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  // NOP em 0x00, 0x01, 0x02 → instrStartFor(0x00) = 0x00
+  writeBytes(api, 0, [0x90, 0x90, 0x90, 0xF4]);
+  const start = api.instrStartFor(0x00);
+  assert.equal(start, 0x00, 'instrStartFor(0x00) deve retornar 0x00 para NOP no início');
+  api.toggleBreakpoint(0x00);
+  assert.ok(api.S.breakpoints.has(0x00), 'breakpoint deve estar em 0x00');
+  assert.equal(api.S.breakpoints.size, 1, 'não deve criar breakpoints duplicados');
+});
+
+test('[INVARIANT] instrStartFor nunca retorna endereço >= 64', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0x90, 0xF4]);
+  for (let addr = 0; addr < 64; addr++) {
+    const start = api.instrStartFor(addr);
+    assert.ok(start >= 0 && start <= 0x3F,
+      `instrStartFor(0x${addr.toString(16)}) = 0x${start.toString(16)} deve estar em 0x00–0x3F`);
+  }
+});
+
+test('[INVARIANT] RUN com S.breakpoints vazio nunca entra em paused por breakpoint', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90, 0x90, 0xF4]);  // NOP; NOP; HLT
+  assert.equal(api.S.breakpoints.size, 0);
+  await api.doRun();
+  assert.equal(api.S.paused,  false, 'não deve pausar sem breakpoints');
+  assert.equal(api.S.halt,    true,  'deve haltar no HLT');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  RUNNER
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1601,40 +1601,19 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 #memAddrBar {
   display: grid;
-  grid-template-rows: 24px repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px)) 24px;
+  grid-template-rows: repeat(var(--mem-row-count, 8), var(--mem-cell-h, 24px));
   gap: 2px;
-  width: 112px;
-  flex: 0 0 112px;
+  width: 72px;
+  flex: 0 0 72px;
   align-content: start;
 }
 .addr-lbl {
-  height: var(--mem-cell-h, 24px); display: flex; align-items: center; justify-content: flex-end;
+  height: var(--mem-cell-h, 24px); display: flex; align-items: center; justify-content: flex-start;
   font-size: var(--fs-ui-xs); color: var(--ui-address); letter-spacing: .2px;
   font-weight: 700;
   white-space: nowrap; font-family: var(--mono);
   width: 100%;
   box-sizing: border-box;
-  padding-right: 6px;
-}
-.mem-dir-top,
-.mem-dir-bottom {
-  font-size: var(--fs-ui-xs); color: var(--tx1); letter-spacing: .6px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-  box-sizing: border-box;
-  text-align: right;
-  line-height: 1.2;
-}
-.mem-dir-chip {
-  color: var(--acc);
-  border: 1px solid var(--acc-dim);
-  background: rgba(56,189,248,.06);
-  border-radius: 999px;
-  padding: 2px 6px;
-  min-width: 92px;
-  text-align: center;
 }
 
 #memGrid {

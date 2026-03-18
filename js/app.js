@@ -2196,11 +2196,6 @@ function buildMemGrid() {
   g.style.setProperty('--mem-cell-h', `${cellPx}px`);
   g.style.minHeight = `${gridHeightPx}px`;
 
-  const topChip = document.createElement('span');
-  topChip.className = 'mem-dir-top';
-  topChip.innerHTML = `<span class="mem-dir-chip">0x${fmtMemA(topAddr)}</span>`;
-  addrFrag.appendChild(topChip);
-
   for(let r=0;r<rowCount;r++) {
     const rowBase = base + (r * 8);
     const l=document.createElement('div');
@@ -2223,10 +2218,6 @@ function buildMemGrid() {
     }
   }
 
-  const bottomChip = document.createElement('span');
-  bottomChip.className = 'mem-dir-bottom';
-  bottomChip.innerHTML = `<span class="mem-dir-chip">0x${fmtMemA(bottomAddr)}</span>`;
-  addrFrag.appendChild(bottomChip);
 
   a.appendChild(addrFrag);
   g.appendChild(gridFrag);

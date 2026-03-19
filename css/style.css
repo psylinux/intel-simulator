@@ -370,17 +370,17 @@ body.code-mem-resizing {
 }
 
 /* Register picker */
-.reg-picker { display: flex; flex-direction: column; gap: 2px; }
+.reg-picker { display: flex; flex-direction: column; gap: 5px; }
 .rpbtn {
   display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-  padding: 8px 10px; background: #101f33; border: 1px solid #2e4d72;
+  padding: 8px 10px; background: #0e1e33; border: 1px solid #305880;
   border-radius: var(--r); cursor: pointer; transition: all .15s var(--ease);
 }
 .rp-main {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.rp-name { font-size: var(--fs-ui-md); font-weight: 700; color: #60c8ff; letter-spacing: .55px; }
-.rp-val  { font-size: var(--fs-ui-md); color: #eaf4ff; font-family: var(--mono); letter-spacing: .25px; font-weight: 600; }
+.rp-name { font-size: var(--fs-ui-md); font-weight: 800; color: #38c0ff; letter-spacing: .55px; }
+.rp-val  { font-size: var(--fs-ui-md); color: #ffffff; font-family: var(--mono); letter-spacing: .25px; font-weight: 600; }
 .rp-val-editable { cursor: text; }
 .rp-val-editable:hover { color: var(--acc); }
 .rp-bytes {
@@ -389,17 +389,25 @@ body.code-mem-resizing {
 .rp-byte {
   flex: 1; min-width: 0;
   text-align: center; padding: 3px 1px;
-  background: #0d1827; border: 1px solid #2e4d72;
-  border-radius: 3px; color: #d8eeff;
+  background: #0a1628; border: 1px solid #305880;
+  border-radius: 3px; color: #e8f4ff;
   font-size: var(--fs-ui-xs); line-height: 1.15;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 700;
 }
 .rp-byte-lbl {
-  color: #6fa8d0; font-size: 10px; font-weight: 700; letter-spacing: .2px; line-height: 1;
+  font-size: 9px; font-weight: 800; letter-spacing: .3px; line-height: 1;
 }
+/* LSB — green */
+.rc-blbl-lsb { color: #4ade80; }
+/* MSB — amber */
+.rc-blbl-msb { color: #fbbf24; }
+/* A+N address offset — cyan */
+.rc-blbl-mem { color: #38bdf8; }
+
 .rp-byte.rc-byte-base,
 .rp-byte.rc-byte-last {
-  background: #0f1e32; border-color: #3d6a9e;
+  background: #0d1e36; border-color: #4080b0;
 }
 .rpbtn.active {
   background: rgba(251,191,36,.12); border-color: var(--amb);

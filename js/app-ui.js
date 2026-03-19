@@ -176,24 +176,25 @@ function cForInstr(instr, addr) {
   const asm = instr.asm || instr.mnem || `DB 0x${hex8(S.mem[addr & 0x3F])}`;
   let m = null;
 
-  if (instr.unknown) return { kind: 'pseudo', label: 'PSEUDO', code: `db(0x${hex8(instr.op)});` };
-  if (asm === 'NOP') return { kind: 'pseudo', label: 'PSEUDO', code: '/* no-op */' };
-  if (asm === 'HLT') return { kind: 'pseudo', label: 'PSEUDO', code: 'HALT_CPU();' };
-  if (asm === 'RET') return { kind: 'c', label: 'C', code: 'return;' };
-  if ((m = /^CALL 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: 'C', code: `fn_0x${m[1]}();` };
-  if ((m = /^JMP SHORT 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: 'C', code: `goto loc_0x${m[1]};` };
-  if ((m = /^PUSH ([A-Z0-9]+)$/.exec(asm))) return { kind: 'pseudo', label: 'PSEUDO', code: `STACK.push(${m[1]});` };
-  if ((m = /^POP ([A-Z0-9]+)$/.exec(asm))) return { kind: 'pseudo', label: 'PSEUDO', code: `${m[1]} = STACK.pop();` };
-  if ((m = /^MOV ([A-Z0-9]+), 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: 'C', code: `${m[1]} = 0x${m[2]};` };
-  if ((m = /^MOV ([A-Z0-9]+), ([A-Z0-9]+)$/.exec(asm))) return { kind: 'c', label: 'C', code: `${m[1]} = ${m[2]};` };
+  const LP = t('ui.instr.label.pseudo'), LC = t('ui.instr.label.c');
+  if (instr.unknown) return { kind: 'pseudo', label: LP, code: `db(0x${hex8(instr.op)});` };
+  if (asm === 'NOP') return { kind: 'pseudo', label: LP, code: '/* no-op */' };
+  if (asm === 'HLT') return { kind: 'pseudo', label: LP, code: 'HALT_CPU();' };
+  if (asm === 'RET') return { kind: 'c', label: LC, code: 'return;' };
+  if ((m = /^CALL 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: LC, code: `fn_0x${m[1]}();` };
+  if ((m = /^JMP SHORT 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: LC, code: `goto loc_0x${m[1]};` };
+  if ((m = /^PUSH ([A-Z0-9]+)$/.exec(asm))) return { kind: 'pseudo', label: LP, code: `STACK.push(${m[1]});` };
+  if ((m = /^POP ([A-Z0-9]+)$/.exec(asm))) return { kind: 'pseudo', label: LP, code: `${m[1]} = STACK.pop();` };
+  if ((m = /^MOV ([A-Z0-9]+), 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'c', label: LC, code: `${m[1]} = 0x${m[2]};` };
+  if ((m = /^MOV ([A-Z0-9]+), ([A-Z0-9]+)$/.exec(asm))) return { kind: 'c', label: LC, code: `${m[1]} = ${m[2]};` };
   if ((m = /^MOV (QWORD|DWORD) PTR \[0X([0-9A-F]+)\], ([A-Z0-9]+)$/.exec(asm))) {
-    return { kind: 'c', label: 'C', code: `*((${cScalarType(m[1] === 'QWORD' ? 64 : 32)}*)0x${m[2]}) = ${m[3]};` };
+    return { kind: 'c', label: LC, code: `*((${cScalarType(m[1] === 'QWORD' ? 64 : 32)}*)0x${m[2]}) = ${m[3]};` };
   }
   if ((m = /^MOV ([A-Z0-9]+), (QWORD|DWORD) PTR \[0X([0-9A-F]+)\]$/.exec(asm))) {
-    return { kind: 'c', label: 'C', code: `${m[1]} = *((${cScalarType(m[2] === 'QWORD' ? 64 : 32)}*)0x${m[3]});` };
+    return { kind: 'c', label: LC, code: `${m[1]} = *((${cScalarType(m[2] === 'QWORD' ? 64 : 32)}*)0x${m[3]});` };
   }
-  if ((m = /^DB 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'pseudo', label: 'PSEUDO', code: `db(0x${m[1]});` };
-  return { kind: 'pseudo', label: 'PSEUDO', code: `/* ${asm} */` };
+  if ((m = /^DB 0X([0-9A-F]+)$/.exec(asm))) return { kind: 'pseudo', label: LP, code: `db(0x${m[1]});` };
+  return { kind: 'pseudo', label: LP, code: `/* ${asm} */` };
 }
 
 function ensureCurrentTraceVisible() {
@@ -614,8 +615,8 @@ function renderByteStrip(name, opts = {}) {
     if (transferCount > 1 && idx === lastPos && idx >= transferStart) cls += ' rc-byte-last';
 
     const labels = [];
-    if (sigIdx === byteCount - 1) labels.push(`<span class="${labelCls} rc-blbl-msb">MSB</span>`);
-    if (sigIdx === 0) labels.push(`<span class="${labelCls} rc-blbl-lsb">LSB</span>`);
+    if (sigIdx === byteCount - 1) labels.push(`<span class="${labelCls} rc-blbl-msb">${t('ui.byte.role.msb')}</span>`);
+    if (sigIdx === 0) labels.push(`<span class="${labelCls} rc-blbl-lsb">${t('ui.byte.role.lsb')}</span>`);
     if (idx === basePos && idx >= transferStart) labels.push(`<span class="${labelCls} rc-blbl-mem">A+0</span>`);
     if (transferCount > 1 && idx === lastPos && idx >= transferStart) {
       labels.push(`<span class="${labelCls} rc-blbl-mem">A+${transferCount - 1}</span>`);
@@ -715,8 +716,8 @@ function refreshPreview() {
     if (f && S.endian === 'big') cls += ' msb';
     if (l && S.endian === 'little' && n > 1) cls += ' msb';
     if (l && S.endian === 'big' && n > 1) cls += ' lsb';
-    const lbl = (f && S.endian === 'little') ? ' LSB' : (f && S.endian === 'big') ? ' MSB' :
-      (l && S.endian === 'little' && n > 1) ? ' MSB' : (l && S.endian === 'big' && n > 1) ? ' LSB' : '';
+    const lbl = (f && S.endian === 'little') ? ' ' + t('ui.byte.role.lsb') : (f && S.endian === 'big') ? ' ' + t('ui.byte.role.msb') :
+      (l && S.endian === 'little' && n > 1) ? ' ' + t('ui.byte.role.msb') : (l && S.endian === 'big' && n > 1) ? ' ' + t('ui.byte.role.lsb') : '';
     return `<span class="${cls}">${hex8(b)}${lbl}</span>`;
   }).join('');
 }
@@ -732,10 +733,10 @@ function refreshBreakdown() {
   c.innerHTML = ord.map((b, i) => {
     const ma = addr + i, f = i === 0, l = i === n - 1;
     let cls = '', role = '—';
-    if (f && S.endian === 'little') { cls = 'bb-lsb'; role = 'LSB'; }
-    if (f && S.endian === 'big') { cls = 'bb-msb'; role = 'MSB'; }
-    if (l && S.endian === 'little' && n > 1) { cls = 'bb-msb'; role = 'MSB'; }
-    if (l && S.endian === 'big' && n > 1) { cls = 'bb-lsb'; role = 'LSB'; }
+    if (f && S.endian === 'little') { cls = 'bb-lsb'; role = t('ui.byte.role.lsb'); }
+    if (f && S.endian === 'big') { cls = 'bb-msb'; role = t('ui.byte.role.msb'); }
+    if (l && S.endian === 'little' && n > 1) { cls = 'bb-msb'; role = t('ui.byte.role.msb'); }
+    if (l && S.endian === 'big' && n > 1) { cls = 'bb-lsb'; role = t('ui.byte.role.lsb'); }
     return `<div class="bb-row">
       <span class="bb-addr">0x${fmtA(ma)}</span>
       <span class="bb-hex ${cls}">${hex8(b)}</span>
@@ -774,7 +775,7 @@ function renderMemGrid() {
   g.innerHTML = '';
   a.innerHTML = '';
   const tag = $('addrDirTag');
-  if (tag) tag.textContent = `0x${fmtMemA(topAddr)}..0x${fmtMemA(bottomAddr)} · total ${formatStackSize(totalBytes)}`;
+  if (tag) tag.textContent = t('mem.addrdir.total', fmtMemA(topAddr), fmtMemA(bottomAddr), formatStackSize(totalBytes));
   a.style.setProperty('--mem-row-count', String(rowCount));
   a.style.setProperty('--mem-cell-h', `${cellPx}px`);
   a.style.setProperty('--mem-cell-w', `${cellPx}px`);
@@ -1069,7 +1070,7 @@ function setArch(arch) {
   updatePickerVal(S.reg);
   doSelectReg(S.reg);
   setCpuState('idle');
-  const stackLbl = $('stackArchLbl'); if (stackLbl) stackLbl.textContent = `STACK  ${arch === 'x64' ? 'RSP/RBP' : 'ESP/EBP'}`;
+  const stackLbl = $('stackArchLbl'); if (stackLbl) stackLbl.textContent = t(arch === 'x64' ? 'stack.label.x64' : 'stack.label.ia32');
   const asmPh = $('asmInput'); if (asmPh) asmPh.placeholder = t(arch === 'x64' ? 'asm.hint.placeholder.x64' : 'asm.hint.placeholder.ia32');
   syncInstructionPointerUI();
   refreshAsmValidation();
@@ -1308,7 +1309,7 @@ function renderStackView() {
     <div class="stack-list">${rows}</div>`;
 
   const stackLbl = $('stackArchLbl');
-  if (stackLbl) stackLbl.textContent = `STACK  ${spName}/${bpName}`;
+  if (stackLbl) stackLbl.textContent = t(is64() ? 'stack.label.x64' : 'stack.label.ia32');
   syncStackSizeUI();
   syncStackCfgUI();
   scheduleCenterPaneLayout();

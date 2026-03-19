@@ -34,7 +34,7 @@
       <div>
         <div class="tb-title">Intel x86/x64 Memory &amp; Stack Lab <span id="appVersion" class="tb-version"></span>
         </div>
-        <div class="tb-sub" data-i18n="topbar.subtitle">Simulador didático de memória, registradores e stack</div>
+        <div class="tb-sub" data-i18n="topbar.subtitle"></div>
       </div>
     </div>
 
@@ -77,40 +77,38 @@
 
       <!-- ARQUITETURA -->
       <section class="ctrl-section">
-        <div class="ctrl-label" data-i18n="sidebar.arch.label">ARQUITETURA</div>
+        <div class="ctrl-label" data-i18n="sidebar.arch.label"></div>
         <div class="arch-toggle">
           <button class="artbtn active" id="archIA32" onclick="App.setArch('ia32')">
-            <span class="art-name" data-i18n="sidebar.arch.ia32.name">IA-32</span>
-            <span class="art-sub" data-i18n="sidebar.arch.ia32.sub">32-bit · EAX..EDI</span>
+            <span class="art-name" data-i18n="sidebar.arch.ia32.name"></span>
+            <span class="art-sub" data-i18n="sidebar.arch.ia32.sub"></span>
           </button>
           <button class="artbtn" id="archX64" onclick="App.setArch('x64')">
-            <span class="art-name" data-i18n="sidebar.arch.x64.name">x86-64</span>
-            <span class="art-sub" data-i18n="sidebar.arch.x64.sub">64-bit · RAX..R15</span>
+            <span class="art-name" data-i18n="sidebar.arch.x64.name"></span>
+            <span class="art-sub" data-i18n="sidebar.arch.x64.sub"></span>
           </button>
         </div>
       </section>
 
       <!-- ENDIANNESS -->
       <section class="ctrl-section">
-        <div class="ctrl-label" data-i18n="sidebar.endian.label">ENDIANNESS (EXPERIMENTAL)</div>
+        <div class="ctrl-label" data-i18n="sidebar.endian.label"></div>
         <div class="endian-toggle">
           <button class="etbtn active" id="eLittle" onclick="App.setEndian('little')">
-            <span class="et-name" data-i18n="sidebar.endian.little.name">LITTLE</span>
-            <span class="et-sub" data-i18n="sidebar.endian.little.sub">LSB primeiro</span>
+            <span class="et-name" data-i18n="sidebar.endian.little.name"></span>
+            <span class="et-sub" data-i18n="sidebar.endian.little.sub"></span>
           </button>
           <button class="etbtn" id="eBig" onclick="App.setEndian('big')">
-            <span class="et-name" data-i18n="sidebar.endian.big.name">BIG</span>
-            <span class="et-sub" data-i18n="sidebar.endian.big.sub">MSB primeiro</span>
+            <span class="et-name" data-i18n="sidebar.endian.big.name"></span>
+            <span class="et-sub" data-i18n="sidebar.endian.big.sub"></span>
           </button>
         </div>
-        <div class="endian-hint" id="endianHint">
-          <span class="eh-arrow">0x0000</span> ← byte menos significativo (LSB)
-        </div>
+        <div class="endian-hint" id="endianHint"></div>
       </section>
 
       <!-- REGISTER SELECT -->
       <section class="ctrl-section">
-        <div class="ctrl-label" data-i18n="sidebar.reg.label">REGISTRADORES</div>
+        <div class="ctrl-label" data-i18n="sidebar.reg.label"></div>
         <div class="reg-picker" id="regPicker">
           <!-- populated dynamically by buildRegPicker() -->
         </div>
@@ -130,12 +128,9 @@
     <main id="canvas">
 
       <div id="editGuideBanner">
-        <span class="eg-title" data-i18n="editguide.title">EDICAO RAPIDA</span>
-        <span class="eg-item" id="editGuideHint1" data-i18n-html="editguide.hint1">Clique nos <strong>valores dos
-            registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para
-          editar bytes.</span>
-        <span class="eg-item" data-i18n-html="editguide.hint2">Edite o programa direto na <strong>LISTAGEM ASM</strong>
-          com <strong>2× clique</strong> em qualquer instrucao.</span>
+        <span class="eg-title" data-i18n="editguide.title"></span>
+        <span class="eg-item" id="editGuideHint1" data-i18n-html="editguide.hint1"></span>
+        <span class="eg-item" data-i18n-html="editguide.hint2"></span>
       </div>
 
 
@@ -144,7 +139,7 @@
 
         <!-- Card CPU -->
         <div class="cb-card cb-card-cpu" id="cpuOpsGrid" data-cpu-state="idle">
-          <div class="cb-card-title" data-i18n="ctrlbar.cpu.title">CPU</div>
+          <div class="cb-card-title" data-i18n="ctrlbar.cpu.title"></div>
           <div class="cb-card-body">
 
             <!-- idle: STEP · RUN · CLEAR -->
@@ -154,19 +149,19 @@
                   <polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7" />
                   <line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.step">STEP</span>
+                <span data-i18n="ctrlbar.btn.step"></span>
               </button>
               <button class="cb-btn cb-run" id="opRun" onclick="App.doRun()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <polygon points="5,3 18,10 5,17" fill="currentColor" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.run">RUN</span>
+                <span data-i18n="ctrlbar.btn.run"></span>
               </button>
               <button class="cb-btn cb-clear" id="opClear" onclick="App.clearSim()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.clear">CLEAR</span>
+                <span data-i18n="ctrlbar.btn.clear"></span>
               </button>
             </div>
 
@@ -177,13 +172,13 @@
                   <rect x="5" y="4" width="3.5" height="12" rx="1" fill="currentColor" />
                   <rect x="11.5" y="4" width="3.5" height="12" rx="1" fill="currentColor" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.pause">PAUSE</span>
+                <span data-i18n="ctrlbar.btn.pause"></span>
               </button>
               <button class="cb-btn cb-stop" id="opStop" onclick="App.doStop()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.stop">STOP</span>
+                <span data-i18n="ctrlbar.btn.stop"></span>
               </button>
             </div>
 
@@ -194,26 +189,26 @@
                   <polygon points="13,4 4,10 13,16" fill="currentColor" opacity=".7" />
                   <line x1="15" y1="4" x2="15" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.back">BACK</span>
+                <span data-i18n="ctrlbar.btn.back"></span>
               </button>
               <button class="cb-btn cb-resume" id="opResume" onclick="App.doResume()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <polygon points="5,3 18,10 5,17" fill="currentColor" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.resume">RESUME</span>
+                <span data-i18n="ctrlbar.btn.resume"></span>
               </button>
               <button class="cb-btn cb-next" id="opStepFwd" onclick="App.doStepForward()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <polygon points="7,4 16,10 7,16" fill="currentColor" opacity=".7" />
                   <line x1="5" y1="4" x2="5" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.next">NEXT</span>
+                <span data-i18n="ctrlbar.btn.next"></span>
               </button>
               <button class="cb-btn cb-stop" id="opStopPaused" onclick="App.doStop()">
                 <svg viewBox="0 0 20 20" fill="none">
                   <rect x="5" y="5" width="10" height="10" rx="1.6" fill="currentColor" />
                 </svg>
-                <span data-i18n="ctrlbar.btn.stop">STOP</span>
+                <span data-i18n="ctrlbar.btn.stop"></span>
               </button>
             </div>
 
@@ -225,7 +220,7 @@
 
         <!-- Card SPEED -->
         <div class="cb-card cb-card-speed" id="speedCard">
-          <div class="cb-card-title" data-i18n="ctrlbar.speed.title">SPEED</div>
+          <div class="cb-card-title" data-i18n="ctrlbar.speed.title"></div>
           <div class="cb-card-body cb-speed-body">
             <svg class="cb-speed-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M3 13a7 7 0 1 1 4.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -235,9 +230,9 @@
             <div class="cb-speed-track">
               <input type="range" id="speedSlider" min="80" max="10000" value="2500" step="40">
               <div class="cb-speed-labels">
-                <span data-i18n="ctrlbar.speed.fast">FAST</span>
+                <span data-i18n="ctrlbar.speed.fast"></span>
                 <span id="speedVal">2500ms</span>
-                <span data-i18n="ctrlbar.speed.slow">SLOW</span>
+                <span data-i18n="ctrlbar.speed.slow"></span>
               </div>
             </div>
           </div>
@@ -248,7 +243,7 @@
 
         <!-- Card MEMÓRIA -->
         <div class="cb-card cb-card-mem">
-          <div class="cb-card-title" data-i18n="ctrlbar.mem.title">MEMÓRIA</div>
+          <div class="cb-card-title" data-i18n="ctrlbar.mem.title"></div>
           <div class="cb-card-body">
             <button class="cb-btn cb-store" id="opStore" onclick="App.doStore()">
               <svg viewBox="0 0 20 20" fill="none">
@@ -257,7 +252,7 @@
                 <path d="M10 3v8M10 11l-3-3m3 3l3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
                   stroke-linejoin="round" />
               </svg>
-              <span data-i18n="ctrlbar.btn.store">STORE</span>
+              <span data-i18n="ctrlbar.btn.store"></span>
             </button>
             <button class="cb-btn cb-load" id="opLoad" onclick="App.doLoad()">
               <svg viewBox="0 0 20 20" fill="none">
@@ -266,21 +261,21 @@
                 <path d="M10 16V8M10 8l-3 3m3-3l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
                   stroke-linejoin="round" />
               </svg>
-              <span data-i18n="ctrlbar.btn.load">LOAD</span>
+              <span data-i18n="ctrlbar.btn.load"></span>
             </button>
             <button class="cb-btn cb-push" id="opPush" onclick="App.doPush()">
               <svg viewBox="0 0 20 20" fill="none">
                 <path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span data-i18n="ctrlbar.btn.push">PUSH</span>
+              <span data-i18n="ctrlbar.btn.push"></span>
             </button>
             <button class="cb-btn cb-pop" id="opPop" onclick="App.doPop()">
               <svg viewBox="0 0 20 20" fill="none">
                 <path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span data-i18n="ctrlbar.btn.pop">POP</span>
+              <span data-i18n="ctrlbar.btn.pop"></span>
             </button>
           </div>
         </div>
@@ -321,22 +316,22 @@
                 <!-- Coluna esquerda: mapa de memória -->
                 <div class="mem-col-map">
                   <div class="section-badge">
-                    <span data-i18n="mem.section.label">MAPA DE MEMÓRIA</span>
-                    <span class="addr-dir-tag" id="addrDirTag">0x0000..0x003F · cresce ↓</span>
+                    <span data-i18n="mem.section.label"></span>
+                    <span class="addr-dir-tag" id="addrDirTag"></span>
                   </div>
                   <div id="memWrapper">
                     <div id="memAddrBar"></div>
                     <div id="memGrid"></div>
                     <div id="memLegend">
                       <span class="ml-item"><span class="ml-dot ml-active"></span><span
-                          data-i18n="mem.legend.active">Ativo</span></span>
+                          data-i18n="mem.legend.active"></span></span>
                       <span class="ml-item"><span class="ml-dot ml-written"></span><span
-                          data-i18n="mem.legend.written">Escrito</span></span>
+                          data-i18n="mem.legend.written"></span></span>
                       <span class="ml-item"><span class="ml-dot ml-pc"></span><span id="memLegendIpLbl">EIP</span></span>
                       <span class="ml-item"><span class="ml-dot ml-fetch"></span><span
-                          data-i18n="mem.legend.fetch">Fetch</span></span>
+                          data-i18n="mem.legend.fetch"></span></span>
                       <span class="ml-item"><span class="ml-dot ml-bp"></span><span
-                          data-i18n="mem.legend.bp">BP</span></span>
+                          data-i18n="mem.legend.bp"></span></span>
                     </div>
                   </div>
                 </div>
@@ -347,13 +342,13 @@
                 <!-- Coluna direita: lista de breakpoints -->
                 <div class="mem-col-bp">
                   <div class="section-badge mem-bp-badge">
-                    <span data-i18n="mem.bp.section">BREAKPOINTS</span>
+                    <span data-i18n="mem.bp.section"></span>
                     <button class="mem-bp-clr-btn" id="bpClearBtn" onclick="App.clearBreakpoints()"
                       data-i18n-title="mem.bp.clr.title" title="Limpar todos os breakpoints">
                       <svg viewBox="0 0 14 14" fill="none">
                         <path d="M3 3l8 8M11 3L3 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
                       </svg>
-                      <span data-i18n="mem.bp.clr.btn">LIMPAR</span>
+                      <span data-i18n="mem.bp.clr.btn"></span>
                     </button>
                   </div>
                   <div id="memBpStatus" class="mem-bp-status mem-bp-always"></div>
@@ -368,11 +363,11 @@
             <section id="asmTraceSection" class="split-pane">
               <div class="split-pane-body">
                 <div class="section-badge">
-                  <span data-i18n="asm.section.label">LISTAGENS DE CODIGO</span>
+                  <span data-i18n="asm.section.label"></span>
                 </div>
                 <div class="trace-heads">
-                  <div class="trace-head" data-i18n="asm.trace.head.asm">LISTAGEM ASM</div>
-                  <div class="trace-head" data-i18n="asm.trace.head.pseudo">PSEUDO-CÓDIGO</div>
+                  <div class="trace-head" data-i18n="asm.trace.head.asm"></div>
+                  <div class="trace-head" data-i18n="asm.trace.head.pseudo"></div>
                 </div>
                 <div id="asmTrace"></div>
               </div>
@@ -386,8 +381,8 @@
       <!-- LOG -->
       <div id="logSection" class="canvas-pane">
         <div class="canvas-pane-body">
-          <div class="section-badge"><span data-i18n="log.section.label">LOG DE OPERAÇÕES</span> <button
-              id="logClearBtn" onclick="App.clearLog()" data-i18n="log.clear.btn">limpar</button></div>
+          <div class="section-badge"><span data-i18n="log.section.label"></span> <button
+              id="logClearBtn" onclick="App.clearLog()" data-i18n="log.clear.btn"></button></div>
           <div id="logOutput"></div>
         </div>
         <div class="canvas-pane-handle" data-pane-handle aria-hidden="true" data-i18n-title="resize.section"
@@ -405,7 +400,7 @@
       <!-- STACK VIEWER -->
       <section class="ctrl-section stack-section">
         <div class="ctrl-label stack-hd">
-          <span id="stackArchLbl" data-i18n="stack.label.ia32">STACK ESP/EBP</span>
+          <span id="stackArchLbl" data-i18n="stack.label.ia32"></span>
           <button class="stack-cfg-toggle" id="stackCfgToggle" onclick="App.toggleStackCfg()"
             data-i18n-title="stack.cfg.toggle.title" title="Configurações da stack" aria-expanded="true">
             <svg viewBox="0 0 20 20" fill="none">
@@ -413,50 +408,50 @@
                 d="M10 3a1 1 0 01.993.883L11 4v1.17a5.002 5.002 0 012.83 1.657l1.014-.586a1 1 0 011.37.365l.003.005 1 1.732a1 1 0 01-.365 1.37l-.005.003-1.014.585c.1.39.152.8.152 1.22s-.052.83-.152 1.22l1.014.585a1 1 0 01.365 1.37l-.003.005-1 1.732a1 1 0 01-1.37.365l-.005-.003-1.014-.586A5.002 5.002 0 0111 14.83V16a1 1 0 01-2 0v-1.17a5.002 5.002 0 01-2.83-1.657l-1.014.586a1 1 0 01-1.37-.365l-.003-.005-1-1.732a1 1 0 01.365-1.37l.005-.003 1.014-.585A5.05 5.05 0 014 10c0-.42.052-.83.152-1.22L3.138 8.195a1 1 0 01-.365-1.37l.003-.005 1-1.732a1 1 0 011.37-.365l.005.003 1.014.586A5.002 5.002 0 019 5.17V4a1 1 0 011-1zm0 5a2 2 0 100 4 2 2 0 000-4z"
                 fill="currentColor" />
             </svg>
-            <span data-i18n="stack.cfg.toggle.btn">CFG</span>
+            <span data-i18n="stack.cfg.toggle.btn"></span>
           </button>
         </div>
 
         <!-- Painel de configuração da stack -->
         <div class="stack-cfg stack-cfg-open" id="stackCfg" aria-hidden="false">
           <div class="stack-cfg-inner">
-            <div class="stack-cfg-header" data-i18n="stack.cfg.header">CONFIGURAÇÃO DA STACK</div>
+            <div class="stack-cfg-header" data-i18n="stack.cfg.header"></div>
 
             <div class="stack-cfg-row">
-              <span class="stack-cfg-label" data-i18n="stack.cfg.size.label">Tamanho</span>
+              <span class="stack-cfg-label" data-i18n="stack.cfg.size.label"></span>
               <div class="stack-cfg-ctrl">
                 <input class="stack-size-input" id="stackSizeInput" type="number" min="1" max="1048576" step="1"
                   value="100" />
                 <select class="stack-size-unit-select" id="stackSizeUnitSelect">
-                  <option value="B" selected data-i18n="stack.cfg.size.bytes">Bytes</option>
-                  <option value="KB" data-i18n="stack.cfg.size.kb">KB</option>
+                  <option value="B" selected data-i18n="stack.cfg.size.bytes"></option>
+                  <option value="KB" data-i18n="stack.cfg.size.kb"></option>
                 </select>
                 <button class="stack-size-apply" type="button" onclick="App.applyStackSize()"
-                  data-i18n="stack.cfg.size.apply">Aplicar</button>
+                  data-i18n="stack.cfg.size.apply"></button>
               </div>
             </div>
 
             <div class="stack-cfg-row">
-              <span class="stack-cfg-label" data-i18n="stack.cfg.mode.label">Modo</span>
+              <span class="stack-cfg-label" data-i18n="stack.cfg.mode.label"></span>
               <div class="stack-cfg-ctrl">
                 <button class="stack-cfg-mode-btn stack-cfg-mode-btn-active" id="stackModeFull"
-                  onclick="App.setStackMode('full')" data-i18n="stack.cfg.mode.full">FULL</button>
+                  onclick="App.setStackMode('full')" data-i18n="stack.cfg.mode.full"></button>
                 <button class="stack-cfg-mode-btn" id="stackModeFrame" onclick="App.setStackMode('frame')"
-                  data-i18n="stack.cfg.mode.frame">FRAME</button>
+                  data-i18n="stack.cfg.mode.frame"></button>
               </div>
             </div>
 
             <div class="stack-cfg-row">
-              <span class="stack-cfg-label" data-i18n="stack.cfg.gran.label">Granularidade</span>
+              <span class="stack-cfg-label" data-i18n="stack.cfg.gran.label"></span>
               <div class="stack-cfg-ctrl">
                 <button class="stack-cfg-gran-btn" id="stackGranByte" onclick="App.setStackGranularity('byte')"
-                  data-i18n="stack.cfg.gran.byte">Byte</button>
+                  data-i18n="stack.cfg.gran.byte"></button>
                 <button class="stack-cfg-gran-btn" id="stackGranWord" onclick="App.setStackGranularity('word')"
-                  data-i18n="stack.cfg.gran.word">Word</button>
+                  data-i18n="stack.cfg.gran.word"></button>
                 <button class="stack-cfg-gran-btn stack-cfg-gran-btn-active" id="stackGranDword"
-                  onclick="App.setStackGranularity('dword')" data-i18n="stack.cfg.gran.dword">DWord</button>
+                  onclick="App.setStackGranularity('dword')" data-i18n="stack.cfg.gran.dword"></button>
                 <button class="stack-cfg-gran-btn" id="stackGranQword" onclick="App.setStackGranularity('qword')"
-                  data-i18n="stack.cfg.gran.qword">QWord</button>
+                  data-i18n="stack.cfg.gran.qword"></button>
               </div>
             </div>
           </div>
@@ -474,14 +469,14 @@
   <div class="modal-bg" id="helpBg" onclick="if(event.target===this)App.closeHelp()">
     <div class="modal" id="helpModal">
       <div class="modal-hd">
-        <span data-i18n="help.modal.title">GUIA DE ENDIANNESS</span>
+        <span data-i18n="help.modal.title"></span>
         <button class="modal-x" onclick="App.closeHelp()">✕</button>
       </div>
       <div class="help-tabs">
-        <button class="htab active" onclick="App.showHelp('intro',this)" data-i18n="help.tab.intro">Introdução</button>
-        <button class="htab" onclick="App.showHelp('little',this)" data-i18n="help.tab.little">Little Endian</button>
-        <button class="htab" onclick="App.showHelp('big',this)" data-i18n="help.tab.big">Big Endian</button>
-        <button class="htab" onclick="App.showHelp('ops',this)" data-i18n="help.tab.ops">Operações</button>
+        <button class="htab active" onclick="App.showHelp('intro',this)" data-i18n="help.tab.intro"></button>
+        <button class="htab" onclick="App.showHelp('little',this)" data-i18n="help.tab.little"></button>
+        <button class="htab" onclick="App.showHelp('big',this)" data-i18n="help.tab.big"></button>
+        <button class="htab" onclick="App.showHelp('ops',this)" data-i18n="help.tab.ops"></button>
       </div>
       <div class="modal-body" id="helpBody"></div>
     </div>

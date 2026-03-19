@@ -26,7 +26,7 @@ function init() {
   if (window.APP_VERSION) {
     const vEl = document.getElementById('appVersion');
     if (vEl) vEl.textContent = window.APP_VERSION;
-    document.title = `Intel x86/x64 Memory & Stack Lab ${window.APP_VERSION}`;
+    document.title = `${t('page.title')} ${window.APP_VERSION}`;
   }
   loadSidebarPanelWidth();
   loadStackPanelWidth();

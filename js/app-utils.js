@@ -144,10 +144,6 @@ function fmtMemA(n) {
   return safe.toString(16).padStart(Math.max(4, stackHexWidth()), '0').toUpperCase();
 }
 
-function fmtStackA(n) {
-  return fmtMemA(n);
-}
-
 // ─────────────────────────────────────────────────────────
 // MODULE-LEVEL STATE  (timing / animation / DOM refs)
 // ─────────────────────────────────────────────────────────

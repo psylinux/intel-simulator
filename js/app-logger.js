@@ -25,13 +25,11 @@
 function setPC(addr, opts = {}) {
   const prevPC = S.pc & 0x3F;
   S.pc = addr & 0x3F;
-  syncMemCellDom(prevPC);
-  if (S.pc !== prevPC) syncMemCellDom(S.pc);
+  syncInstrSpanDom(prevPC);
+  if (S.pc !== prevPC) syncInstrSpanDom(S.pc);
   const syncTrace = opts.trace !== false;
   const traceAutoScroll = opts.traceAutoScroll === true;
   const revealMem = opts.revealMem === true;
-  const pd = $('pcDisplay');
-  if (pd && document.activeElement !== pd) pd.value = fmtA(S.pc);
   const ai = $('addrInput');
   if (ai && document.activeElement !== ai) {
     ai.value = fmtA(S.pc);
@@ -152,8 +150,6 @@ function recOp(type, ms) {
   if (type === 'load') { S.stats.loads++; S.stats.loadTimes.push(ms); }
   if (type === 'store') { S.stats.stores++; S.stats.storeTimes.push(ms); }
   S.endian === 'little' ? S.stats.littleOps++ : S.stats.bigOps++;
-  $('clockDisplay').textContent = ms + 'ms';
-  $('opsDisplay').textContent = S.stats.ops;
 }
 
 function refreshStats() {

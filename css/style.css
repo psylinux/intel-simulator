@@ -98,11 +98,17 @@
   --r:          4px;
   --r2:         6px;
   --ease:       cubic-bezier(.4,0,.2,1);
+
+  /* Layout spacing */
+  --canvas-edge: 12px;  /* horizontal margin of every direct child of #canvas */
+  --pane-inset:  16px;  /* horizontal padding inside pane content areas */
+  --canvas-gap:  12px;  /* vertical bottom-margin between #canvas children */
+
   --sidebar-w:  clamp(220px, 18vw, 320px);
   --sidebar-resizer-w: 10px;
   --stack-panel-w: clamp(240px, 22vw, 360px);
   --stack-resizer-w: 10px;
-  --code-mem-splitter-w: 10px;
+  --code-mem-splitter-w: 18px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -809,7 +815,7 @@ input[type=range]::-webkit-slider-thumb {
   flex-direction: column;
   gap: 0;
   background: var(--bg0);
-  padding: 0 0 18px;
+  padding: 0 0 var(--canvas-gap);
   height: 100%;
   scrollbar-gutter: stable;
   scroll-padding-bottom: 28px;
@@ -820,10 +826,13 @@ input[type=range]::-webkit-slider-thumb {
   align-self: stretch;
   min-width: 0;
   min-height: 0;
-  margin: 0 12px 12px;
+  width: calc(100% - (var(--canvas-edge) * 2));
+  max-width: calc(100% - (var(--canvas-edge) * 2));
+  margin: 0 var(--canvas-edge) var(--canvas-gap);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
 }
 .canvas-pane.is-collapsed {
   flex: 0 0 auto !important;
@@ -840,6 +849,9 @@ input[type=range]::-webkit-slider-thumb {
 .canvas-pane-handle {
   flex: 0 0 14px;
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: ns-resize;
   background:
     linear-gradient(90deg, transparent, rgba(56,189,248,.10), transparent),
@@ -853,7 +865,7 @@ input[type=range]::-webkit-slider-thumb {
   display: block;
   width: 52px;
   height: 4px;
-  margin: 5px auto 0;
+  margin: 0;
   border-radius: 999px;
   background:
     radial-gradient(circle at center, var(--acc) 0 1px, transparent 1px 100%);
@@ -871,31 +883,39 @@ body.pane-resizing .canvas-pane-handle {
 
 #editGuideBanner {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  padding: 8px 14px;
+  justify-content: center;
+  padding: 8px var(--canvas-edge);
   background:
     linear-gradient(90deg, rgba(56,189,248,.10), rgba(129,140,248,.08) 55%, rgba(56,189,248,.04));
   border-bottom: 1px solid rgba(56,189,248,.18);
 }
-.eg-title {
-  display: inline-flex;
+.eg-copy {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(56,189,248,.14);
-  border: 1px solid rgba(56,189,248,.25);
-  color: var(--role-pc);
-  font-size: var(--fs-ui-xs);
-  font-weight: 700;
-  letter-spacing: 1.4px;
+  gap: 4px;
+  width: min(100%, 980px);
+  text-align: center;
 }
-.eg-item {
+.eg-title {
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: var(--role-pc);
+  font-size: var(--fs-ui-sm);
+  font-weight: 800;
+  letter-spacing: 1.8px;
+}
+.eg-text {
+  margin: 0;
   color: var(--tx0);
   font-size: var(--fs-ui-sm);
-  line-height: 1.35;
+  line-height: 1.45;
+}
+.eg-item {
+  display: inline;
 }
 .eg-item strong {
   color: #f8fbff;
@@ -906,10 +926,12 @@ body.pane-resizing .canvas-pane-handle {
   font-size: var(--fs-ui-sm); letter-spacing: 1.4px; color: #f8fbff; font-weight: 800;
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
   flex: 0 0 auto;
+  align-self: center;
+  width: calc(100% - 12px);
   min-height: 0;
   line-height: 1.35;
-  margin: 8px 14px 6px;
-  padding: 6px 9px;
+  margin: 8px auto 6px;
+  padding: 6px 12px;
   border: 1px solid rgba(56,189,248,.18);
   border-left: 3px solid var(--acc);
   border-radius: 8px;
@@ -976,8 +998,10 @@ body.pane-resizing .canvas-pane-handle {
   align-items: stretch;
   justify-content: center;
   gap: 0;
-  margin: 0 12px 12px;
-  padding: 10px 16px;
+  width: calc(100% - (var(--canvas-edge) * 2));
+  max-width: calc(100% - (var(--canvas-edge) * 2));
+  margin: var(--canvas-gap) var(--canvas-edge) var(--canvas-gap);
+  padding: 10px var(--pane-inset);
   background: linear-gradient(180deg,
     rgba(14,22,32,.85) 0%,
     rgba(14,22,32,.95) 100%);
@@ -1187,6 +1211,7 @@ body.pane-resizing .canvas-pane-handle {
 }
 #codeMemRow .canvas-pane-body {
   overflow: visible;
+  padding-bottom: 10px;
 }
 #codeMemRow.pane-manual .canvas-pane-body {
   overflow: hidden;
@@ -1195,6 +1220,7 @@ body.pane-resizing .canvas-pane-handle {
   display: grid;
   grid-template-columns: auto var(--code-mem-splitter-w) minmax(0, 1fr);
   gap: 0;
+  width: 100%;
   min-height: 0;
   align-items: stretch;
 }
@@ -1271,7 +1297,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
-  padding: 0 14px 6px;
+  padding: 0 var(--pane-inset) 6px;
 }
 .trace-head {
   display: flex;
@@ -1296,7 +1322,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 14px 10px;
+  padding: 6px var(--pane-inset) 10px;
   scroll-padding-top: 6px;
   scroll-padding-bottom: 10px;
 }
@@ -1543,6 +1569,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   padding: 0 8px 8px;
 }
 .mem-col-bp .section-badge {
+  align-self: stretch;
+  width: 100%;
   margin: 8px 0 0;
   padding: 5px 8px 5px 10px;
   margin-bottom: 0;
@@ -1589,7 +1617,7 @@ body.code-mem-resizing #codeMemSplitHandle {
   flex: 0 0 auto;
   align-items: stretch;
   min-height: auto;
-  padding: 0 10px 10px;
+  padding: 0 var(--canvas-edge) var(--canvas-gap);
   gap: 3px;
   overflow-x: auto;
   overflow-y: visible;
@@ -1753,7 +1781,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 #logOutput {
   flex: 0 0 auto;
   overflow: visible;
-  padding: 10px 16px 12px;
+  padding: 10px 0 12px;
   min-height: 0;
   max-height: none;
   width: 100%;
@@ -1774,6 +1802,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   --log-code-bg: rgba(139,164,192,.10);
   --log-code-bdr: rgba(139,164,192,.24);
   position: relative;
+  align-self: stretch;
+  width: 100%;
   display: grid;
   grid-template-columns: auto auto minmax(0,1fr);
   align-items: start;

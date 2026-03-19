@@ -95,7 +95,7 @@ function init() {
     if (!row) return;
     const addr = parseInt(row.dataset.stackAddr || '0', 10);
     revealMemAddr(addr, { select: true, scroll: true });
-    lg('sys', t('log.sys.stack_located', fmtStackA(addr)));
+    lg('sys', t('log.sys.stack_located', fmtMemA(addr)));
   });
   $('stackView')?.addEventListener('dblclick', e => {
     const row = e.target.closest('.stack-row');

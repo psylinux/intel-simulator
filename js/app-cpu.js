@@ -79,6 +79,7 @@ async function _executeOne(opts = {}) {
   await sleep(S.speed * 0.2);
 
   // ── FASE 3: EXECUTE ────────────────────────────────────
+  clearChangedRegisters();
   setStatus(t('status.execute', instr.mnem), 'lbl-load', { log: false });
   if (isStepTrace) {
     lg('info', t('log.info.execute_desc', ipReg()), instr.asm, { indent: 1, kindLabel: 'EXECUTE' });
@@ -338,8 +339,8 @@ async function doPush() {
   const sp = S.regs.ESP;
   revealMemRange(sp, width, { select: true });
   renderStackView();
-  lg('store', t('log.push', reg, regHex(reg), spName, fmtStackA(sp)), `PUSH ${reg}`);
-  setStatus(t('status.push_start', reg, fmtStackA(sp)), 'lbl-store');
+  lg('store', t('log.push', reg, regHex(reg), spName, fmtMemA(sp)), `PUSH ${reg}`);
+  setStatus(t('status.push_start', reg, fmtMemA(sp)), 'lbl-store');
   const bs = regBytes(reg, width);
   for (let i = 0; i < width; i++) {
     const ma = sp + i;
@@ -354,7 +355,7 @@ async function doPush() {
   updatePickerVal(reg); updatePickerBytes(reg);
   updatePickerVal(spName);
   markRegistersChanged(spName);
-  setStatus(t('status.push_done', spName, fmtStackA(sp)), 'lbl-done');
+  setStatus(t('status.push_done', spName, fmtMemA(sp)), 'lbl-done');
   renderStackView();
   refreshStats(); refreshBreakdown();
   S.busy = false; setBusy(false);
@@ -370,8 +371,8 @@ async function doPop() {
     S.busy = false; setBusy(false);
     return;
   }
-  lg('load', t('log.pop', fmtStackA(sp), reg, spName), `POP ${reg}`);
-  setStatus(t('status.pop_start', fmtStackA(sp), reg), 'lbl-load');
+  lg('load', t('log.pop', fmtMemA(sp), reg, spName), `POP ${reg}`);
+  setStatus(t('status.pop_start', fmtMemA(sp), reg), 'lbl-load');
   revealMemRange(sp, width, { select: true });
   renderStackView();
   const partialLittle = new Array(width).fill(0);

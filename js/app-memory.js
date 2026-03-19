@@ -69,6 +69,26 @@ function setByteState(addr, st = '') {
 
 const MEM_STATE_CLASSES = ['mc-active', 'mc-written', 'mc-pc', 'mc-error', 'mc-pc-current'];
 
+// Returns the byte span [start, start+size) of the instruction at pc.
+function instrSpanAt(pc) {
+  const a = pc & 0x3F;
+  const instr = decodeAt(a);
+  const size = (instr && instr.size > 0) ? instr.size : 1;
+  return { start: a, size };
+}
+
+// Returns true if addr falls within the current instruction span (pc .. pc+size-1).
+function isInPcSpan(addr) {
+  const { start, size } = instrSpanAt(S.pc);
+  return addr >= start && addr < start + size;
+}
+
+// Sync all cells in the instruction span at a given pc address.
+function syncInstrSpanDom(pc) {
+  const { start, size } = instrSpanAt(pc);
+  for (let i = 0; i < size; i++) syncMemCellDom(start + i);
+}
+
 function syncMemCellDom(addr) {
   const cell = memEl(addr);
   if (!cell || cell.classList?.contains('is-editing')) return;
@@ -76,7 +96,7 @@ function syncMemCellDom(addr) {
   cell.classList.remove(...MEM_STATE_CLASSES);
   const st = memStateAt(addr);
   if (st) cell.classList.add(st);
-  if (addr === (S.pc & 0x3F)) cell.classList.add('mc-pc-current');
+  if (isInPcSpan(addr)) cell.classList.add('mc-pc-current');
 }
 
 function writeMem(addr, val, st = '') {
@@ -111,15 +131,6 @@ function revealMemAddr(addr, opts = {}) {
 function revealMemRange(addr, width = 1, opts = {}) {
   const first = clamp(Math.trunc(Number.isFinite(addr) ? addr : 0), 0, Math.max(memSpaceSize() - 1, 0));
   if (opts.scroll) memEl(first)?.scrollIntoView({ block: 'center', inline: 'nearest' });
-}
-
-function mapVisibleRange(addr, width) {
-  const out = [];
-  for (let i = 0; i < width; i++) {
-    const ma = addr + i;
-    if (ma >= 0 && ma < 64) out.push(ma);
-  }
-  return out;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -192,7 +203,7 @@ function resetStackState() {
 function reportStackBoundsError(kind, addr, width, asm = null, opts = {}) {
   const first = addr;
   const last = addr + width - 1;
-  const message = t('error.stack.bounds', kind, width, fmtStackA(first), fmtStackA(last), fmtStackA(S.stackSize - 1));
+  const message = t('error.stack.bounds', kind, width, fmtMemA(first), fmtMemA(last), fmtMemA(S.stackSize - 1));
   reportStackError(message, asm, opts);
 }
 

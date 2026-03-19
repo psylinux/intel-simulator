@@ -133,6 +133,7 @@ function createDocument() {
     /^animStage$/, /^animSVG$/, /^rc-/, /^rcv-/, /^rcb-/, /^rpv-/, /^rpb-/,
     /^r[A-Z0-9]+$/, /^stackView$/, /^stackLegend$/,
     /^codeMemSplit/, /^sidebarResize/, /^stackResize/,
+    /^pcDisplay$/, /^ipChipLbl$/, /^clockDisplay$/, /^opsDisplay$/, /^archDisplay$/,
   ];
   const doc = {
     body: new MockElement('body', 'body'),
@@ -353,18 +354,23 @@ function sortedStrings(values) {
   return [...values].sort();
 }
 
-function extractInlineLocaleKeys() {
+function extractInlineLocales() {
   const src = fs.readFileSync(path.join(ROOT, 'js/i18n.js'), 'utf8');
-  const ptMatch = src.match(/'pt-BR': \{([\s\S]*?)\n\s*\},\n\s*'en-US':/);
-  const enMatch = src.match(/'en-US': \{([\s\S]*?)\n\s*\},\n\s*\};/);
+  const ptMatch = src.match(/'pt-BR': (\{[\s\S]*?\n\s*\}),\n\s*'en-US':/);
+  const enMatch = src.match(/'en-US': (\{[\s\S]*?\n\s*\}),?\n\s*\};/);
   assert.ok(ptMatch, 'must find pt-BR locale block in js/i18n.js');
   assert.ok(enMatch, 'must find en-US locale block in js/i18n.js');
-  const keys = block => [...block.matchAll(/"([^"]+)":/g)].map(m => m[1]);
+  const ptData = JSON.parse(ptMatch[1]);
+  const enData = JSON.parse(enMatch[1]);
   return {
-    pt: new Set(keys(ptMatch[1])),
-    en: new Set(keys(enMatch[1])),
+    pt:     new Set(Object.keys(ptData)),
+    en:     new Set(Object.keys(enData)),
+    ptData,
+    enData,
   };
 }
+// Backward-compat alias used by older call sites
+function extractInlineLocaleKeys() { return extractInlineLocales(); }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  SUITE: PURE UTILITIES
@@ -401,22 +407,34 @@ test('fmtA: 4-char zero-padded hex', () => {
 suite('i18n');
 
 test('inline i18n locale blocks expose the same keys for pt-BR and en-US', () => {
-  const inline = extractInlineLocaleKeys();
+  const { pt, en } = extractInlineLocales();
   assert.deepEqual(
-    sortedStrings(inline.pt),
-    sortedStrings(inline.en),
+    sortedStrings(pt),
+    sortedStrings(en),
     'js/i18n.js must keep pt-BR and en-US key sets in sync'
   );
 });
 
-test('locale JSON files expose the same keys for pt-BR and en-US', () => {
-  const pt = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/pt-BR.json'), 'utf8'));
-  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/en-US.json'), 'utf8'));
-  assert.deepEqual(
-    sortedStrings(Object.keys(pt)),
-    sortedStrings(Object.keys(en)),
-    'locales/*.json must keep pt-BR and en-US key sets in sync'
-  );
+test('instruction-pointer locale strings use architecture-specific placeholders and remove legacy EIP/RIP keys', () => {
+  const inlineSrc = fs.readFileSync(path.join(ROOT, 'js/i18n.js'), 'utf8');
+  const { ptData: pt, enData: en } = extractInlineLocales();
+
+  ['topbar.pc.title', 'topbar.chip.pc', 'mem.legend.pc', 'topbar.ip.title', 'topbar.chip.lastop', 'topbar.chip.ops', 'topbar.chip.arch', 'editguide.hint1.ip', 'log.sys.pc_manual'].forEach(key => {
+    assert.equal(key in pt, false, `pt-BR locale must not expose legacy key ${key}`);
+    assert.equal(key in en, false, `en-US locale must not expose legacy key ${key}`);
+    assert.equal(inlineSrc.includes(`"${key}":`), false, `js/i18n.js must not expose legacy key ${key}`);
+  });
+
+  assert.equal(pt['editguide.hint1'], 'Clique nos <strong>valores dos registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.');
+  assert.equal(en['editguide.hint1'], 'Click on <strong>register values</strong> to edit. Use <strong>double-click</strong> on the <strong>MEMORY MAP</strong> to edit bytes.');
+  assert.equal(en['ui.asm.write.title'], 'Writes bytes at current {0}. Press Enter to confirm.');
+  assert.equal(en['help.ops'].includes('updating {0}, registers, memory and stack'), true);
+  assert.equal(en['log.sys.pc_moved'], '{0} moved to code listing 0x{1}');
+  assert.equal(en['log.info.execute_desc'], 'Applies the architectural effects of the decoded instruction on {0}, registers, memory and stack as needed.');
+  assert.equal(en['status.demo_arch'], '{0} demo program loaded — {1} at 0x0000');
+  assert.equal(en['status.demo_reset'], 'Demo program restored — {0} at 0x0000');
+  assert.equal(JSON.stringify(pt).includes('EIP/RIP'), false, 'pt-BR locale must not contain combined EIP/RIP labels');
+  assert.equal(JSON.stringify(en).includes('EIP/RIP'), false, 'en-US locale must not contain combined EIP/RIP labels');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -437,7 +455,49 @@ test('init renders ASM trace on first load without requiring architecture re-sel
   const trace = document.getElementById('asmTrace');
   assert.ok(trace, 'asmTrace element must exist in the initial DOM');
   assert.ok(/asm-line|trace-row|MOV|CALL/.test(trace.innerHTML), 'initial boot must populate the ASM listing');
-  assert.equal(document.getElementById('ipChipLbl').textContent, 'EIP', 'initial boot must sync the instruction pointer label');
+  assert.equal(document.getElementById('ipChipLbl'), null, 'topbar instruction-pointer chip was removed');
+  assert.equal(document.getElementById('pcDisplay'), null, 'topbar instruction-pointer input was removed');
+  assert.equal(document.getElementById('memLegendIpLbl').textContent, 'EIP', 'initial boot must sync the memory-legend instruction pointer label');
+});
+
+test('index.html first paint removes the old topbar chips and keeps only the memory-map instruction-pointer label', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.equal(html.includes('EIP/RIP'), false, 'static HTML must not expose combined EIP/RIP labels during refresh');
+  assert.equal(html.includes('id="ipChipLbl"'), false, 'topbar instruction-pointer chip must not exist');
+  assert.equal(html.includes('id="pcDisplay"'), false, 'topbar instruction-pointer input must not exist');
+  assert.equal(html.includes('id="clockDisplay"'), false, 'topbar last-op indicator must not exist');
+  assert.equal(html.includes('id="opsDisplay"'), false, 'topbar ops indicator must not exist');
+  assert.equal(html.includes('id="archDisplay"'), false, 'topbar architecture indicator must not exist');
+  assert.equal(/id="memLegendIpLbl">EIP</.test(html), true, 'memory legend must boot with EIP placeholder');
+  assert.equal(/id="editGuideHint1"/.test(html), true, 'quick-edit hint must still exist');
+  assert.equal(/id="editGuideHint1"[\s\S]*<strong>EIP<\/strong>/.test(html), false, 'quick-edit hint must no longer mention the removed topbar pointer control');
+  assert.equal(/id="editGuideHint1"[\s\S]*<strong>RIP<\/strong>/.test(html), false, 'quick-edit hint must no longer mention the removed topbar pointer control');
+  assert.equal(html.includes('data-i18n="topbar.chip.pc"'), false, 'instruction-pointer chip label must be driven dynamically, not by a stale locale key');
+  assert.equal(html.includes('data-i18n="mem.legend.pc"'), false, 'memory legend label must be driven dynamically, not by a stale locale key');
+});
+
+test('layout uses spacing instead of dedicated divider elements around the control bar and logs', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(ROOT, 'css/style.css'), 'utf8');
+  assert.equal(html.includes('id="ctrlBarDivider"'), false, 'HTML must not render a dedicated divider after the control bar');
+  assert.equal(html.includes('id="codeMemLogDivider"'), false, 'HTML must not render a dedicated divider before the logs');
+  assert.equal(css.includes('#ctrlBarDivider'), false, 'CSS must not style a removed divider after the control bar');
+  assert.equal(css.includes('#codeMemLogDivider'), false, 'CSS must not style a removed divider before the logs');
+  assert.equal(css.includes('--code-mem-splitter-w: 18px;'), true, 'code/memory splitter must keep symmetric breathing room around the resize handle');
+  assert.equal(css.includes('width: calc(100% - (var(--canvas-edge) * 2));'), true, 'control bar and panes must share the same computed width');
+  assert.equal(css.includes('.canvas-pane {\n  flex: 1 1 auto;\n  align-self: stretch;\n  min-width: 0;\n  min-height: 0;\n  width: calc(100% - (var(--canvas-edge) * 2));\n  max-width: calc(100% - (var(--canvas-edge) * 2));\n  margin: 0 var(--canvas-edge) var(--canvas-gap);'), true, 'stacked panes must keep the shared side insets and bottom spacing');
+  assert.equal(css.includes('#ctrlBar {\n  flex: 0 0 auto;\n  display: flex;\n  align-items: stretch;\n  justify-content: center;\n  gap: 0;\n  width: calc(100% - (var(--canvas-edge) * 2));\n  max-width: calc(100% - (var(--canvas-edge) * 2));\n  margin: var(--canvas-gap) var(--canvas-edge) var(--canvas-gap);'), true, 'control bar must keep a top gap instead of sticking to the banner');
+  assert.equal(css.includes('.canvas-pane-handle {\n  flex: 0 0 14px;\n  width: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;'), true, 'pane resize handle must center its grip to keep symmetric top and bottom spacing');
+  assert.equal(css.includes('.canvas-pane-handle::before {\n  content: \'\';\n  display: block;\n  width: 52px;\n  height: 4px;\n  margin: 0;'), true, 'pane resize handle grip must not rely on asymmetric top margin');
+  assert.equal(css.includes('.section-badge {\n  font-size: var(--fs-ui-sm); letter-spacing: 1.4px; color: #f8fbff; font-weight: 800;\n  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;\n  flex: 0 0 auto;\n  align-self: center;\n  width: calc(100% - 12px);'), true, 'section badges must stay slightly narrower than their pane');
+  assert.equal(css.includes('.section-badge {\n  font-size: var(--fs-ui-sm); letter-spacing: 1.4px; color: #f8fbff; font-weight: 800;\n  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;\n  flex: 0 0 auto;\n  align-self: center;\n  width: calc(100% - 12px);\n  min-height: 0;\n  line-height: 1.35;\n  margin: 8px auto 6px;'), true, 'section badges must keep a small symmetric horizontal inset');
+  assert.equal(css.includes('.mem-col-bp .section-badge {\n  align-self: stretch;\n  width: 100%;'), true, 'breakpoint badge must override the generic inset and match the breakpoint status width');
+  assert.equal(css.includes('#logOutput {\n  flex: 0 0 auto;\n  overflow: visible;\n  padding: 10px 0 12px;'), true, 'log output must not add extra horizontal inset around entries');
+  assert.equal(css.includes('.le {\n  --log-accent: var(--tx1);'), true, 'log entry styles must exist');
+  assert.equal(css.includes('.le {\n  --log-accent: var(--tx1);\n  --log-tint: rgba(139,164,192,.08);\n  --log-kind-bg: rgba(139,164,192,.14);\n  --log-kind-bdr: rgba(139,164,192,.28);\n  --log-kind-tx: #dce8f5;\n  --log-msg-tx: #d5e4f2;\n  --log-code-bg: rgba(139,164,192,.10);\n  --log-code-bdr: rgba(139,164,192,.24);\n  position: relative;\n  align-self: stretch;\n  width: 100%;'), true, 'log entries must stretch to the full log body width');
+  assert.equal(css.includes('#codeMemRow .canvas-pane-body {\n  overflow: visible;\n  padding-bottom: 10px;'), true, 'code/memory pane body must keep extra space before the resize handle');
+  assert.equal(css.includes('#codeMemSplit {\n  display: grid;\n  grid-template-columns: auto var(--code-mem-splitter-w) minmax(0, 1fr);\n  gap: 0;\n  width: 100%;'), true, 'codeMemSplit must expand to the full shared pane width');
+  assert.equal(css.includes('#codeMemRow {\n  margin-bottom: 0;'), false, 'code/memory pane must keep the standard bottom spacing');
 });
 
 suite('utils');
@@ -1945,10 +2005,10 @@ test('UI: instruction pointer labels follow active architecture', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
   api.setArch('ia32');
-  assert.equal(document.getElementById('ipChipLbl').textContent, 'EIP');
+  assert.equal(document.getElementById('ipChipLbl'), null);
   assert.equal(document.getElementById('memLegendIpLbl').textContent, 'EIP');
   api.setArch('x64');
-  assert.equal(document.getElementById('ipChipLbl').textContent, 'RIP');
+  assert.equal(document.getElementById('ipChipLbl'), null);
   assert.equal(document.getElementById('memLegendIpLbl').textContent, 'RIP');
 });
 

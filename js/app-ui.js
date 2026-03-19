@@ -55,10 +55,6 @@ function doSetStackSizeUnit(nextUnit) {
   syncStackSizeUI(previewBytes);
 }
 
-function setRunButtonMode(mode = 'run') {
-  setCpuState(mode === 'stop' ? 'running' : 'idle');
-}
-
 // idle | running | paused
 function setCpuState(state) {
   const grid = $('cpuOpsGrid');
@@ -89,7 +85,7 @@ function applyStackSize() {
   refreshPreview();
   refreshBreakdown();
   syncStackSizeUI();
-  lg('sys', t('log.sys.stack_size', formatStackSize(nextSize), is64() ? 'RSP/RBP' : 'ESP/EBP', fmtStackA(stackTopInit()), fmtMemA(Math.max(memSpaceSize() - 1, 0))));
+  lg('sys', t('log.sys.stack_size', formatStackSize(nextSize), is64() ? 'RSP/RBP' : 'ESP/EBP', fmtMemA(stackTopInit()), fmtMemA(Math.max(memSpaceSize() - 1, 0))));
 }
 
 
@@ -260,7 +256,7 @@ function currentReturnInfo() {
 
 function stackTraceExtra(frameCall) {
   if (!frameCall) return t('stack.trace.extra.root');
-  return t('stack.trace.extra.call', fmtA(frameCall.returnTo), fmtStackA(frameCall.slot), frameCall.callAsm, fmtA(frameCall.callSite));
+  return t('stack.trace.extra.call', fmtA(frameCall.returnTo), fmtMemA(frameCall.slot), frameCall.callAsm, fmtA(frameCall.callSite));
 }
 
 function stackTraceFrames() {
@@ -687,6 +683,7 @@ function syncPicker() {
     updatePickerVal(name);
     updatePickerBytes(name);
   });
+  syncRegChangedClasses();
 }
 function updatePickerVal(n) {
   const e = $('rpv-' + n); if (!e) return;
@@ -800,8 +797,7 @@ function renderMemGrid() {
       cell.textContent = hex8(memByteAt(addr));
       const st = memStateAt(addr);
       if (st) cell.classList.add(st);
-      if (addr === (S.pc & 0x3F)) cell.classList.add('mc-pc-current');
-      if (addr === S.memSelectedAddr) cell.classList.add('mc-selected');
+      if (isInPcSpan(addr)) cell.classList.add('mc-pc-current');
       if (addr < 64 && bpBytes.has(addr)) cell.classList.add('mc-bp');
       memCellRefs[addr] = cell;
       gridFrag.appendChild(cell);
@@ -1291,7 +1287,7 @@ function renderStackView() {
       : stackGroupHex(addr, gran);
     const granLabel = gran === 1 ? '' : ` stack-row-gran-${S.stackGranularity}`;
     return `<div class="stack-row${granLabel} stack-row-${meta.primary}" data-stack-addr="${addr}" title="${t('ui.stack.row.title')}">
-      <span class="stack-row-addr">0x${fmtStackA(addr)}</span>
+      <span class="stack-row-addr">0x${fmtMemA(addr)}</span>
       <span class="stack-row-byte">${valHex}</span>
       <span class="stack-row-tags">${tags}</span>
     </div>`;
@@ -1301,8 +1297,8 @@ function renderStackView() {
     <div class="stack-meta">
       <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">${t('stack.meta.size')}</span><span class="stack-meta-pill">${formatStackSize(S.stackSize)}</span></div>
       <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">${t('stack.meta.ip', ipReg())}</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
-      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${t('stack.meta.sp', spName)}</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${t('stack.meta.bp', bpName)}</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${t('stack.meta.sp', spName)}</span><span class="stack-meta-pill">0x${fmtMemA(sp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${t('stack.meta.bp', bpName)}</span><span class="stack-meta-pill">0x${fmtMemA(bp)}</span></div>
       <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">${t('stack.meta.ret')}</span><span class="stack-meta-pill">${retInfo ? `0x${fmtA(retInfo.returnTo)}` : '—'}</span></div>
     </div>
     ${renderStackTrace()}

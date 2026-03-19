@@ -152,7 +152,7 @@ function decodeAt(pc) {
       const highGarbage = width > 4 && bytes.slice(4).some(b => b !== 0);
       if (expected) {
         const issues = [];
-        if (expected.slot !== sp) issues.push(`o topo da pilha esta em 0x${fmtStackA(sp)}, mas o CALL mais recente gravou o retorno em 0x${fmtStackA(expected.slot)}`);
+        if (expected.slot !== sp) issues.push(`o topo da pilha esta em 0x${fmtMemA(sp)}, mas o CALL mais recente gravou o retorno em 0x${fmtMemA(expected.slot)}`);
         if ((expected.returnTo & 0x3F) !== (target & 0x3F)) issues.push(`o endereco lido foi 0x${fmtA(target & 0x3F)}, mas o CALL mais recente esperava 0x${fmtA(expected.returnTo & 0x3F)}`);
         if (expected.width !== width) issues.push(`a largura esperada para o retorno era ${expected.width} byte(s), mas o RET leu ${width}`);
         if (highGarbage) issues.push('os bytes altos do endereco de retorno nao estao zerados');

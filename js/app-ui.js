@@ -478,93 +478,6 @@ function makeRegisterEditable(el, name) {
   inp.addEventListener('blur', () => { if (el.dataset.editing) commit(); });
 }
 
-
-function registerMapWidthBytes(name) {
-  return is64() && (name === 'RSP' || name === 'RBP') ? 8 : regWidthBytes(name);
-}
-
-function registerEncapsulationRows(name) {
-  const classic = {
-    EAX: { word: 'AX', high: 'AH', low: 'AL', size: 4 },
-    EBX: { word: 'BX', high: 'BH', low: 'BL', size: 4 },
-    ECX: { word: 'CX', high: 'CH', low: 'CL', size: 4 },
-    EDX: { word: 'DX', high: 'DH', low: 'DL', size: 4 },
-    ESI: { word: 'SI', size: 4 },
-    EDI: { word: 'DI', size: 4 },
-    ESP: { word: 'SP', size: 4 },
-    EBP: { word: 'BP', size: 4 },
-    RAX: { dword: 'EAX', word: 'AX', high: 'AH', low: 'AL', size: 8 },
-    RBX: { dword: 'EBX', word: 'BX', high: 'BH', low: 'BL', size: 8 },
-    RCX: { dword: 'ECX', word: 'CX', high: 'CH', low: 'CL', size: 8 },
-    RDX: { dword: 'EDX', word: 'DX', high: 'DH', low: 'DL', size: 8 },
-  };
-  const lowOnly = {
-    RSI: { dword: 'ESI', word: 'SI', low: 'SIL', size: 8 },
-    RDI: { dword: 'EDI', word: 'DI', low: 'DIL', size: 8 },
-    RSP: { dword: 'ESP', word: 'SP', low: 'SPL', size: 8 },
-    RBP: { dword: 'EBP', word: 'BP', low: 'BPL', size: 8 },
-    R8: { dword: 'R8D', word: 'R8W', low: 'R8B', size: 8 },
-    R9: { dword: 'R9D', word: 'R9W', low: 'R9B', size: 8 },
-    R10: { dword: 'R10D', word: 'R10W', low: 'R10B', size: 8 },
-    R11: { dword: 'R11D', word: 'R11W', low: 'R11B', size: 8 },
-    R12: { dword: 'R12D', word: 'R12W', low: 'R12B', size: 8 },
-    R13: { dword: 'R13D', word: 'R13W', low: 'R13B', size: 8 },
-    R14: { dword: 'R14D', word: 'R14W', low: 'R14B', size: 8 },
-    R15: { dword: 'R15D', word: 'R15W', low: 'R15B', size: 8 },
-  };
-
-  if (classic[name]) {
-    const rows = [];
-    if (classic[name].dword) rows.push({ label: classic[name].dword, bits: 32, start: 0, count: 4, tone: 'dword' });
-    rows.push({ label: classic[name].word, bits: 16, start: 0, count: 2, tone: 'word' });
-    if (classic[name].high && classic[name].low) {
-      rows.push({ label: classic[name].high, bits: 8, start: 1, count: 1, tone: 'high' });
-      rows.push({ label: classic[name].low, bits: 8, start: 0, count: 1, tone: 'low' });
-    } else if (classic[name].low) {
-      rows.push({ label: classic[name].low, bits: 8, start: 0, count: 1, tone: 'low' });
-    }
-    return rows;
-  }
-
-  if (lowOnly[name]) {
-    return [
-      { label: lowOnly[name].dword, bits: 32, start: 0, count: 4, tone: 'dword' },
-      { label: lowOnly[name].word, bits: 16, start: 0, count: 2, tone: 'word' },
-      { label: lowOnly[name].low, bits: 8, start: 0, count: 1, tone: 'low' },
-    ];
-  }
-
-  return [];
-}
-
-function renderRegisterEncapsulation(name) {
-  const rows = registerEncapsulationRows(name);
-  if (!rows.length) return '';
-  const totalBytes = registerMapWidthBytes(name);
-  const displayBytes = regBytes(name, totalBytes).slice().reverse().map(hex8);
-  return rows.map(row => {
-    const rowValue = displayBytes
-      .filter((_, idx) => {
-        const littleIdx = totalBytes - 1 - idx;
-        return littleIdx >= row.start && littleIdx < (row.start + row.count);
-      })
-      .join('');
-    const cells = displayBytes.map((byte, idx) => {
-      const littleIdx = totalBytes - 1 - idx;
-      const active = littleIdx >= row.start && littleIdx < (row.start + row.count);
-      return `<span class="rc-subcell${active ? ' rc-subcell-active' : ''}">${active ? byte : '··'}</span>`;
-    }).join('');
-    return `<div class="rc-subrow rc-subrow-${row.tone || 'neutral'}" title="${row.label} = 0x${rowValue || '00'}">
-      <div class="rc-submeta">
-        <span class="rc-subname">${row.label}</span>
-      </div>
-      <div class="rc-subgrid rc-subgrid-${totalBytes}">
-        ${cells}
-      </div>
-    </div>`;
-  }).join('');
-}
-
 function renderByteStrip(name, opts = {}) {
   const {
     activePos = -1,
@@ -632,7 +545,6 @@ function registerByteAnchor(name, byteIdx) {
   return bytes[byteIdx] || null;
 }
 
-
 function pulseRegister(name) {
   const id = 'r' + name;
   const el = $(id);
@@ -657,9 +569,11 @@ function liveUpdate(name, _partial, byteIdx, transferCount = transferWidth(name)
 
   // Update picker bytes (âncora de animação, memory order)
   const pb = $('rpb-' + name);
-  if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
+  if (pb) pb.innerHTML = renderByteStrip(name, {
+    compact: true, memoryOrder: true,
     activePos: byteIdx, doneSet: pickerDone,
-    byteCount: regWidthBytes(name), transferCount });
+    byteCount: regWidthBytes(name), transferCount
+  });
   updatePickerVal(name);
 }
 
@@ -668,8 +582,10 @@ function liveUpdate(name, _partial, byteIdx, transferCount = transferWidth(name)
 function storeHighlight(name, hexPos, transferCount = transferWidth(name), byteIdx = hexPos) {
   // Update picker bytes (âncora de animação, memory order)
   const pb = $('rpb-' + name);
-  if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
-    activePos: byteIdx, byteCount: regWidthBytes(name), transferCount });
+  if (pb) pb.innerHTML = renderByteStrip(name, {
+    compact: true, memoryOrder: true,
+    activePos: byteIdx, byteCount: regWidthBytes(name), transferCount
+  });
   pulseRegister(name);
 }
 
@@ -1540,14 +1456,23 @@ function loadSim(e) {
       }
       if (Number.isFinite(d.speed)) S.speed = normalizeSpeed(d.speed);
       if (Number.isFinite(d.memViewBase)) S.memViewBase = 0;
-      Object.assign(S.regs, d.regs);
+      if (d.regs && typeof d.regs === 'object') {
+        for (const k in S.regs) {
+          if (d.regs[k] !== undefined) S.regs[k] = d.regs[k];
+        }
+      }
       S.mem = new Uint8Array(d.mem); S.memState = d.memState;
       ensureStackMem();
       if (Array.isArray(d.stackMem) && d.stackMem.length === S.stackSize) S.stackMem = new Uint8Array(d.stackMem);
       else S.stackMem.fill(0);
       S.stackState = Array.isArray(d.stackState) ? new Map(d.stackState) : new Map();
       syncLowMemoryToStack();
-      Object.assign(S.stats, d.stats); S.pc = d.pc;
+      if (d.stats && typeof d.stats === 'object') {
+        for (const k in S.stats) {
+          if (d.stats[k] !== undefined) S.stats[k] = d.stats[k];
+        }
+      }
+      S.pc = d.pc;
       applySidebarPanelWidth();
       persistSidebarPanelWidth();
       applyStackPanelWidth();

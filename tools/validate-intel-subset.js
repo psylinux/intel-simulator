@@ -239,8 +239,6 @@ globalThis.__memsim = {
   isInstructionFault,
   loadDefaultProgram,
   resetCoreRegisters,
-  getBytes,
-  ordered,
   hex32,
   hex8,
   fmtA,
@@ -510,23 +508,6 @@ test('clamp: boundaries and middle', () => {
   assert.equal(api.clamp(0, 0, 0),   0);
 });
 
-test('getBytes: LSB first, correct count', () => {
-  const { api } = loadSimulator();
-  assert.deepEqual(toArr(api.getBytes(0x12345678, 4)), [0x78, 0x56, 0x34, 0x12]);
-  assert.deepEqual(toArr(api.getBytes(0x12345678, 2)), [0x78, 0x56]);
-  assert.deepEqual(toArr(api.getBytes(0x12345678, 1)), [0x78]);
-  assert.deepEqual(toArr(api.getBytes(0x00000000, 4)), [0, 0, 0, 0]);
-  assert.deepEqual(toArr(api.getBytes(0xFFFFFFFF, 4)), [0xFF, 0xFF, 0xFF, 0xFF]);
-});
-
-test('ordered: little-endian = LSB first, big-endian = MSB first', () => {
-  const { api } = loadSimulator();
-  // Intel Vol.1 §1.3.2: little-endian stores LSB at lowest address
-  assert.deepEqual(toArr(api.ordered(0xDEADBEEF, 4, 'little')), [0xEF, 0xBE, 0xAD, 0xDE]);
-  assert.deepEqual(toArr(api.ordered(0xDEADBEEF, 4, 'big')),    [0xDE, 0xAD, 0xBE, 0xEF]);
-  assert.deepEqual(toArr(api.ordered(0x1234, 2, 'little')),     [0x34, 0x12]);
-  assert.deepEqual(toArr(api.ordered(0x1234, 2, 'big')),        [0x12, 0x34]);
-});
 
 test('normalizeStackSizeBytes: clamps to [1, 1MB]', () => {
   const { api } = loadSimulator();
@@ -1629,15 +1610,7 @@ test('S.endian=big does NOT change PUSH byte order', async () => {
   assert.deepEqual(Array.from(api.S.stackMem.slice(sp, sp + 4)), [0x44, 0x33, 0x22, 0x11]);
 });
 
-test('ordered() utility: little returns [LSB..MSB], big returns [MSB..LSB]', () => {
-  const { api } = loadSimulator();
-  const le = toArr(api.ordered(0xAABBCCDD, 4, 'little'));
-  const be = toArr(api.ordered(0xAABBCCDD, 4, 'big'));
-  assert.deepEqual(le, [0xDD, 0xCC, 0xBB, 0xAA]);
-  assert.deepEqual(be, [0xAA, 0xBB, 0xCC, 0xDD]);
-  // big-endian order is exactly the reverse of little-endian
-  assert.deepEqual(be, [...le].reverse());
-});
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  SUITE: ASSEMBLER VALIDATOR (validateAssembly)
@@ -1946,15 +1919,6 @@ test('Multiple CALL/RET pairs maintain correct callFrame nesting', async () => {
   await api._executeOne();  // RET from 0x0F → back to 0x05, length=0
   assert.equal(api.S.callFrames.length, 0);
   assert.equal(api.S.pc, 0x05);
-});
-
-test('getBytes produces correct LSB-first order for edge values', () => {
-  const { api } = loadSimulator();
-  assert.deepEqual(toArr(api.getBytes(0x00000000, 4)), [0,0,0,0]);
-  assert.deepEqual(toArr(api.getBytes(0xFFFFFFFF, 4)), [0xFF,0xFF,0xFF,0xFF]);
-  assert.deepEqual(toArr(api.getBytes(0x00000001, 4)), [0x01,0,0,0]);
-  assert.deepEqual(toArr(api.getBytes(0x80000000, 4)), [0,0,0,0x80]);
-  assert.deepEqual(toArr(api.getBytes(0x000000FF, 1)), [0xFF]);
 });
 
 test('CALL encodes return address as address AFTER the CALL instruction (not its own address)', async () => {

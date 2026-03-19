@@ -71,16 +71,6 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-function getBytes(v32, n) {
-  const b = [];
-  for (let i = 0; i < n; i++) b.push((v32 >>> (i * 8)) & 0xFF);
-  return b; // [LSB, ..., MSB]
-}
-
-function ordered(v32, n, end) {
-  const b = getBytes(v32, n);
-  return end === 'little' ? b : [...b].reverse();
-}
 
 function orderedBytes(bytes, end) {
   return end === 'little' ? [...bytes] : [...bytes].reverse();

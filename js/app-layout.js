@@ -71,27 +71,6 @@ function loadSidebarPanelWidth() {
   } catch (_) { }
 }
 
-function loadCenterPaneHeights() {
-  try {
-    const raw = localStorage.getItem('memsim.centerPaneHeights');
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (!saved || typeof saved !== 'object') return;
-    Object.keys(CENTER_PANE_CONFIG).forEach(key => {
-      const height = parseInt(saved[key], 10);
-      if (Number.isFinite(height)) S.centerPaneHeights[key] = height;
-    });
-  } catch (_) { }
-}
-
-function loadCollapsedSections() {
-  try {
-    const raw = localStorage.getItem('memsim.collapsedSections');
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (saved && typeof saved === 'object') S.collapsedSections = { ...saved };
-  } catch (_) { }
-}
 
 function codeMemSplitMinPane(totalWidth) {
   const usable = Math.max((Number.isFinite(totalWidth) ? totalWidth : 0) - 10, 0);
@@ -268,20 +247,6 @@ function createCollapseButton(target, sectionId) {
   return btn;
 }
 
-function setSectionHeaderText(el, text) {
-  if (!el) return;
-  [...el.childNodes].forEach(node => {
-    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) node.remove();
-  });
-  let textNode = el.querySelector(':scope > .section-header-text');
-  if (!textNode) {
-    textNode = document.createElement('span');
-    textNode.className = 'section-header-text';
-    const collapseBtn = el.querySelector(':scope > .section-collapse-btn');
-    el.insertBefore(textNode, collapseBtn || el.firstChild);
-  }
-  textNode.textContent = text;
-}
 
 function setToggleVisual(btn, collapsed) {
   if (!btn) return;

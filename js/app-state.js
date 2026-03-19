@@ -37,6 +37,8 @@ const S = {
   stackSize: DEFAULT_STACK_SIZE,
   stackSizeInputUnit: 'B',
   changedRegs: [],
+  lastTouchedReg: null,
+  trackRegAccess: false,
   sidebarPanelWidth: 240,
   sidebarPanelManual: false,
   stackPanelWidth: 280,

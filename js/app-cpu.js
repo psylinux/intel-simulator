@@ -80,15 +80,18 @@ async function _executeOne(opts = {}) {
 
   // ── FASE 3: EXECUTE ────────────────────────────────────
   clearChangedRegisters();
+  S.lastTouchedReg = null;
   setStatus(t('status.execute', instr.mnem), 'lbl-load', { log: false });
   if (isStepTrace) {
     lg('info', t('log.info.execute_desc', ipReg()), instr.asm, { indent: 1, kindLabel: 'EXECUTE' });
   }
   const prevIndent = S.logIndent;
   if (isStepTrace) S.logIndent = 2;
+  S.trackRegAccess = true;
   try {
     instr.exec();
   } finally {
+    S.trackRegAccess = false;
     S.logIndent = prevIndent;
   }
   for (let i = 0; i < instr.size; i++) {

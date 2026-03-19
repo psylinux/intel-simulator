@@ -26,9 +26,9 @@
   --bg4:        #1c2a3e;
 
   /* Borders */
-  --bdr:        #1e3050;
-  --bdr-hi:     #2a4570;
-  --bdr-focus:  #3d6699;
+  --bdr:        #243858;
+  --bdr-hi:     #335070;
+  --bdr-focus:  #4878aa;
 
   /* Accent – cyan-steel */
   --acc:        #38bdf8;
@@ -79,10 +79,10 @@
   --red-dim:    #7f1d1d;
 
   /* Text */
-  --tx0:        #e2eaf5;
-  --tx1:        #bfd4ea;
-  --tx2:        #647c9b;
-  --tx3:        #32445b;
+  --tx0:        #f0f6ff;
+  --tx1:        #cde0f5;
+  --tx2:        #8baac8;
+  --tx3:        #4a6480;
   --ui-address: #8fe9ff;
 
   /* Fonts */
@@ -373,14 +373,14 @@ body.code-mem-resizing {
 .reg-picker { display: flex; flex-direction: column; gap: 2px; }
 .rpbtn {
   display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-  padding: 8px 10px; background: var(--bg2); border: 1px solid var(--bdr);
+  padding: 8px 10px; background: #101f33; border: 1px solid #2e4d72;
   border-radius: var(--r); cursor: pointer; transition: all .15s var(--ease);
 }
 .rp-main {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.rp-name { font-size: var(--fs-ui-md); font-weight: 700; color: var(--tx1); letter-spacing: .55px; }
-.rp-val  { font-size: var(--fs-ui-md); color: var(--tx2); font-family: var(--mono); letter-spacing: .25px; }
+.rp-name { font-size: var(--fs-ui-md); font-weight: 700; color: #60c8ff; letter-spacing: .55px; }
+.rp-val  { font-size: var(--fs-ui-md); color: #eaf4ff; font-family: var(--mono); letter-spacing: .25px; font-weight: 600; }
 .rp-val-editable { cursor: text; }
 .rp-val-editable:hover { color: var(--acc); }
 .rp-bytes {
@@ -389,23 +389,24 @@ body.code-mem-resizing {
 .rp-byte {
   flex: 1; min-width: 0;
   text-align: center; padding: 3px 1px;
-  background: var(--bg3); border: 1px solid var(--bdr);
-  border-radius: 3px; color: var(--tx2);
+  background: #0d1827; border: 1px solid #2e4d72;
+  border-radius: 3px; color: #d8eeff;
   font-size: var(--fs-ui-xs); line-height: 1.15;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .rp-byte-lbl {
-  color: var(--tx3); font-size: 10px; font-weight: 700; letter-spacing: .2px; line-height: 1;
+  color: #6fa8d0; font-size: 10px; font-weight: 700; letter-spacing: .2px; line-height: 1;
 }
 .rp-byte.rc-byte-base,
 .rp-byte.rc-byte-last {
-  border-color: var(--bdr-hi);
+  background: #0f1e32; border-color: #3d6a9e;
 }
 .rpbtn.active {
-  background: rgba(251,191,36,.08); border-color: var(--amb);
+  background: rgba(251,191,36,.12); border-color: var(--amb);
+  box-shadow: inset 0 0 12px rgba(251,191,36,.07);
 }
-.rpbtn.active .rp-name { color: var(--amb); }
-.rpbtn.active .rp-val  { color: #fde68a; }
+.rpbtn.active .rp-name { color: #fbbf24; }
+.rpbtn.active .rp-val  { color: #fff3a3; }
 .rpbtn.reg-changed {
   border-color: rgba(34,197,94,.72);
   background: rgba(34,197,94,.09);
@@ -418,7 +419,16 @@ body.code-mem-resizing {
 .rpbtn.reg-changed.active {
   box-shadow: inset 0 0 0 1px rgba(34,197,94,.22), 0 0 0 1px rgba(34,197,94,.24), 0 0 22px rgba(34,197,94,.16);
 }
-.rpbtn:not(.active):hover { border-color: var(--bdr-hi); }
+.rpbtn.reg-touched {
+  border-color: rgba(56,189,248,.55);
+  background: rgba(56,189,248,.07);
+  box-shadow: inset 0 0 0 1px rgba(56,189,248,.12), 0 0 14px rgba(56,189,248,.10);
+}
+.rpbtn.reg-touched .rp-name,
+.rpbtn.reg-touched .rp-val {
+  color: #bae6fd;
+}
+.rpbtn:not(.active):hover { border-color: #3b82f6; background: #111f33; }
 .rpbtn.reg-animating { animation: reg-pulse .4s var(--ease); }
 @keyframes reg-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(251,191,36,.20); transform: scale(1); }
@@ -753,6 +763,11 @@ input[type=range]::-webkit-slider-thumb {
 .op-clear   { background: rgba(248,113,113,.07); border-color: var(--red); color: var(--red); }
 .op-execute { background: rgba(56,189,248,.07);  border-color: var(--acc); color: var(--acc); }
 .op-run     { background: rgba(56,189,248,.10);  border-color: var(--acc); color: var(--acc); }
+
+/* Instruction pointer register button (EIP / RIP) */
+.rpbtn-ip { border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.07); cursor: default; }
+.rpbtn-ip .rp-name { color: var(--role-pc); }
+.rpbtn-ip .rp-val  { color: #ffe87a; font-weight: 700; }
 
 /* Stack pointer register buttons */
 .rpbtn-sp { opacity: 0.96; }

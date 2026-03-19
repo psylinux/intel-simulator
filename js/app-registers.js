@@ -94,6 +94,7 @@ function setRegParts(name, lo, hi = 0, opts = {}) {
 // REGISTER READ / WRITE
 // ─────────────────────────────────────────────────────────
 function getReg(name) {
+  touchReg(name);
   if (is64()) {
     if (name === 'RSP') return S.regs.ESP;
     if (name === 'RBP') return S.regs.EBP;
@@ -156,9 +157,15 @@ function displayPosForTransferByte(name, byteIdx, count = transferWidth(name)) {
 // ─────────────────────────────────────────────────────────
 // CHANGE TRACKING  (CSS highlight for modified registers)
 // ─────────────────────────────────────────────────────────
+function touchReg(name) {
+  if (!S.trackRegAccess) return;
+  S.lastTouchedReg = name;
+}
+
 function markRegistersChanged(...names) {
   const flat = names.flat();
   S.changedRegs = [...new Set([...S.changedRegs, ...flat])];
+  if (flat.length > 0) touchReg(flat[flat.length - 1]);
 }
 
 function clearChangedRegisters() {

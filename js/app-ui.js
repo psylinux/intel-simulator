@@ -95,8 +95,11 @@ function changedRegisterSet() {
 
 function syncRegChangedClasses() {
   const changed = changedRegisterSet();
+  const touched = S.lastTouchedReg;
   [...gpRegs(), ...extRegs(), ...spRegs()].forEach(name => {
-    $('r' + name)?.classList.toggle('reg-changed', changed.has(name));
+    const el = $('r' + name); if (!el) return;
+    el.classList.toggle('reg-changed', changed.has(name));
+    el.classList.toggle('reg-touched', !changed.has(name) && name === touched);
   });
 }
 
@@ -679,6 +682,8 @@ function setLoading(name, on) {
 // SIDEBAR PICKER
 // ─────────────────────────────────────────────────────────
 function syncPicker() {
+  const ipEl = $('rpv-' + ipReg());
+  if (ipEl) ipEl.textContent = '0x' + fmtA(S.pc);
   [...gpRegs(), ...extRegs(), ...spRegs()].forEach(name => {
     updatePickerVal(name);
     updatePickerBytes(name);
@@ -1016,6 +1021,18 @@ function renderRegPicker() {
   const gp = gpRegs(), sp = spRegs(), ext = extRegs();
   const all = [...gp, ...ext, ...sp];
   picker.innerHTML = '';
+
+  // ── EIP / RIP (instruction pointer) — sempre primeiro ──
+  const ip = ipReg();
+  const ipBtn = document.createElement('button');
+  ipBtn.className = 'rpbtn rpbtn-ip';
+  ipBtn.id = 'r' + ip;
+  ipBtn.innerHTML = `<span class="rp-main">
+      <span class="rp-name">${ip}</span>
+      <span class="rp-val" id="rpv-${ip}">0x${fmtA(S.pc)}</span>
+    </span>`;
+  picker.appendChild(ipBtn);
+
   for (const name of all) {
     const isSp = isSpReg(name);
     const role = isSp ? ` rpbtn-${stackRoleClass(name)}` : '';

@@ -42,8 +42,19 @@ const ease = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 // ─────────────────────────────────────────────────────────
 // ARCHITECTURE SHORTCUTS  (depend on S — defined in app-state.js)
 // ─────────────────────────────────────────────────────────
-const sizeN = () => S.size === 'byte' ? 1 : S.size === 'word' ? 2 : S.size === 'qword' ? 8 : 4;
 const is64 = () => S.arch === 'x64';
+const sizeN = () => is64() ? 8 : 4;
+
+function widthName(width) {
+  if (width === 1) return 'BYTE';
+  if (width === 2) return 'WORD';
+  if (width === 8) return 'QWORD';
+  return 'DWORD';
+}
+
+function widthPtr(width) {
+  return `${widthName(width)} PTR`;
+}
 
 // ─────────────────────────────────────────────────────────
 // I18N SHORTHAND  (delegates to I18N from i18n.js)

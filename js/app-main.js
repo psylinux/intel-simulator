@@ -49,8 +49,6 @@ function init() {
   // Set initial arch button state
   $('archIA32')?.classList.add('active');
   $('archX64')?.classList.remove('active');
-  // Hide QWORD button initially (IA-32 mode)
-  $('sQword')?.setAttribute('style', 'display:none');
   syncSpeedUI();
 
   $('speedSlider').addEventListener('input', e => {
@@ -191,7 +189,6 @@ function init() {
 // ─────────────────────────────────────────────────────────
 const App = {
   setEndian,
-  setSize,
   setArch,
   selectReg,
   doStore,

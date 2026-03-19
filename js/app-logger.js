@@ -55,23 +55,17 @@ function setStatus(msg, cls, opts = {}) {
   lg(statusLogType(cls), msg);
 }
 
-function sizePtr() {
-  if (S.size === 'byte') return 'BYTE PTR';
-  if (S.size === 'word') return 'WORD PTR';
-  if (S.size === 'qword') return 'QWORD PTR';
-  return is64() ? 'DWORD PTR' : 'DWORD PTR';
-}
 function ipReg() { return is64() ? 'RIP' : 'EIP'; }
 
 function asmForOp(type, ctx) {
   // ctx: { reg, addr, val, byteAddr, byteVal, byteIdx, byteCount, newPC }
   switch (type) {
     case 'store-start':
-      return `MOV ${sizePtr()} [0x${fmtA(ctx.addr)}], ${ctx.reg}`;
+      return `MOV ${widthPtr(transferWidth(ctx.reg))} [0x${fmtA(ctx.addr)}], ${ctx.reg}`;
     case 'store-byte':
       return `MOV BYTE PTR [0x${fmtA(ctx.byteAddr)}], 0x${hex8(ctx.byteVal)}  ; byte ${ctx.byteIdx + 1}/${ctx.byteCount}`;
     case 'load-start':
-      return `MOV ${ctx.reg}, ${sizePtr()} [0x${fmtA(ctx.addr)}]`;
+      return `MOV ${ctx.reg}, ${widthPtr(transferWidth(ctx.reg))} [0x${fmtA(ctx.addr)}]`;
     case 'load-byte':
       return `; [0x${fmtA(ctx.byteAddr)}] → ${ctx.reg}[byte ${ctx.byteIdx}]  (parcial: 0x${ctx.partial})`;
     case 'fetch':

@@ -129,28 +129,9 @@
         </div>
       </section>
 
-      <!-- DATA SIZE -->
-      <section class="ctrl-section">
-        <div class="ctrl-label" data-i18n="sidebar.size.label">TAMANHO</div>
-        <div class="size-toggle">
-          <button class="stbtn" id="sByte" onclick="App.setSize('byte')"><span
-              data-i18n="sidebar.size.byte">BYTE</span><br><small data-i18n="sidebar.size.byte.sub">8
-              bit</small></button>
-          <button class="stbtn" id="sWord" onclick="App.setSize('word')"><span
-              data-i18n="sidebar.size.word">WORD</span><br><small data-i18n="sidebar.size.word.sub">16
-              bit</small></button>
-          <button class="stbtn active" id="sDword" onclick="App.setSize('dword')"><span
-              data-i18n="sidebar.size.dword">DWORD</span><br><small data-i18n="sidebar.size.dword.sub">32
-              bit</small></button>
-          <button class="stbtn stbtn-qword" id="sQword" onclick="App.setSize('qword')" style="display:none"><span
-              data-i18n="sidebar.size.qword">QWORD</span><br><small data-i18n="sidebar.size.qword.sub">64
-              bit</small></button>
-        </div>
-      </section>
-
       <!-- REGISTER SELECT -->
       <section class="ctrl-section">
-        <div class="ctrl-label" data-i18n="sidebar.reg.label">REGISTRADOR</div>
+        <div class="ctrl-label" data-i18n="sidebar.reg.label">REGISTRADORES</div>
         <div class="reg-picker" id="regPicker">
           <!-- populated dynamically by buildRegPicker() -->
         </div>
@@ -292,30 +273,32 @@
           <div class="cb-card-body">
             <button class="cb-btn cb-store" id="opStore" onclick="App.doStore()">
               <svg viewBox="0 0 20 20" fill="none">
-                <path d="M10 3v10M10 13l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                <rect x="4" y="11" width="12" height="5" rx="1.2" stroke="currentColor" stroke-width="1.6" />
+                <path d="M8 13.5h1M10 13.5h1M12 13.5h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                <path d="M10 3v8M10 11l-3-3m3 3l3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
                   stroke-linejoin="round" />
-                <rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor" />
               </svg>
               <span data-i18n="ctrlbar.btn.store">STORE</span>
             </button>
             <button class="cb-btn cb-load" id="opLoad" onclick="App.doLoad()">
               <svg viewBox="0 0 20 20" fill="none">
-                <path d="M10 17V7M10 7l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                <rect x="4" y="11" width="12" height="5" rx="1.2" stroke="currentColor" stroke-width="1.6" />
+                <path d="M8 13.5h1M10 13.5h1M12 13.5h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                <path d="M10 16V8M10 8l-3 3m3-3l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
                   stroke-linejoin="round" />
-                <rect x="3" y="3" width="14" height="2" rx="1" fill="currentColor" />
               </svg>
               <span data-i18n="ctrlbar.btn.load">LOAD</span>
             </button>
             <button class="cb-btn cb-push" id="opPush" onclick="App.doPush()">
               <svg viewBox="0 0 20 20" fill="none">
-                <path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8"
+                <path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <span data-i18n="ctrlbar.btn.push">PUSH</span>
             </button>
             <button class="cb-btn cb-pop" id="opPop" onclick="App.doPop()">
               <svg viewBox="0 0 20 20" fill="none">
-                <path d="M10 16V8M10 8l-3 3m3-3l3 3M4 4h12" stroke="currentColor" stroke-width="1.8"
+                <path d="M10 4v8M10 12l-3-3m3 3l3-3M4 16h12" stroke="currentColor" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <span data-i18n="ctrlbar.btn.pop">POP</span>

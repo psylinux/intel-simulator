@@ -985,20 +985,6 @@ function setEndian(e) {
   lg('sys', t('log.sys.format', e.toUpperCase()));
 }
 
-function setSize(s) {
-  S.size = s;
-  ['byte', 'word', 'dword', 'qword'].forEach(x => {
-    const id = 's' + x[0].toUpperCase() + x.slice(1);
-    $(id)?.classList.toggle('active', x === s);
-  });
-  // QWORD only available in x64 mode; clamp to dword otherwise
-  if (s === 'qword' && !is64()) { S.size = 'dword'; doSetSize('dword'); return; }
-  renderRegPicker();
-  syncPicker();
-  refreshPreview(); refreshBreakdown();
-  lg('sys', t('log.sys.size', s.toUpperCase(), sizeN() * 8));
-}
-
 function selectReg(name) {
   S.reg = name;
   [...gpRegs(), ...extRegs(), ...spRegs()].forEach(r => {
@@ -1048,13 +1034,6 @@ function setArch(arch) {
   $('archIA32')?.classList.toggle('active', arch === 'ia32');
   $('archX64')?.classList.toggle('active', arch === 'x64');
 
-  // Add QWORD button visibility
-  const sQ = $('sQword'); if (sQ) sQ.style.display = arch === 'x64' ? '' : 'none';
-
-  // Default operand size follows the selected architecture in the UI
-  if (arch === 'x64') S.size = 'qword';
-  else if (S.size === 'qword') S.size = 'dword';
-
   // Granularidade padrão por arquitetura: DWord (IA-32) / QWord (x64)
   S.stackGranularity = arch === 'x64' ? 'qword' : 'dword';
 
@@ -1069,7 +1048,6 @@ function setArch(arch) {
   renderMemGrid();
   setPC(demoProgramForArch(arch).entry);
   renderStackView();
-  doSetSize(S.size);
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   updatePickerVal(S.reg);
   doSelectReg(S.reg);
@@ -1101,7 +1079,7 @@ async function doStore() {
     return;
   }
   setPC(addr, { traceAutoScroll: false });
-  lg('store', t('log.store.start', reg, regHex(reg), fmtA(addr), S.size.toUpperCase(), S.endian.toUpperCase()), asm);
+  lg('store', t('log.store.start', reg, regHex(reg), fmtA(addr), widthName(n), S.endian.toUpperCase()), asm);
   setStatus(t('status.store_start', n, fmtA(addr)), 'lbl-store');
 
   for (let i = 0; i < n; i++) {
@@ -1144,7 +1122,7 @@ async function doLoad() {
     return;
   }
   setPC(addr, { traceAutoScroll: false });
-  lg('load', t('log.load.start', fmtA(addr), reg, S.size.toUpperCase(), S.endian.toUpperCase()), asm);
+  lg('load', t('log.load.start', fmtA(addr), reg, widthName(n), S.endian.toUpperCase()), asm);
   setStatus(t('status.load_start', n, fmtA(addr)), 'lbl-load');
 
   const raw = [];
@@ -1493,7 +1471,7 @@ async function animPacket(dir, bv, targetIdx, opts = {}) {
 function saveSim() {
   const data = {
     version: 10, state: {
-      endian: S.endian, size: S.size, reg: S.reg, arch: S.arch, stackMode: S.stackMode, stackSize: S.stackSize, stackSizeInputUnit: S.stackSizeInputUnit, sidebarPanelWidth: S.sidebarPanelWidth, sidebarPanelManual: S.sidebarPanelManual, stackPanelWidth: S.stackPanelWidth, stackPanelManual: S.stackPanelManual, codeMemSplitWidth: S.codeMemSplitWidth, codeMemSplitManual: S.codeMemSplitManual, centerPaneHeights: { ...S.centerPaneHeights }, collapsedSections: { ...S.collapsedSections }, speed: S.speed,
+      endian: S.endian, reg: S.reg, arch: S.arch, stackMode: S.stackMode, stackSize: S.stackSize, stackSizeInputUnit: S.stackSizeInputUnit, sidebarPanelWidth: S.sidebarPanelWidth, sidebarPanelManual: S.sidebarPanelManual, stackPanelWidth: S.stackPanelWidth, stackPanelManual: S.stackPanelManual, codeMemSplitWidth: S.codeMemSplitWidth, codeMemSplitManual: S.codeMemSplitManual, centerPaneHeights: { ...S.centerPaneHeights }, collapsedSections: { ...S.collapsedSections }, speed: S.speed,
       memViewBase: S.memViewBase,
       regs: { ...S.regs }, mem: Array.from(S.mem), memState: [...S.memState], stackMem: Array.from(S.stackMem || []), stackState: Array.from((S.stackState || new Map()).entries()),
       stats: { ...S.stats, loadTimes: [...S.stats.loadTimes], storeTimes: [...S.stats.storeTimes] }, pc: S.pc
@@ -1511,7 +1489,10 @@ function loadSim(e) {
   r.onload = ev => {
     try {
       const d = JSON.parse(ev.target.result).state;
-      S.endian = d.endian; S.size = d.size; S.reg = d.reg;
+      if (d.arch) S.arch = d.arch;
+      doSetArch(S.arch);
+      S.endian = d.endian;
+      S.reg = d.reg;
       if (d.stackMode) S.stackMode = d.stackMode;
       if (Number.isFinite(d.stackSize)) S.stackSize = normalizeStackSizeBytes(d.stackSize);
       S.stackSizeInputUnit = normalizeStackSizeUnit(d.stackSizeInputUnit || preferredStackSizeUnit(S.stackSize));
@@ -1532,7 +1513,6 @@ function loadSim(e) {
       }
       if (Number.isFinite(d.speed)) S.speed = normalizeSpeed(d.speed);
       if (Number.isFinite(d.memViewBase)) S.memViewBase = 0;
-      if (d.arch) S.arch = d.arch;
       Object.assign(S.regs, d.regs);
       S.mem = new Uint8Array(d.mem); S.memState = d.memState;
       ensureStackMem();
@@ -1551,7 +1531,7 @@ function loadSim(e) {
       persistCenterPaneHeights();
       applyCollapsedSections();
       persistCollapsedSections();
-      doSetEndian(S.endian); doSetArch(S.arch); doSetSize(S.size); doSelectReg(S.reg);
+      doSetEndian(S.endian); doSelectReg(S.reg);
       renderRegPicker(); renderMemGrid(); setPC(S.pc);
       renderStackView();
       syncSpeedUI();
@@ -1579,5 +1559,4 @@ function closeHelp() { $('helpBg').classList.remove('open'); }
 // Backward-compatible aliases (for HTML onclick and test harness)
 const doSetArch = setArch;
 const doSetEndian = setEndian;
-const doSetSize = setSize;
 const doSelectReg = selectReg;

@@ -31,7 +31,6 @@ const MAX_STACK_SIZE = 1024 * 1024;
 // ─────────────────────────────────────────────────────────
 const S = {
   endian: 'little',
-  size: 'dword',
   reg: 'EAX',
   stackMode: 'full',
   stackGranularity: 'dword', // 'byte' | 'word' | 'dword' | 'qword'

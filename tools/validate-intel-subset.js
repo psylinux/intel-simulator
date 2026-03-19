@@ -212,7 +212,6 @@ globalThis.__memsim = {
   // nomes novos (pós-refatoração) — aliases para compatibilidade
   setArch:    typeof setArch    !== 'undefined' ? setArch    : doSetArch,
   setEndian:  typeof setEndian  !== 'undefined' ? setEndian  : doSetEndian,
-  setSize:    typeof setSize    !== 'undefined' ? setSize    : doSetSize,
   clearSim:   typeof clearSim   !== 'undefined' ? clearSim   : doClear,
   selectReg:  typeof selectReg  !== 'undefined' ? selectReg  : doSelectReg,
   clearLog:   typeof clearLog   !== 'undefined' ? clearLog   : doClearLog,
@@ -220,7 +219,6 @@ globalThis.__memsim = {
   // nomes originais mantidos durante transição
   doSetArch,
   doSetEndian,
-  doSetSize,
   doClear,
   setPC,
   getReg,
@@ -256,6 +254,7 @@ globalThis.__memsim = {
   // utils extended
   trimNumericText,
   memByteAt,
+  memEl,
   // register extended
   markRegistersChanged,
   clearChangedRegisters,
@@ -263,9 +262,12 @@ globalThis.__memsim = {
   resetStatsState,
   resetStackState,
   // memory extended
+  setMemSt,
+  writeMem,
   writeStackBytes,
   readStackBytes,
   readStackPtrLE,
+  renderMemGrid,
   // assembler validation
   editDistance,
   wideAliasForReg,
@@ -303,7 +305,6 @@ function defaultStackTop(api) {
 function resetSim(api, document, arch = 'ia32') {
   api.S.arch         = arch;
   api.S.endian       = 'little';
-  api.S.size         = arch === 'x64' ? 'qword' : 'dword';
   api.S.reg          = arch === 'x64' ? 'RAX' : 'EAX';
   api.S.stackSize    = 100 * 1024;   // 100 KB
   api.S.busy         = false;
@@ -1068,29 +1069,24 @@ test('STORE/LOAD round-trip: arbitrary 32-bit value survives memory cycle', asyn
   assert.equal(api.getReg('EAX'), original, 'Round-trip must preserve value');
 });
 
-test('STORE word (2 bytes): only 2 bytes written', async () => {
+test('STORE ia32: width is fixed to DWORD by architecture', async () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  api.S.size = 'word';
-  api.S.reg = 'EAX';
-  api.setReg('EAX', 0xABCD);
-  setAddr(document, 0x10);
-  await api.doStore();
-  assert.equal(api.S.mem[0x10], 0xCD);  // LSB
-  assert.equal(api.S.mem[0x11], 0xAB);  // MSB
-  assert.equal(api.S.mem[0x12], 0x00);  // untouched
-});
-
-test('STORE byte (1 byte): only lowest byte written', async () => {
-  const { api, document } = loadSimulator();
-  resetSim(api, document, 'ia32');
-  api.S.size = 'byte';
   api.S.reg = 'EAX';
   api.setReg('EAX', 0x12345678);
   setAddr(document, 0x10);
   await api.doStore();
-  assert.equal(api.S.mem[0x10], 0x78);  // only LSB
-  assert.equal(api.S.mem[0x11], 0x00);  // untouched
+  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x14)), [0x78, 0x56, 0x34, 0x12]);
+});
+
+test('STORE x64: width is fixed to QWORD by architecture', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'x64');
+  api.S.reg = 'RAX';
+  api.setRegParts('RAX', 0x55667788, 0x11223344);
+  setAddr(document, 0x10);
+  await api.doStore();
+  assert.deepEqual(Array.from(api.S.mem.slice(0x10, 0x18)), [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
 });
 
 test('mapAccessFits: boundary checks for 64-byte memory', () => {
@@ -1359,6 +1355,48 @@ test('Multiple FETCH calls advance PC cumulatively', async () => {
   assert.equal(api.S.pc, 2);
   await api.doFetch();
   assert.equal(api.S.pc, 3);
+});
+
+test('FETCH restores previous memory cell state after temporary highlight', async () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  writeBytes(api, 0, [0x90]);
+  assert.equal(api.S.memState[0], 'mc-written');
+  await api.doFetch();
+  assert.equal(api.S.memState[0], 'mc-written', 'FETCH must not leave mc-pc latched in memory state');
+});
+
+test('Memory DOM: setMemSt immediately updates rendered cell class', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.renderMemGrid();
+  api.setMemSt(0, 'mc-pc');
+  const cell = api.memEl(0);
+  assert.ok(cell, 'rendered memory cell must exist');
+  assert.equal(cell.classList.contains('mc-pc'), true, 'rendered memory cell must reflect mc-pc immediately');
+});
+
+test('Memory DOM: writeMem immediately updates rendered cell text and class', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.renderMemGrid();
+  api.writeMem(0, 0xAB, 'mc-written');
+  const cell = api.memEl(0);
+  assert.ok(cell, 'rendered memory cell must exist');
+  assert.equal(cell.textContent, 'AB');
+  assert.equal(cell.classList.contains('mc-written'), true, 'rendered memory cell must reflect write state immediately');
+});
+
+test('Memory DOM: temporary state updates preserve selection and breakpoint markers', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.renderMemGrid();
+  const cell = api.memEl(0);
+  cell.classList.add('mc-selected', 'mc-bp');
+  api.setMemSt(0, 'mc-pc');
+  assert.equal(cell.classList.contains('mc-selected'), true, 'mc-selected must survive temporary memory state updates');
+  assert.equal(cell.classList.contains('mc-bp'), true, 'mc-bp must survive temporary memory state updates');
+  assert.equal(cell.classList.contains('mc-pc'), true, 'temporary fetch highlight must still be applied');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1705,14 +1743,12 @@ test('PUSH/POP always use little-endian regardless of S.endian (was bug)', async
   assert.equal(api.getReg('EAX'), 0x11223344, 'PUSH/POP round-trip must work regardless of S.endian');
 });
 
-test('sizeN: returns correct byte counts for all sizes', () => {
+test('sizeN: follows the active architecture', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
-  api.S.size = 'byte';  assert.equal(api.sizeN(), 1);
-  api.S.size = 'word';  assert.equal(api.sizeN(), 2);
-  api.S.size = 'dword'; assert.equal(api.sizeN(), 4);
+  assert.equal(api.sizeN(), 4);
   api.S.arch = 'x64';
-  api.S.size = 'qword'; assert.equal(api.sizeN(), 8);
+  assert.equal(api.sizeN(), 8);
 });
 
 test('JMP does not push anything to callFrames (not a CALL)', async () => {
@@ -2549,18 +2585,15 @@ test('regWidthBytes: 4 bytes para IA-32; 8 para x64 GP, 4 para SP', () => {
   assert.equal(api.regWidthBytes('R8'),  8);
 });
 
-test('transferWidth: limitado pelo menor entre sizeN() e regWidthBytes()', () => {
+test('transferWidth: segue a largura fixa da arquitetura, limitada pelo registrador', () => {
   const { api } = loadSimulator();
   api.S.arch = 'ia32';
-  api.S.size = 'dword';
   api.S.reg  = 'EAX';
   assert.equal(api.transferWidth('EAX'), 4);
-  api.S.size = 'byte';
-  assert.equal(api.transferWidth('EAX'), 1);
   api.S.arch = 'x64';
-  api.S.size = 'qword';
   api.S.reg  = 'RAX';
   assert.equal(api.transferWidth('RAX'), 8);
+  assert.equal(api.transferWidth('RSP'), 4);
 });
 
 test('setRegParts + regParts: round-trip para RAX em x64', () => {

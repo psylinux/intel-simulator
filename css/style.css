@@ -368,12 +368,6 @@ body.code-mem-resizing {
 .artbtn.active .art-sub  { color: #7dd3fc; }
 .artbtn:not(.active):hover { border-color: var(--bdr-hi); }
 
-/* QWORD size button */
-.stbtn-qword {
-  background: rgba(56,189,248,.05); border-color: var(--acc-dim); color: var(--acc);
-}
-.stbtn-qword.active { background: var(--acc-dim); border-color: var(--acc); color: var(--acc); }
-
 /* Endian toggle */
 .endian-toggle { display: flex; gap: 3px; }
 .etbtn {
@@ -396,23 +390,6 @@ body.code-mem-resizing {
   padding: 4px 7px; background: var(--acc-glow2); border-left: 2px solid var(--acc);
   border-radius: 0 var(--r) var(--r) 0;
 }
-
-/* Size toggle */
-.size-toggle { display: flex; gap: 3px; }
-.stbtn {
-  flex: 1; padding: 7px 4px; text-align: center;
-  background: var(--bg2); border: 1px solid var(--bdr);
-  border-radius: var(--r); cursor: pointer; font-family: var(--mono);
-  font-size: var(--fs-ui-sm); font-weight: 600; color: var(--tx1);
-  line-height: 1.4; transition: all .15s var(--ease);
-}
-.stbtn small { font-size: var(--fs-ui-xs); color: var(--tx2); display: block; font-weight: 400; }
-.stbtn.active {
-  background: var(--acc-dim); border-color: var(--acc);
-  color: var(--acc);
-}
-.stbtn.active small { color: #7dd3fc; }
-.stbtn:not(.active):hover { border-color: var(--bdr-hi); }
 
 /* Register picker */
 .reg-picker { display: flex; flex-direction: column; gap: 2px; }
@@ -1727,6 +1704,11 @@ body.code-mem-resizing #codeMemSplitHandle {
 .mem-cell.mc-pc {
   background: var(--role-pc-bg); border-color: var(--role-pc); color: var(--role-pc);
   box-shadow: 0 0 10px rgba(0,229,255,.14);
+  animation: fetch-pulse .42s var(--ease) infinite alternate;
+}
+@keyframes fetch-pulse {
+  0%   { box-shadow: 0 0 8px rgba(0,229,255,.10); }
+  100% { box-shadow: 0 0 14px rgba(0,229,255,.26); }
 }
 .mem-cell.mc-error {
   background: rgba(248,113,113,.12); border-color: var(--red); color: var(--red);

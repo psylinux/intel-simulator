@@ -57,9 +57,25 @@ function memStateAt(addr) {
 
 function setByteState(addr, st = '') {
   if (addr < 0 || addr >= memSpaceSize()) return;
-  if (addr < 64) { S.memState[addr] = st || ''; return; }
+  if (addr < 64) {
+    S.memState[addr] = st || '';
+    syncMemCellDom(addr);
+    return;
+  }
   if (st) S.stackState.set(addr, st);
   else S.stackState.delete(addr);
+  syncMemCellDom(addr);
+}
+
+const MEM_STATE_CLASSES = ['mc-active', 'mc-written', 'mc-pc', 'mc-error'];
+
+function syncMemCellDom(addr) {
+  const cell = memEl(addr);
+  if (!cell || cell.classList?.contains('is-editing')) return;
+  cell.textContent = hex8(memByteAt(addr));
+  cell.classList.remove(...MEM_STATE_CLASSES);
+  const st = memStateAt(addr);
+  if (st) cell.classList.add(st);
 }
 
 function writeMem(addr, val, st = '') {
@@ -73,6 +89,7 @@ function writeMem(addr, val, st = '') {
     if (st) S.stackState.set(addr, st);
     else S.stackState.delete(addr);
   }
+  syncMemCellDom(addr);
 }
 
 function setMemSt(addr, st = '') {
@@ -80,7 +97,7 @@ function setMemSt(addr, st = '') {
 }
 
 // Resolve a DOM element for a memory cell by address
-const memEl = addr => document.querySelector(`[data-addr="${addr}"]`);
+const memEl = addr => memCellRefs?.[addr] || document.querySelector(`[data-addr="${addr}"]`);
 
 // ─────────────────────────────────────────────────────────
 // MEMORY VIEW

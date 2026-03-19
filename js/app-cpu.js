@@ -32,8 +32,13 @@ async function _executeOne(opts = {}) {
   // ── FASE 1: FETCH ──────────────────────────────────────
   // Lê bytes da memória → IR; IP incrementa imediatamente (Intel SDM §6.3)
   const np_seq = (addr + instr.size) & 0x3F;   // PC sequencial (pode ser sobrescrito por JMP)
+  const fetchPrevStates = [];
   setStatus(t('status.fetch_short', fmtA(addr), instr.size), 'lbl-fetch', { log: false });
-  for (let i = 0; i < instr.size; i++) { const ma = (addr + i) & 0x3F; setMemSt(ma, 'mc-pc'); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (addr + i) & 0x3F;
+    fetchPrevStates.push(memStateAt(ma));
+    setMemSt(ma, 'mc-pc');
+  }
   if (isStepTrace) {
     lg('info', t('log.info.fetch_desc', instr.size, fmtA(addr)), asmForOp('fetch', { addr, newPC: np_seq }), { indent: 1, kindLabel: 'FETCH' });
   } else {
@@ -85,7 +90,10 @@ async function _executeOne(opts = {}) {
   } finally {
     S.logIndent = prevIndent;
   }
-  for (let i = 0; i < instr.size; i++) { const ma = (addr + i) & 0x3F; setMemSt(ma, S.memState[ma] || ''); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (addr + i) & 0x3F;
+    setMemSt(ma, fetchPrevStates[i] || '');
+  }
   if (S.faulted) {
     syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
     return;
@@ -281,15 +289,23 @@ async function doStepForward() {
 
 async function _executeOneReverse(fromAddr) {
   const instr = decodeAt(fromAddr);
+  const fetchPrevStates = [];
   // EXECUTE → DECODE → FETCH (ordem inversa)
   setStatus(t('status.execute_revert', instr.mnem), 'lbl-load', { log: false });
   await sleep(S.speed * 0.2);
   setStatus(t('status.decode_revert', instr.mnem), 'lbl-fetch', { log: false });
   await sleep(S.speed * 0.2);
   setStatus(t('status.fetch_revert', fmtA(fromAddr)), 'lbl-fetch', { log: false });
-  for (let i = 0; i < instr.size; i++) { const ma = (fromAddr + i) & 0x3F; setMemSt(ma, 'mc-pc'); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (fromAddr + i) & 0x3F;
+    fetchPrevStates.push(memStateAt(ma));
+    setMemSt(ma, 'mc-pc');
+  }
   await sleep(S.speed * 0.25);
-  for (let i = 0; i < instr.size; i++) { const ma = (fromAddr + i) & 0x3F; setMemSt(ma, S.memState[ma] || ''); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (fromAddr + i) & 0x3F;
+    setMemSt(ma, fetchPrevStates[i] || '');
+  }
   setStatus(t('status.back_done', fmtA(fromAddr)), 'lbl-done', { log: false });
 }
 

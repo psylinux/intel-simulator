@@ -378,8 +378,13 @@ async function doFetch() {
   // (Intel SDM Vol.1 §6.3: "The EIP register is incremented after each
   //  instruction fetch to point to the next sequential instruction")
   const np = (addr + instr.size) & 0x3F;   // novo PC = endereço pós-instrução
+  const fetchPrevStates = [];
   setStatus(t('status.fetch1', fmtA(addr), instr.size), 'lbl-fetch');
-  for (let i = 0; i < instr.size; i++) { const ma = (addr + i) & 0x3F; setMemSt(ma, 'mc-pc'); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (addr + i) & 0x3F;
+    fetchPrevStates.push(memStateAt(ma));
+    setMemSt(ma, 'mc-pc');
+  }
   lg('info', t('log.info.fetch1', fmtA(addr), hex8(instr.op), instr.size));
   await sleep(S.speed * 0.4);
 
@@ -405,7 +410,10 @@ async function doFetch() {
   }
   await sleep(S.speed * 0.35);
 
-  for (let i = 0; i < instr.size; i++) { const ma = (addr + i) & 0x3F; setMemSt(ma, S.memState[ma] || ''); }
+  for (let i = 0; i < instr.size; i++) {
+    const ma = (addr + i) & 0x3F;
+    setMemSt(ma, fetchPrevStates[i] || '');
+  }
   setStatus(t('status.fetch_decode_done', fmtA(np)), 'lbl-done');
   renderStackView();
   S.busy = false; setBusy(false);

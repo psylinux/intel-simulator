@@ -423,7 +423,7 @@ test('instruction-pointer locale strings use architecture-specific placeholders 
     assert.equal(inlineSrc.includes(`"${key}":`), false, `js/i18n.js must not expose legacy key ${key}`);
   });
 
-  assert.equal(pt['editguide.hint1'], 'Clique nos <strong>valores dos registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para editar bytes.');
+  assert.equal(pt['editguide.hint1'], 'Clique nos <strong>valores dos registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMÓRIA</strong> para editar bytes.');
   assert.equal(en['editguide.hint1'], 'Click on <strong>register values</strong> to edit. Use <strong>double-click</strong> on the <strong>MEMORY MAP</strong> to edit bytes.');
   assert.equal(en['ui.asm.write.title'], 'Writes bytes at current {0}. Press Enter to confirm.');
   assert.equal(en['help.ops'].includes('updating {0}, registers, memory and stack'), true);

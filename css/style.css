@@ -917,10 +917,8 @@ body.pane-resizing .canvas-pane-handle {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: min(100%, 980px);
-  text-align: center;
+  gap: 6px;
+  width: min(100%, 1100px);
 }
 .eg-title {
   display: block;
@@ -930,19 +928,53 @@ body.pane-resizing .canvas-pane-handle {
   font-size: var(--fs-ui-sm);
   font-weight: 800;
   letter-spacing: 1.8px;
+  text-align: center;
 }
-.eg-text {
+.eg-list {
+  list-style: none;
   margin: 0;
-  color: var(--tx0);
-  font-size: var(--fs-ui-sm);
-  line-height: 1.45;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  justify-content: center;
+  width: 100%;
 }
 .eg-item {
-  display: inline;
+  display: block;
+  position: relative;
+  flex: 1 1 calc(50% - 8px);
+  max-width: calc(50% - 8px);
+  background: rgba(56,189,248,.05);
+  border: 1px solid rgba(56,189,248,.12);
+  border-radius: 8px;
+  padding: 6px 12px 6px 26px;
+  color: var(--tx0);
+  font-size: var(--fs-ui-sm);
+  line-height: 1.5;
+  text-align: left;
+  box-sizing: border-box;
+}
+.eg-item::before {
+  content: '›';
+  position: absolute;
+  left: 10px;
+  top: 7px;
+  color: var(--acc);
+  font-weight: 700;
+  font-size: 1.1em;
+  line-height: 1;
 }
 .eg-item strong {
   color: #f8fbff;
   font-weight: 700;
+}
+/* 3ª dica: ocupa toda a largura e centraliza o texto */
+.eg-item:last-child {
+  flex: 1 1 100%;
+  max-width: 100%;
+  text-align: center;
+  padding-left: 26px;
 }
 
 .section-badge {

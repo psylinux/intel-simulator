@@ -38,27 +38,6 @@
       </div>
     </div>
 
-    <nav class="tb-nav">
-      <div class="pc-chip">
-        <span class="chip-lbl" id="ipChipLbl" data-i18n="topbar.chip.pc">EIP/RIP</span>
-        <span class="chip-val-prefix">0x</span>
-        <input class="chip-val chip-pc-input" id="pcDisplay" type="text" maxlength="4" value="0000" spellcheck="false"
-          data-i18n-title="topbar.pc.title" title="Edite EIP/RIP manualmente" />
-      </div>
-      <div class="clock-chip" id="clockChip">
-        <span class="chip-lbl" data-i18n="topbar.chip.lastop">LAST OP</span>
-        <span class="chip-val" id="clockDisplay">—</span>
-      </div>
-      <div class="ops-chip">
-        <span class="chip-lbl" data-i18n="topbar.chip.ops">OPS</span>
-        <span class="chip-val" id="opsDisplay">0</span>
-      </div>
-      <div class="arch-chip">
-        <span class="chip-lbl" data-i18n="topbar.chip.arch">ARCH</span>
-        <span class="chip-val chip-arch" id="archDisplay">IA-32</span>
-      </div>
-    </nav>
-
     <div class="tb-actions">
       <!-- Seletor de idioma -->
       <select class="tb-lang-select" id="langSwitcher" onchange="I18N.setLocale(this.value)" title="Language / Idioma">
@@ -152,7 +131,7 @@
 
       <div id="editGuideBanner">
         <span class="eg-title" data-i18n="editguide.title">EDICAO RAPIDA</span>
-        <span class="eg-item" id="editGuideHint1" data-i18n-html="editguide.hint1">Clique em <strong>EIP/RIP</strong> e nos <strong>valores dos
+        <span class="eg-item" id="editGuideHint1" data-i18n-html="editguide.hint1">Clique nos <strong>valores dos
             registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para
           editar bytes.</span>
         <span class="eg-item" data-i18n-html="editguide.hint2">Edite o programa direto na <strong>LISTAGEM ASM</strong>
@@ -353,8 +332,7 @@
                           data-i18n="mem.legend.active">Ativo</span></span>
                       <span class="ml-item"><span class="ml-dot ml-written"></span><span
                           data-i18n="mem.legend.written">Escrito</span></span>
-                      <span class="ml-item"><span class="ml-dot ml-pc"></span><span id="memLegendIpLbl"
-                          data-i18n="mem.legend.pc">EIP/RIP</span></span>
+                      <span class="ml-item"><span class="ml-dot ml-pc"></span><span id="memLegendIpLbl">EIP</span></span>
                       <span class="ml-item"><span class="ml-dot ml-fetch"></span><span
                           data-i18n="mem.legend.fetch">Fetch</span></span>
                       <span class="ml-item"><span class="ml-dot ml-bp"></span><span

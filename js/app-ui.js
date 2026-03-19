@@ -106,12 +106,6 @@ function syncRegChangedClasses() {
 
 function syncInstructionPointerUI() {
   const ip = ipReg();
-  const chipLbl = $('ipChipLbl');
-  if (chipLbl) chipLbl.textContent = ip;
-  const pcInput = $('pcDisplay');
-  if (pcInput) pcInput.title = t('topbar.ip.title', ip);
-  const guideHint = $('editGuideHint1');
-  if (guideHint) guideHint.innerHTML = t('editguide.hint1.ip', ip);
   const legendLbl = $('memLegendIpLbl');
   if (legendLbl) legendLbl.textContent = ip;
 }
@@ -1074,10 +1068,7 @@ function setArch(arch) {
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
   updatePickerVal(S.reg);
   doSelectReg(S.reg);
-  $('clockDisplay').textContent = '—';
-  $('opsDisplay').textContent = '0';
   setCpuState('idle');
-  const chip = $('archDisplay'); if (chip) chip.textContent = arch === 'x64' ? 'x86-64' : 'IA-32';
   const stackLbl = $('stackArchLbl'); if (stackLbl) stackLbl.textContent = `STACK  ${arch === 'x64' ? 'RSP/RBP' : 'ESP/EBP'}`;
   const asmPh = $('asmInput'); if (asmPh) asmPh.placeholder = t(arch === 'x64' ? 'asm.hint.placeholder.x64' : 'asm.hint.placeholder.ia32');
   syncInstructionPointerUI();
@@ -1559,8 +1550,6 @@ function loadSim(e) {
       syncSpeedUI();
       syncStackSizeUI();
       syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
-      $('opsDisplay').textContent = S.stats.ops;
-      $('clockDisplay').textContent = '—';
       lg('sys', t('log.sys.sim_loaded'));
     } catch (err) { lg('error', t('log.error.fail', err.message)); }
   };

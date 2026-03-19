@@ -61,23 +61,6 @@ function init() {
     doSetStackSizeUnit(e.target.value);
   });
 
-  // PC input — manual editing
-  $('pcDisplay').addEventListener('input', e => {
-    const raw = e.target.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
-    e.target.value = raw;
-  });
-  $('pcDisplay').addEventListener('change', e => {
-    const addr = parseInt(e.target.value || '0', 16) & 0x3F;
-    e.target.value = fmtA(addr);
-    setPC(addr, { revealMem: true });
-    refreshBreakdown();
-    renderStackView();
-    lg('sys', t('log.sys.pc_manual', ipReg(), fmtA(addr)));
-  });
-  $('pcDisplay').addEventListener('keydown', e => {
-    if (e.key === 'Enter') e.target.blur();
-  });
-
   // Bloqueia a seleção de texto que o browser inicia ao Shift+Click
   $('memGrid').addEventListener('mousedown', e => {
     if (e.shiftKey && e.target.closest('.mem-cell')) e.preventDefault();

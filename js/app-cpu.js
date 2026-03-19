@@ -437,8 +437,6 @@ function clearSim() {
   $('valInput').value = regHex(S.reg).slice(-Math.min(sizeN() * 2, regWidthBytes(S.reg) * 2));
   renderStackView();
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
-  $('clockDisplay').textContent = '—';
-  $('opsDisplay').textContent = '0';
   setCpuState('idle');
   setStatus(t('status.demo_reset', ipReg()), 'lbl-done');
   lg('sys', t('log.sys.demo_reset'), asmForOp('clear', {}));

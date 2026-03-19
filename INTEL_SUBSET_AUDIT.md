@@ -15,7 +15,7 @@ O simulador implementa um subset didatico, nao a arquitetura inteira. As validac
 - `CALL rel32`
 - `RET`
 - `JMP SHORT rel8`
-- `FETCH` com avanço do `IP`/`RIP` para a proxima instrucao
+- `FETCH` com avanço do `IP`/`RIP` para a proxima instrucao
 - falhas de `opcode invalido`
 - falhas de `decode inconsistente`
 - falhas de largura fora do mapa de 64 bytes
@@ -52,6 +52,8 @@ Execucao:
 node tools/validate-intel-subset.js
 ```
 
+**Cobertura atual: 227 testes, 0 falhas.**
+
 ## O que ainda impede qualquer alegacao de conformidade total
 
 Mesmo com os testes acima, o simulador nao pode ser descrito como "exato" ou "completamente conforme" a toda a arquitetura Intel x86/x86-64. Os limites principais sao estes:
@@ -69,9 +71,9 @@ Mesmo com os testes acima, o simulador nao pode ser descrito como "exato" ou "co
 ## Referencias Intel usadas
 
 - Intel SDM landing page: https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
-- Intel 64 and IA-32 Architectures Software Developer’s Manual, Volume 1: https://cdrdv2.intel.com/v1/dl/getContent/671436
-- Intel 64 and IA-32 Architectures Software Developer’s Manual, Volume 2A: https://cdrdv2.intel.com/v1/dl/getContent/671110
-- Intel 64 and IA-32 Architectures Software Developer’s Manual, Volume 2B: https://cdrdv2.intel.com/v1/dl/getContent/671199
+- Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 1: https://cdrdv2.intel.com/v1/dl/getContent/671436
+- Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2A: https://cdrdv2.intel.com/v1/dl/getContent/671110
+- Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B: https://cdrdv2.intel.com/v1/dl/getContent/671199
 
 ## Conclusao tecnica
 

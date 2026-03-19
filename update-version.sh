@@ -6,7 +6,7 @@
 #      ./update-version.sh v0.2     (altera o semver base)
 set -euo pipefail
 
-SEMVER="${1:-v0.1}"
+SEMVER="${1:-v0.2}"
 COMMIT=$(git rev-parse --short HEAD)
 VERSION="${SEMVER}.${COMMIT}"
 

@@ -36,12 +36,12 @@ npm run test:breakpoint
 
 ---
 
-## Funcionalidades (v0.1)
+## Funcionalidades (v0.2)
 
 ### Arquitetura e CPU
 - Suporte a **IA-32** e **x86-64** com conjunto de registradores dinâmico
-- Registradores de uso geral: EAX/RAX, EBX/RBX, ECX/RCX, EDX/RDX, ESI/RSI, EDI/RDI, ESP/RSP, EBP/RBP
-- Registrador de instrução (EIP/RIP) atualizado a cada passo
+- Registradores de uso geral: EAX/RAX, EBX/RBX, ECX/RCX, EDX/RDX, ESI/RSI, EDI/RDI
+- Registrador de instrução **EIP/RIP** exibido no topo da lista de registradores, atualizado a cada passo
 - Flags de CPU: ZF, SF, CF, OF, PF
 
 ### Assembler e Execução
@@ -60,10 +60,18 @@ npm run test:breakpoint
 
 ### Memória
 - Espaço de memória dedicado com visualização célula a célula
+- Clique em qualquer byte do mapa de memória seleciona todos os bytes da instrução correspondente
 - Stack memory separada com tamanho configurável (B ou KB)
 - Animações byte a byte para operações STORE e LOAD
 - Highlight de células ativas durante operações de memória e stack
-- Exibição dos bytes de cada instrução como chips individuais
+- Exibição dos bytes de cada instrução como chips individuais no trace de assembly
+
+### Registradores (sidebar esquerda)
+- **EIP/RIP** sempre exibido no topo da lista com cor âmbar exclusiva
+- Highlight **verde** ao escrever em um registrador, highlight **ciano** ao ler — persiste até o próximo acesso
+- Labels **LSB** (verde), **MSB** (âmbar) e **A+N** (ciano) com cores distintas e saturadas em cada célula de byte
+- Largura de transferência inferida automaticamente do registrador selecionado (sem seletor manual)
+- Animações byte a byte de STORE/LOAD/PUSH/POP diretamente nos cards da sidebar
 
 ### Backtrace e Call Frames
 - **BACKTRACE** visual com pilha de chamadas (cresce para cima, como uma pilha de pratos)
@@ -73,11 +81,11 @@ npm run test:breakpoint
 
 ### Interface
 - Layout com painéis redimensionáveis (sidebar, stack, trace, memória)
+- Coluna central com espaçamento e alinhamento tokenizados (tokens CSS `--canvas-edge`, `--pane-inset`, `--canvas-gap`)
 - Assembly trace com scroll automático para a instrução atual
-- Animações de transferência de dados entre registradores byte a byte
-- Highlight de registradores alterados após cada instrução
 - Visualização pseudo-código (C-like) para cada instrução
 - Salvar/carregar simulações como JSON
+- Internacionalização completa (PT-BR / EN-US) via `js/i18n.js` — sem dependências externas
 - Versionamento com cache busting automático
 
 ---
@@ -88,7 +96,19 @@ npm run test:breakpoint
 intel-simulator/
 ├── index.html              <- Interface HTML
 ├── css/style.css           <- Estilos
-├── js/app.js               <- Lógica completa do simulador
+├── js/
+│   ├── app-assembler.js    <- Assembler e decodificador de instruções
+│   ├── app-cpu.js          <- Ciclo de execução (fetch/decode/execute)
+│   ├── app-logger.js       <- Log de execução e utilitários de PC
+│   ├── app-main.js         <- Inicialização e orquestração
+│   ├── app-memory.js       <- Mapa de memória e helpers de span de instrução
+│   ├── app-registers.js    <- Registradores, tracking de leitura/escrita
+│   ├── app-state.js        <- Estado global (S)
+│   ├── app-ui.js           <- Renderização de UI e sincronização DOM
+│   ├── app-utils.js        <- Utilitários de formatação
+│   └── i18n.js             <- Dados de localização embutidos (PT-BR / EN-US)
+├── tools/
+│   └── validate-intel-subset.js  <- Suite de testes (227 testes)
 ├── INTEL_SUBSET_AUDIT.md   <- Auditoria do subset implementado
 └── README.md
 ```

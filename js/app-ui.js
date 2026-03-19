@@ -782,6 +782,7 @@ function renderMemGrid() {
       cell.textContent = hex8(memByteAt(addr));
       const st = memStateAt(addr);
       if (st) cell.classList.add(st);
+      if (addr === (S.pc & 0x3F)) cell.classList.add('mc-pc-current');
       if (addr === S.memSelectedAddr) cell.classList.add('mc-selected');
       if (addr < 64 && bpBytes.has(addr)) cell.classList.add('mc-bp');
       memCellRefs[addr] = cell;

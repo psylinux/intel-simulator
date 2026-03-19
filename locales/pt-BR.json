@@ -54,6 +54,7 @@
   "mem.addrdir": "0x{0}..0x{1} · cresce ↓",
   "mem.legend.active": "Ativo",
   "mem.legend.written": "Escrito",
+  "mem.legend.pc": "PC (EIP/RIP)",
   "mem.legend.fetch": "Fetch",
   "mem.legend.bp": "BP",
   "mem.cell.title": "Endereco 0x{0} · Shift+Clique para breakpoint",

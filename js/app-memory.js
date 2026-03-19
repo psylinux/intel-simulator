@@ -67,7 +67,7 @@ function setByteState(addr, st = '') {
   syncMemCellDom(addr);
 }
 
-const MEM_STATE_CLASSES = ['mc-active', 'mc-written', 'mc-pc', 'mc-error'];
+const MEM_STATE_CLASSES = ['mc-active', 'mc-written', 'mc-pc', 'mc-error', 'mc-pc-current'];
 
 function syncMemCellDom(addr) {
   const cell = memEl(addr);
@@ -76,6 +76,7 @@ function syncMemCellDom(addr) {
   cell.classList.remove(...MEM_STATE_CLASSES);
   const st = memStateAt(addr);
   if (st) cell.classList.add(st);
+  if (addr === (S.pc & 0x3F)) cell.classList.add('mc-pc-current');
 }
 
 function writeMem(addr, val, st = '') {

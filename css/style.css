@@ -54,9 +54,9 @@
   /* Semantic roles */
   --role-mode:      #7dff72;
   --role-mode-dim:  #15803d;
-  --role-pc:        #00e5ff;
-  --role-pc-dim:    #0284c7;
-  --role-pc-bg:     rgba(0,229,255,.18);
+  --role-pc:        #fbbf24;
+  --role-pc-dim:    #b45309;
+  --role-pc-bg:     rgba(251,191,36,.18);
   --role-esp:       #ffbf00;
   --role-esp-dim:   #b45309;
   --role-esp-bg:    rgba(255,191,0,.18);
@@ -171,12 +171,12 @@ body::before {
 }
 .chip-pc-input:focus { border-bottom-color: var(--role-pc); }
 .pc-chip {
-  border-color: rgba(0,229,255,.34);
+  border-color: rgba(251,191,36,.34);
   background: var(--role-pc-bg);
-  box-shadow: 0 0 18px rgba(0,229,255,.08);
+  box-shadow: 0 0 18px rgba(251,191,36,.08);
 }
 .pc-chip .chip-lbl { color: var(--role-pc); opacity: 0.75; }
-.pc-chip:focus-within { border-color: var(--role-pc); box-shadow: 0 0 0 1px rgba(0,229,255,.28), 0 0 20px rgba(0,229,255,.12); }
+.pc-chip:focus-within { border-color: var(--role-pc); box-shadow: 0 0 0 1px rgba(251,191,36,.28), 0 0 20px rgba(251,191,36,.12); }
 .clock-chip .chip-val { color: var(--acc); }
 .ops-chip .chip-val  { color: var(--grn); }
 .arch-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px;
@@ -443,8 +443,8 @@ body.code-mem-resizing {
 .rpbtn:not(.active):hover { border-color: var(--bdr-hi); }
 .rpbtn.reg-animating { animation: reg-pulse .4s var(--ease); }
 @keyframes reg-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(0,229,255,.20); transform: scale(1); }
-  50%  { box-shadow: 0 0 0 8px rgba(0,229,255,.10), 0 0 22px rgba(0,229,255,.12); transform: scale(1.01); }
+  0%   { box-shadow: 0 0 0 0 rgba(251,191,36,.20); transform: scale(1); }
+  50%  { box-shadow: 0 0 0 8px rgba(251,191,36,.10), 0 0 22px rgba(251,191,36,.12); transform: scale(1.01); }
   100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
 }
 .rpbtn.reg-animating {
@@ -1357,7 +1357,7 @@ body.code-mem-resizing #codeMemSplitHandle {
 .c-line-current {
   border-color: var(--role-pc);
   background: var(--role-pc-bg);
-  box-shadow: inset 0 0 0 1px rgba(0,229,255,.24), 0 0 14px rgba(0,229,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(251,191,36,.24), 0 0 14px rgba(251,191,36,.08);
 }
 .asm-line-editing {
   border-color: var(--role-ret);
@@ -1424,8 +1424,8 @@ body.code-mem-resizing #codeMemSplitHandle {
   letter-spacing: .35px;
 }
 .asm-line-current .asm-byte {
-  border-color: rgba(0,229,255,.26);
-  background: rgba(0,229,255,.10);
+  border-color: rgba(251,191,36,.26);
+  background: rgba(251,191,36,.10);
   color: #f8fbff;
 }
 .asm-byte-empty {
@@ -1701,14 +1701,37 @@ body.code-mem-resizing #codeMemSplitHandle {
 .mem-cell.mc-written {
   background: rgba(96,165,250,.1); border-color: var(--blu-dim); color: var(--blu);
 }
+.mem-cell.mc-pc-current {
+  background: rgba(251,191,36,.10);
+  border-color: var(--role-pc);
+  color: #fff3c4;
+  box-shadow: inset 0 0 0 1px rgba(251,191,36,.24), 0 0 10px rgba(251,191,36,.12);
+}
+.mem-cell.mc-pc-current::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--role-pc);
+  box-shadow: 0 0 0 0 rgba(251,191,36,.34);
+  animation: pc-current-pulse .9s var(--ease) infinite;
+}
 .mem-cell.mc-pc {
   background: var(--role-pc-bg); border-color: var(--role-pc); color: var(--role-pc);
-  box-shadow: 0 0 10px rgba(0,229,255,.14);
+  box-shadow: 0 0 10px rgba(251,191,36,.14);
   animation: fetch-pulse .42s var(--ease) infinite alternate;
 }
 @keyframes fetch-pulse {
-  0%   { box-shadow: 0 0 8px rgba(0,229,255,.10); }
-  100% { box-shadow: 0 0 14px rgba(0,229,255,.26); }
+  0%   { box-shadow: 0 0 8px rgba(251,191,36,.10); }
+  100% { box-shadow: 0 0 14px rgba(251,191,36,.26); }
+}
+@keyframes pc-current-pulse {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(251,191,36,.28); }
+  70%  { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(251,191,36,0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251,191,36,0); }
 }
 .mem-cell.mc-error {
   background: rgba(248,113,113,.12); border-color: var(--red); color: var(--red);
@@ -1732,8 +1755,13 @@ body.code-mem-resizing #codeMemSplitHandle {
 .ml-dot  { width: 10px; height: 10px; border-radius: 2px; border: 1px solid; display: block; flex-shrink: 0; }
 .ml-active  { background: rgba(74,222,128,.12); border-color: var(--grn);       box-shadow: 0 0 5px rgba(74,222,128,.25); }
 .ml-written { background: rgba(96,165,250,.10); border-color: var(--blu-dim);   }
+.ml-pc      {
+  background: radial-gradient(circle at center, rgba(255,243,196,.95) 0 28%, rgba(251,191,36,.18) 29% 100%);
+  border-color: var(--role-pc);
+  box-shadow: inset 0 0 0 1px rgba(251,191,36,.24), 0 0 6px rgba(251,191,36,.20);
+}
 .ml-selected { background: rgba(251,191,36,.08); border-color: var(--amb);      box-shadow: 0 0 0 1px var(--amb); }
-.ml-fetch    { background: var(--role-pc-bg);    border-color: var(--role-pc);  box-shadow: 0 0 6px rgba(0,229,255,.25); }
+.ml-fetch    { background: var(--role-pc-bg);    border-color: var(--role-pc);  box-shadow: 0 0 6px rgba(251,191,36,.25); }
 .ml-err     { background: rgba(248,113,113,.12); border-color: var(--red);      }
 .ml-bp      { background: var(--red); border-color: var(--red); border-radius: 50%; }
 
@@ -1818,24 +1846,24 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .le-sys   {
   --log-accent: var(--role-pc);
-  --log-tint: rgba(0,229,255,.09);
-  --log-kind-bg: rgba(0,229,255,.16);
-  --log-kind-bdr: rgba(0,229,255,.30);
-  --log-kind-tx: #d2fbff;
-  --log-msg-tx: #bdefff;
-  --log-code-bg: rgba(0,229,255,.10);
-  --log-code-bdr: rgba(0,229,255,.24);
+  --log-tint: rgba(251,191,36,.09);
+  --log-kind-bg: rgba(251,191,36,.16);
+  --log-kind-bdr: rgba(251,191,36,.30);
+  --log-kind-tx: #fff1c7;
+  --log-msg-tx: #ffe39b;
+  --log-code-bg: rgba(251,191,36,.10);
+  --log-code-bdr: rgba(251,191,36,.24);
 }
 .le-step  {
   --log-accent: var(--role-pc);
-  --log-tint: rgba(0,229,255,.12);
-  --log-kind-bg: rgba(0,229,255,.20);
-  --log-kind-bdr: rgba(0,229,255,.34);
-  --log-kind-tx: #dbfdff;
-  --log-msg-tx: #d7f9ff;
-  --log-code-bg: rgba(0,229,255,.12);
-  --log-code-bdr: rgba(0,229,255,.28);
-  box-shadow: inset 0 0 0 1px rgba(0,229,255,.08), 0 0 18px rgba(0,229,255,.06);
+  --log-tint: rgba(251,191,36,.12);
+  --log-kind-bg: rgba(251,191,36,.20);
+  --log-kind-bdr: rgba(251,191,36,.34);
+  --log-kind-tx: #fff4d4;
+  --log-msg-tx: #fff0c6;
+  --log-code-bg: rgba(251,191,36,.12);
+  --log-code-bdr: rgba(251,191,36,.28);
+  box-shadow: inset 0 0 0 1px rgba(251,191,36,.08), 0 0 18px rgba(251,191,36,.06);
 }
 .le-error {
   --log-accent: var(--red);
@@ -2184,8 +2212,8 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-meta-row-pc .stack-meta-pill {
   background: var(--role-pc-bg);
-  border-color: rgba(0,229,255,.34);
-  box-shadow: 0 0 14px rgba(0,229,255,.10);
+  border-color: rgba(251,191,36,.34);
+  box-shadow: 0 0 14px rgba(251,191,36,.10);
 }
 .stack-trace {
   display: flex;
@@ -2259,16 +2287,16 @@ body.code-mem-resizing #codeMemSplitHandle {
 .stack-trace-row-pc,
 .stack-trace-row-current {
   background: var(--role-pc-bg);
-  border-color: rgba(0,229,255,.34);
-  box-shadow: inset 0 0 16px rgba(0,229,255,.05);
+  border-color: rgba(251,191,36,.34);
+  box-shadow: inset 0 0 16px rgba(251,191,36,.05);
 }
 .stack-trace-row-pc .stack-trace-kind,
 .stack-trace-row-pc .stack-trace-addr,
 .stack-trace-row-current .stack-trace-kind,
 .stack-trace-row-current .stack-trace-addr {
   color: var(--role-pc);
-  background: rgba(0,229,255,.14);
-  border-color: rgba(0,229,255,.34);
+  background: rgba(251,191,36,.14);
+  border-color: rgba(251,191,36,.34);
 }
 .stack-trace-row-ret,
 .stack-trace-row-caller {
@@ -2445,13 +2473,13 @@ body.code-mem-resizing #codeMemSplitHandle {
 }
 .stack-row-pc {
   background: var(--role-pc-bg);
-  border-color: rgba(0,229,255,.38);
-  box-shadow: inset 0 0 14px rgba(0,229,255,.06);
+  border-color: rgba(251,191,36,.38);
+  box-shadow: inset 0 0 14px rgba(251,191,36,.06);
 }
 .stack-row-pc .stack-row-byte,
 .stack-tag-pc {
   color: var(--role-pc);
-  border-color: rgba(56,189,248,.28);
+  border-color: rgba(251,191,36,.28);
   background: var(--role-pc-bg);
 }
 /* ══════════════════════════════════

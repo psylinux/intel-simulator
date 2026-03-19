@@ -23,7 +23,10 @@
 // PC / STATUS / LOG / STATS
 // ─────────────────────────────────────────────────────────
 function setPC(addr, opts = {}) {
+  const prevPC = S.pc & 0x3F;
   S.pc = addr & 0x3F;
+  syncMemCellDom(prevPC);
+  if (S.pc !== prevPC) syncMemCellDom(S.pc);
   const syncTrace = opts.trace !== false;
   const traceAutoScroll = opts.traceAutoScroll === true;
   const revealMem = opts.revealMem === true;

@@ -1376,6 +1376,26 @@ test('Memory DOM: setMemSt immediately updates rendered cell class', () => {
   assert.equal(cell.classList.contains('mc-pc'), true, 'rendered memory cell must reflect mc-pc immediately');
 });
 
+test('Memory DOM: renderMemGrid marks current PC position', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setPC(0x0A, { trace: false });
+  api.renderMemGrid();
+  assert.equal(api.memEl(0x0A).classList.contains('mc-pc-current'), true, 'current PC cell must be highlighted in the memory map');
+  assert.equal(api.memEl(0x09).classList.contains('mc-pc-current'), false, 'adjacent cells must not inherit the PC marker');
+});
+
+test('Memory DOM: setPC moves persistent PC marker between memory cells', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.renderMemGrid();
+  api.setPC(0x03, { trace: false });
+  assert.equal(api.memEl(0x03).classList.contains('mc-pc-current'), true, 'new PC address must gain the marker');
+  api.setPC(0x07, { trace: false });
+  assert.equal(api.memEl(0x03).classList.contains('mc-pc-current'), false, 'old PC address must lose the marker');
+  assert.equal(api.memEl(0x07).classList.contains('mc-pc-current'), true, 'current PC address must keep the marker');
+});
+
 test('Memory DOM: writeMem immediately updates rendered cell text and class', () => {
   const { api, document } = loadSimulator();
   resetSim(api, document, 'ia32');
@@ -1397,6 +1417,17 @@ test('Memory DOM: temporary state updates preserve selection and breakpoint mark
   assert.equal(cell.classList.contains('mc-selected'), true, 'mc-selected must survive temporary memory state updates');
   assert.equal(cell.classList.contains('mc-bp'), true, 'mc-bp must survive temporary memory state updates');
   assert.equal(cell.classList.contains('mc-pc'), true, 'temporary fetch highlight must still be applied');
+});
+
+test('Memory DOM: temporary state updates preserve current PC marker', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.renderMemGrid();
+  api.setPC(0x00, { trace: false });
+  api.setMemSt(0, 'mc-pc');
+  const cell = api.memEl(0);
+  assert.equal(cell.classList.contains('mc-pc'), true, 'temporary fetch highlight must still be applied');
+  assert.equal(cell.classList.contains('mc-pc-current'), true, 'current PC marker must remain visible on the active cell');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

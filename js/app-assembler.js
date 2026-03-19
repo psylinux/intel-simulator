@@ -123,7 +123,7 @@ function decodeAt(pc) {
       return {
         op, mnem: `${rexPfx}MOV ${reg}, 0x${hex64(hi >>> 0, lo >>> 0)}`, size: off + 9,
         asm: `MOV ${reg}, 0x${hex64(hi >>> 0, lo >>> 0)}`,
-        exec: () => { setRegParts(reg, lo >>> 0, hi >>> 0); updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg); }
+        exec: () => { setRegParts(reg, lo >>> 0, hi >>> 0); updatePickerVal(reg); updatePickerBytes(reg); }
       };
     }
     const imm = (S.mem[base & 0x3F]) | (S.mem[(base + 1) & 0x3F] << 8) | (S.mem[(base + 2) & 0x3F] << 16) | (S.mem[(base + 3) & 0x3F] << 24);
@@ -131,7 +131,7 @@ function decodeAt(pc) {
     return {
       op, mnem: `${rexPfx}MOV ${reg}, 0x${hex32(immU)}`, size: off + 5,
       asm: `MOV ${reg}, 0x${hex32(immU)}`,
-      exec: () => { setReg(reg, immU); updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg); }
+      exec: () => { setReg(reg, immU); updatePickerVal(reg); updatePickerBytes(reg); }
     };
   }
   if (op === 0x90) return { op, mnem: 'NOP', size: off + 1, asm: 'NOP', exec: () => { } };
@@ -164,7 +164,6 @@ function decodeAt(pc) {
       }
       S.regs[spKey] = S.regs[spKey] + width;
       revealMemRange(sp, width, { select: true });
-      updateRegCard(spName);
       updatePickerVal(spName);
       markRegistersChanged(spName);
       setPC(target & 0x3F);
@@ -209,7 +208,6 @@ function decodeAt(pc) {
         writeStackBytes(sp, retBytes);
         revealMemRange(sp, width, { select: true });
         S.callFrames.push({ slot: sp, width, returnTo: nextIp & 0x3F, callSite: pc & 0x3F, target });
-        updateRegCard(spName);
         updatePickerVal(spName);
         markRegistersChanged(spName);
         setPC(target);
@@ -240,7 +238,7 @@ function decodeAt(pc) {
           } else {
             setReg(rmName, getReg(rName));
           }
-          updateRegCard(rmName); updatePickerVal(rmName); updatePickerBytes(rmName);
+          updatePickerVal(rmName); updatePickerBytes(rmName);
         }
       };
       else return {
@@ -252,7 +250,7 @@ function decodeAt(pc) {
           } else {
             setReg(rName, getReg(rmName));
           }
-          updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName);
+          updatePickerVal(rName); updatePickerBytes(rName);
         }
       };
     }
@@ -282,7 +280,7 @@ function decodeAt(pc) {
             reportWidthOverflow(`MOV ${rName}, [0x${fmtA(addr)}]`, addr, width, `MOV ${rName}, ${dPtr} [0x${fmtA(addr)}]`, { halt: true, pc });
             return;
           }
-          const bytes = []; for (let i = 0; i < width; i++) bytes.push(S.mem[(addr + i) & 0x3F]); setRegFromBytes(rName, bytes); updateRegCard(rName); updatePickerVal(rName); updatePickerBytes(rName);
+          const bytes = []; for (let i = 0; i < width; i++) bytes.push(S.mem[(addr + i) & 0x3F]); setRegFromBytes(rName, bytes); updatePickerVal(rName); updatePickerBytes(rName);
         }
       };
     }
@@ -315,7 +313,7 @@ function decodeAt(pc) {
           S.regs[spKey] = nextSp;
           writeStackBytes(S.regs[spKey], regBytes(rn, width));
           revealMemRange(S.regs[spKey], width, { select: true });
-          updateRegCard(spName); updatePickerVal(spName);
+          updatePickerVal(spName);
           markRegistersChanged(spName);
         }
       };
@@ -350,7 +348,7 @@ function decodeAt(pc) {
           revealMemRange(sp, width, { select: true });
           setRegFromBytes(rn, bytes);
           S.regs[spKey] = S.regs[spKey] + width;
-          updateRegCard(rn); updateRegCard(spName); updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
+          updatePickerVal(rn); updatePickerVal(spName); updatePickerBytes(rn);
           markRegistersChanged([rn, spName]);
         }
       };

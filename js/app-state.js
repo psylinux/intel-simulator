@@ -96,7 +96,6 @@ const S = {
 // CENTER PANE LAYOUT CONFIGURATION
 // ─────────────────────────────────────────────────────────
 const CENTER_PANE_CONFIG = {
-  regsRow: { initial: 332, min: 180, max: 520 },
   codeMemRow: { initial: 360, min: 220, max: 680 },
   logSection: { initial: 242, min: 170, max: 520 },
 };

@@ -35,7 +35,6 @@ function init() {
   applySidebarPanelWidth();
   applyStackPanelWidth();
   applyCenterPaneHeights();
-  renderRegCards();
   renderRegPicker();
   renderMemGrid();
   renderStackView();
@@ -225,7 +224,6 @@ const App = {
     if (stackLbl) stackLbl.textContent = t(is64() ? 'stack.label.x64' : 'stack.label.ia32');
     renderAsmTrace();
     renderMemGrid();
-    renderRegCards();
   },
 };
 

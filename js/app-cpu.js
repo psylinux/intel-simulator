@@ -142,7 +142,6 @@ function restoreSnapshot(snap) {
   S.halt = false;
   if (actuallyChanged.length > 0) markRegistersChanged(actuallyChanged);
   else clearChangedRegisters();
-  renderRegCards();
   renderMemGrid();
   renderStackView();
   syncPicker();
@@ -336,8 +335,8 @@ async function doPush() {
     await sleep(S.speed * 0.12);
     setMemSt(ma, 'mc-written');
   }
-  updateRegCard(reg); updatePickerVal(reg); updatePickerBytes(reg);
-  updateRegCard(spName); updatePickerVal(spName);
+  updatePickerVal(reg); updatePickerBytes(reg);
+  updatePickerVal(spName);
   markRegistersChanged(spName);
   setStatus(t('status.push_done', spName, fmtStackA(sp)), 'lbl-done');
   renderStackView();
@@ -373,7 +372,7 @@ async function doPop() {
   }
   setLoading(reg, false);
   S.regs.ESP = sp + width;
-  updateRegCard(reg); updateRegCard(spName); updatePickerVal(spName);
+  updatePickerVal(spName);
   markRegistersChanged([reg, spName]);
   const finalHex = regHex(reg);
   $('valInput').value = finalHex.slice(-Math.min(sizeN() * 2, regWidthBytes(reg) * 2));
@@ -418,7 +417,7 @@ function clearSim() {
   // Reset selected register to arch default
   S.reg = is64() ? 'RAX' : 'EAX';
   loadDefaultProgram(false);
-  renderRegCards(); renderRegPicker(); renderMemGrid(); setPC(0);
+  renderRegPicker(); renderMemGrid(); setPC(0);
   $('valInput').value = regHex(S.reg).slice(-Math.min(sizeN() * 2, regWidthBytes(S.reg) * 2));
   renderStackView();
   syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();

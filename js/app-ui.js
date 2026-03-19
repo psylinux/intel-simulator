@@ -79,10 +79,8 @@ function applyStackSize() {
   S.stackSizeInputUnit = unit;
   S.stackSize = nextSize;
   resetStackState();
-  const stackViewAddr = clamp(Math.max(S.stackSize - ptrSize(), 0), 0, Math.max(memSpaceSize() - 1, 0));
   S.memViewBase = 0;
   markRegistersChanged(spRegs());
-  renderRegCards();
   renderRegPicker();
   renderMemGrid();
   syncPicker();
@@ -102,7 +100,6 @@ function changedRegisterSet() {
 function syncRegChangedClasses() {
   const changed = changedRegisterSet();
   [...gpRegs(), ...extRegs(), ...spRegs()].forEach(name => {
-    $('rc-' + name)?.classList.toggle('reg-changed', changed.has(name));
     $('r' + name)?.classList.toggle('reg-changed', changed.has(name));
   });
 }
@@ -402,7 +399,7 @@ function renderAsmTrace(opts = {}) {
 
 
 // ─────────────────────────────────────────────────────────
-// REGISTER CARDS
+// REGISTER EDITING (via picker)
 // ─────────────────────────────────────────────────────────
 function parseRegisterInput(name, raw) {
   const clean = raw.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
@@ -421,7 +418,6 @@ function parseRegisterInput(name, raw) {
 function commitRegisterValue(name, raw) {
   const { lo, hi } = parseRegisterInput(name, raw);
   setRegParts(name, lo, hi);
-  renderRegCards();
   renderRegPicker();
   syncPicker();
   if (name === S.reg) {
@@ -469,87 +465,6 @@ function makeRegisterEditable(el, name) {
   inp.addEventListener('blur', () => { if (el.dataset.editing) commit(); });
 }
 
-function renderRegCards() {
-  const gp = gpRegs(), sp = spRegs(), ext = extRegs();
-
-  // Update section badge
-  const gpBadge = $('gpBadge');
-  if (gpBadge) setSectionHeaderText(gpBadge, is64() ? 'REGISTRADORES DE USO GERAL (64-bit)' : 'REGISTRADORES DE USO GERAL');
-
-  // Main GP reg cards
-  const g = $('regCards'); g.innerHTML = '';
-  g.style.gridTemplateColumns = gp.length > 1 ? 'repeat(2, minmax(0, 1fr))' : `repeat(${gp.length}, 1fr)`;
-  for (const name of gp) {
-    const d = document.createElement('div');
-    d.className = 'reg-card';
-    d.id = 'rc-' + name;
-    const valueHex = regHex(name);
-    if (is64()) {
-      d.innerHTML = `<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}"><span class="rc-hi">${valueHex.slice(0, 8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
-        <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
-        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
-    } else {
-      d.innerHTML = `<div class="rc-name">${name}</div>
-        <div class="rc-value rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}">${valueHex}</div>
-        <div class="rc-subregs" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
-        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
-    }
-    d.querySelector('.rc-value').addEventListener('click', e => {
-      e.stopPropagation();
-      makeRegisterEditable(d.querySelector('.rc-value'), name);
-    });
-    g.appendChild(d);
-  }
-
-  // R8-R15 extension cards (x64 only)
-  const eg = $('extCards'); if (eg) {
-    eg.innerHTML = '';
-    eg.style.gridTemplateColumns = ext.length ? 'repeat(4, minmax(0, 1fr))' : '';
-    for (const name of ext) {
-      const d = document.createElement('div');
-      d.className = 'reg-card rc-ext';
-      d.id = 'rc-' + name;
-      const valueHex = regHex(name);
-      d.innerHTML = `<div class="rc-name">${name}</div>
-        <div class="rc-value rc-val64 rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}"><span class="rc-hi">${valueHex.slice(0, 8)}</span><span class="rc-lo">${valueHex.slice(8)}</span></div>
-        <div class="rc-bytes" id="rcb-${name}">${renderByteStrip(name)}</div>`;
-      d.querySelector('.rc-value').addEventListener('click', e => {
-        e.stopPropagation();
-        makeRegisterEditable(d.querySelector('.rc-value'), name);
-      });
-      eg.appendChild(d);
-    }
-    eg.style.display = ext.length ? '' : 'none';
-    const badge = $('extBadge'); if (badge) badge.style.display = ext.length ? '' : 'none';
-  }
-
-  // Stack pointer cards
-  const sg = $('spCards'); if (!sg) return;
-  sg.innerHTML = '';
-  for (const name of sp) {
-    const d = document.createElement('div');
-    const role = stackRoleClass(name);
-    const roleLabel = isStackTopReg(name) ? 'TOPO' : 'BASE';
-    d.className = 'reg-card rc-sp rc-sp-' + role + (name === S.reg ? ' rc-selected' : '');
-    d.id = 'rc-' + name;
-    d.innerHTML = `<div class="rc-sp-meta">
-        <div class="rc-name">${name}</div>
-        <div class="rc-sp-role">${roleLabel}</div>
-      </div>
-      <div class="rc-sp-body">
-        <div class="rc-value rc-value-sp rc-value-editable" id="rcv-${name}" title="${t('ui.reg.edit.title')}">0x${fmtA(getReg(name))}</div>
-        <div class="rc-subregs rc-subregs-sp" id="rcs-${name}">${renderRegisterEncapsulation(name)}</div>
-      </div>`;
-    d.querySelector('.rc-value').addEventListener('click', e => {
-      e.stopPropagation();
-      makeRegisterEditable(d.querySelector('.rc-value'), name);
-    });
-    sg.appendChild(d);
-  }
-  syncRegChangedClasses();
-  scheduleCenterPaneLayout();
-}
 
 function registerMapWidthBytes(name) {
   return is64() && (name === 'RSP' || name === 'RBP') ? 8 : regWidthBytes(name);
@@ -700,73 +615,25 @@ function registerByteAnchor(name, byteIdx) {
   return bytes[byteIdx] || null;
 }
 
-function updateRegCard(name) {
-  const v = $('rcv-' + name), b = $('rcb-' + name), s = $('rcs-' + name);
-  if (!v) return;
-  if (isSpReg(name)) {
-    v.textContent = '0x' + fmtA(getReg(name));
-    if (s) s.innerHTML = renderRegisterEncapsulation(name);
-    syncRegChangedClasses();
-    return;
-  }
-  const valueHex = regHex(name);
-  if (is64()) {
-    const hiSpan = v.querySelector('.rc-hi');
-    const loSpan = v.querySelector('.rc-lo');
-    if (hiSpan && loSpan) {
-      hiSpan.textContent = valueHex.slice(0, 8);
-      loSpan.textContent = valueHex.slice(8);
-    } else v.textContent = valueHex;
-  } else {
-    v.textContent = valueHex;
-  }
-  if (s) s.innerHTML = renderRegisterEncapsulation(name);
-  if (b) b.innerHTML = renderByteStrip(name);
-  syncRegChangedClasses();
-}
 
 function pulseRegister(name) {
-  ['rc-' + name, 'r' + name].forEach(id => {
-    const el = $(id);
-    if (!el) return;
+  const id = 'r' + name;
+  const el = $(id);
+  if (!el) return;
+  el.classList.remove('reg-animating');
+  void el.offsetWidth;
+  el.classList.add('reg-animating');
+  const prevTimer = regPulseTimers.get(id);
+  if (prevTimer) clearTimeout(prevTimer);
+  const timer = setTimeout(() => {
     el.classList.remove('reg-animating');
-    void el.offsetWidth;
-    el.classList.add('reg-animating');
-    const prevTimer = regPulseTimers.get(id);
-    if (prevTimer) clearTimeout(prevTimer);
-    const timer = setTimeout(() => {
-      el.classList.remove('reg-animating');
-      regPulseTimers.delete(id);
-    }, 520);
-    regPulseTimers.set(id, timer);
-  });
+    regPulseTimers.delete(id);
+  }, 520);
+  regPulseTimers.set(id, timer);
 }
 
 // Live update during LOAD
-function liveUpdate(name, partial, byteIdx, transferCount = transferWidth(name)) {
-  const v = $('rcv-' + name), s = $('rcs-' + name);
-  const valueHex = regHex(name);
-  if (v) {
-    if (is64()) {
-      const hi = v.querySelector('.rc-hi');
-      const lo = v.querySelector('.rc-lo');
-      if (hi && lo) {
-        hi.textContent = valueHex.slice(0, 8);
-        lo.textContent = valueHex.slice(8);
-      } else v.textContent = valueHex;
-    } else v.textContent = valueHex;
-  }
-  if (s) s.innerHTML = renderRegisterEncapsulation(name);
-
-  // display-order para o reg card
-  const hexPos = displayPosForTransferByte(name, byteIdx, transferCount);
-  const done = new Set();
-  for (let i = 0; i < byteIdx; i++) done.add(displayPosForTransferByte(name, i, transferCount));
-
-  // Update reg card bytes (visualização, display order)
-  const b = $('rcb-' + name);
-  if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, doneSet: done, transferCount });
-
+function liveUpdate(name, _partial, byteIdx, transferCount = transferWidth(name)) {
   // memory-order para o picker: byteIdx == posição direta em A+0, A+1, ...
   const pickerDone = new Set();
   for (let i = 0; i < byteIdx; i++) pickerDone.add(i);
@@ -780,13 +647,8 @@ function liveUpdate(name, partial, byteIdx, transferCount = transferWidth(name))
 }
 
 // Highlight byte being SENT during STORE
-// hexPos  = display-order index (para o reg card)
 // byteIdx = memory-order index A+i (para o picker)
 function storeHighlight(name, hexPos, transferCount = transferWidth(name), byteIdx = hexPos) {
-  // Update reg card bytes (visualização, display order)
-  const b = $('rcb-' + name);
-  if (b) b.innerHTML = renderByteStrip(name, { activePos: hexPos, transferCount });
-
   // Update picker bytes (âncora de animação, memory order)
   const pb = $('rpb-' + name);
   if (pb) pb.innerHTML = renderByteStrip(name, { compact: true, memoryOrder: true,
@@ -795,9 +657,8 @@ function storeHighlight(name, hexPos, transferCount = transferWidth(name), byteI
 }
 
 function setLoading(name, on) {
-  $('rc-' + name)?.classList.toggle('rc-loading', on);
   $('r' + name)?.classList.toggle('rc-loading', on);
-  if (!on) updateRegCard(name);
+  if (!on) { updatePickerVal(name); updatePickerBytes(name); }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1032,7 +893,6 @@ function writeAssembledBytes(addr, src, oldSizeHint, bytesHint) {
   renderAsmTrace();
   renderStackView();
   syncPicker();
-  renderRegCards();
   refreshPreview();
   refreshBreakdown();
 
@@ -1118,7 +978,6 @@ function setEndian(e) {
   $('endianHint').innerHTML = e === 'little'
     ? '<span class="eh-arrow">0x0000</span> ← byte menos significativo (LSB)'
     : '<span class="eh-arrow">0x0000</span> ← byte mais significativo (MSB)';
-  renderRegCards();
   renderRegPicker();
   renderStackView();
   syncPicker();
@@ -1134,7 +993,6 @@ function setSize(s) {
   });
   // QWORD only available in x64 mode; clamp to dword otherwise
   if (s === 'qword' && !is64()) { S.size = 'dword'; doSetSize('dword'); return; }
-  renderRegCards();
   renderRegPicker();
   syncPicker();
   refreshPreview(); refreshBreakdown();
@@ -1207,7 +1065,6 @@ function setArch(arch) {
   S.progRunning = false;
   loadDefaultProgram(false, arch);
 
-  renderRegCards();
   renderRegPicker();
   renderMemGrid();
   setPC(demoProgramForArch(arch).entry);
@@ -1261,7 +1118,7 @@ async function doStore() {
     await sleep(S.speed * 0.18);
     S.memState[ma] = 'mc-written'; setMemSt(ma, 'mc-written');
   }
-  updateRegCard(reg);
+  updatePickerVal(reg); updatePickerBytes(reg);
   const ms = Math.round(performance.now() - t0);
   recOp('store', ms);
   setPC((addr + n) & 0x3F, { traceAutoScroll: false });
@@ -1695,7 +1552,7 @@ function loadSim(e) {
       applyCollapsedSections();
       persistCollapsedSections();
       doSetEndian(S.endian); doSetArch(S.arch); doSetSize(S.size); doSelectReg(S.reg);
-      renderRegCards(); renderRegPicker(); renderMemGrid(); setPC(S.pc);
+      renderRegPicker(); renderMemGrid(); setPC(S.pc);
       renderStackView();
       syncSpeedUI();
       syncStackSizeUI();

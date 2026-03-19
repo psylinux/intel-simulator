@@ -165,13 +165,6 @@ function clearChangedRegisters() {
   S.changedRegs = [];
 }
 
-function syncRegChangedClasses() {
-  document.querySelectorAll('.reg-card').forEach(card => {
-    const name = card.dataset.reg;
-    if (!name) return;
-    card.classList.toggle('reg-changed', S.changedRegs.includes(name));
-  });
-}
 
 // ─────────────────────────────────────────────────────────
 // RESET

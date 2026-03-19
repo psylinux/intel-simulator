@@ -35,17 +35,10 @@ function init() {
   applySidebarPanelWidth();
   applyStackPanelWidth();
   applyCenterPaneHeights();
-  renderRegPicker();
-  renderMemGrid();
-  renderStackView();
   initSidebarResize();
   initStackResize();
   initCodeMemSplitResize();
   initCenterPaneResize();
-  syncPicker();
-  refreshPreview();
-  refreshBreakdown();
-  refreshStats();
   // Set initial arch button state
   $('archIA32')?.classList.add('active');
   $('archX64')?.classList.remove('active');
@@ -79,7 +72,7 @@ function init() {
     setPC(addr, { revealMem: true });
     refreshBreakdown();
     renderStackView();
-    lg('sys', t('log.sys.pc_manual', fmtA(addr)));
+    lg('sys', t('log.sys.pc_manual', ipReg(), fmtA(addr)));
   });
   $('pcDisplay').addEventListener('keydown', e => {
     if (e.key === 'Enter') e.target.blur();
@@ -148,7 +141,7 @@ function init() {
       asmTraceClickTimer = 0;
       setPC(addr, { revealMem: true });
       renderStackView();
-      lg('sys', t('log.sys.pc_moved', fmtA(addr)));
+      lg('sys', t('log.sys.pc_moved', ipReg(), fmtA(addr)));
     }, 220);
   });
   $('asmTrace')?.addEventListener('dblclick', e => {
@@ -167,10 +160,17 @@ function init() {
   $('fileInput').onchange = loadSim;
 
   loadDefaultProgram(false);
+  renderRegPicker();
   renderMemGrid();
+  setPC(demoProgramForArch().entry, { traceAutoScroll: false });
   renderStackView();
+  syncInstructionPointerUI();
+  syncEndianHint();
+  syncPicker();
   refreshAsmValidation();
   refreshBreakdown();
+  refreshPreview();
+  refreshStats();
   setStatus(t('status.demo_loaded'), 'lbl-done');
   lg('sys', t('log.sys.demo_loaded', is64() ? 'x86-64' : 'IA-32'));
   lg('sys', demoProgramForArch().listing.join(' | '));
@@ -219,9 +219,18 @@ const App = {
     if (asmPh) asmPh.placeholder = t(S.arch === 'x64' ? 'asm.hint.placeholder.x64' : 'asm.hint.placeholder.ia32');
     const stackLbl = $('stackArchLbl');
     if (stackLbl) stackLbl.textContent = t(is64() ? 'stack.label.x64' : 'stack.label.ia32');
+    syncInstructionPointerUI();
+    syncEndianHint();
+    refreshAsmValidation();
+    renderStackView();
     renderAsmTrace();
     renderMemGrid();
+    relocalizeLogOutput();
+    const helpBody = $('helpBody');
+    if (helpBody?.dataset.page) showHelp(helpBody.dataset.page, document.querySelector('.htab.active'));
   },
 };
+
+if (typeof globalThis !== 'undefined') globalThis.App = App;
 
 document.addEventListener('DOMContentLoaded', init);

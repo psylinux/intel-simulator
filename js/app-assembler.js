@@ -401,7 +401,7 @@ async function doFetch() {
   if (isInstructionFault(instr)) {
     reportMemoryError(
       instr.errorAddrs || [addr],
-      instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
+      instr.errorDetail || t('log.error.decode_fail', fmtA(addr)),
       instr.asm,
       { pc: addr }
     );
@@ -594,10 +594,10 @@ function explainInvalidRegisterOperand(token, mnem = '', expectedRegs = null) {
     return `Registrador invalido: ${raw}. O prefixo "$" nao faz parte da sintaxe Intel usada aqui. ${ruleHint}`;
   }
   if (raw === 'PC') {
-    return 'Registrador invalido: PC. "PC" e apenas o nome didatico mostrado na interface. No assembler, altere o fluxo com JMP/CALL ou edite o PC pelos controles visuais.';
+    return 'Registrador invalido: PC. "PC" e apenas um alias didatico; na interface, o ponteiro de instrucao aparece como EIP ou RIP conforme a arquitetura. No assembler, altere o fluxo com JMP/CALL ou edite o ponteiro pelos controles visuais.';
   }
   if (raw === 'EIP' || raw === 'RIP') {
-    return `Registrador invalido: ${raw}. ${raw} e um ponteiro de instrucao especial da CPU, mas este assembler didatico nao aceita ${raw} como operando. Para mudar o fluxo, use JMP/CALL; a interface atualiza o PC automaticamente.`;
+    return `Registrador invalido: ${raw}. ${raw} e um ponteiro de instrucao especial da CPU, mas este assembler didatico nao aceita ${raw} como operando. Para mudar o fluxo, use JMP/CALL; a interface atualiza ${is64() ? 'o RIP' : 'o EIP'} automaticamente.`;
   }
   if (raw === 'FP') {
     return `Registrador invalido: ${raw}. "FP" nao e um registrador Intel x86/x86-64. Para a base do frame, use ${is64() ? 'RBP' : 'EBP'}.`;
@@ -766,7 +766,7 @@ function refreshAsmValidation() {
   hint.classList.remove('asm-hint-ok', 'asm-hint-error');
 
   if (!raw) {
-    hint.textContent = 'Grava bytes no PC atual. Enter para confirmar.';
+    hint.textContent = t('ui.asm.write.title', ipReg());
     return;
   }
 
@@ -774,11 +774,11 @@ function refreshAsmValidation() {
   if (check.ok) {
     input.classList.add('is-valid');
     hint.classList.add('asm-hint-ok');
-    hint.textContent = `Valido: ${check.bytes.length} byte(s) serao gravados em 0x${fmtA(S.pc)}.`;
+    hint.textContent = t('ui.asm.write.valid', check.bytes.length, fmtA(S.pc));
   } else {
     input.classList.add('is-invalid');
     hint.classList.add('asm-hint-error');
-    hint.textContent = `Invalido: ${check.error}`;
+    hint.textContent = t('ui.asm.write.invalid', check.error);
   }
 }
 

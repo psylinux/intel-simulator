@@ -103,6 +103,25 @@ function syncRegChangedClasses() {
     $('r' + name)?.classList.toggle('reg-changed', changed.has(name));
   });
 }
+
+function syncInstructionPointerUI() {
+  const ip = ipReg();
+  const chipLbl = $('ipChipLbl');
+  if (chipLbl) chipLbl.textContent = ip;
+  const pcInput = $('pcDisplay');
+  if (pcInput) pcInput.title = t('topbar.ip.title', ip);
+  const guideHint = $('editGuideHint1');
+  if (guideHint) guideHint.innerHTML = t('editguide.hint1.ip', ip);
+  const legendLbl = $('memLegendIpLbl');
+  if (legendLbl) legendLbl.textContent = ip;
+}
+
+function syncEndianHint() {
+  const hint = $('endianHint');
+  if (!hint) return;
+  const key = S.endian === 'little' ? 'sidebar.endian.hint.little' : 'sidebar.endian.hint.big';
+  hint.innerHTML = `<span class="eh-arrow">0x0000</span> ${t(key)}`;
+}
 function traceBlock(startAddr, maxLines = 20) {
   const lines = [];
   const visited = new Set();
@@ -245,8 +264,8 @@ function currentReturnInfo() {
 }
 
 function stackTraceExtra(frameCall) {
-  if (!frameCall) return 'Frame raiz: nenhuma chamada ativa e nenhum endereco de retorno pendente.';
-  return `<span class="stack-trace-ret-addr">RET → 0x${fmtA(frameCall.returnTo)}</span> · slot [0x${fmtStackA(frameCall.slot)}] · entrou via ${frameCall.callAsm} @ 0x${fmtA(frameCall.callSite)}`;
+  if (!frameCall) return t('stack.trace.extra.root');
+  return t('stack.trace.extra.call', fmtA(frameCall.returnTo), fmtStackA(frameCall.slot), frameCall.callAsm, fmtA(frameCall.callSite));
 }
 
 function stackTraceFrames() {
@@ -263,7 +282,7 @@ function stackTraceFrames() {
         : null;
       items.push({
         kind: depth === 0 ? 'current' : (frameCall ? 'caller' : 'root'),
-        label: depth === 0 ? 'ATUAL' : (frameCall ? 'CHAMADOR' : 'RAIZ'),
+        label: depth === 0 ? t('stack.trace.label.current') : (frameCall ? t('stack.trace.label.caller') : t('stack.trace.label.root')),
         depth,
         addr,
         asm: codeLabelAt(addr),
@@ -299,7 +318,7 @@ function stackTraceFrames() {
 
     items.push({
       kind: depth === 0 ? 'current' : (frameCall ? 'caller' : 'root'),
-      label: depth === 0 ? 'ATUAL' : (frameCall ? 'CHAMADOR' : 'RAIZ'),
+      label: depth === 0 ? t('stack.trace.label.current') : (frameCall ? t('stack.trace.label.caller') : t('stack.trace.label.root')),
       depth,
       addr: currentAddr,
       asm: codeLabelAt(currentAddr),
@@ -332,11 +351,11 @@ function renderStackTrace() {
   return `
     <div class="stack-trace">
       <div class="stack-trace-hd">
-        <span>BACKTRACE</span>
-        <span class="stack-trace-hint">ordem das chamadas ativas e seus enderecos de retorno</span>
+        <span>${t('stack.trace.title')}</span>
+        <span class="stack-trace-hint">${t('stack.trace.hint')}</span>
       </div>
       <div class="stack-trace-list">${rows}</div>
-      ${items.length === 1 && items[0].kind === 'root' ? '<div class="stack-trace-empty">Nenhuma chamada ativa no momento. O programa esta no frame raiz.</div>' : ''}
+      ${items.length === 1 && items[0].kind === 'root' ? `<div class="stack-trace-empty">${t('stack.trace.empty')}</div>` : ''}
     </div>`;
 }
 
@@ -365,7 +384,7 @@ function renderAsmTrace(opts = {}) {
 
   root.innerHTML = lines.length
     ? lines.map(line => {
-      if (line.separator) return '<div class="trace-separator">PC atual fora do fluxo principal. Abaixo, decode local a partir do PC.</div>';
+      if (line.separator) return `<div class="trace-separator">${t('asm.trace.separator.offflow', ipReg())}</div>`;
       const byteChips = renderTraceByteChips(line.bytes);
       const hasBp = S.breakpoints.has(line.addr);
       const bpNum = hasBp ? bpNumber(line.addr) : 0;
@@ -391,7 +410,7 @@ function renderAsmTrace(opts = {}) {
           </div>
         </div>`;
     }).join('')
-    : '<div class="trace-separator">Nenhuma instrucao disponivel para listar.</div>';
+    : `<div class="trace-separator">${t('asm.trace.empty')}</div>`;
 
   if (autoScroll) requestAnimationFrame(() => requestAnimationFrame(ensureCurrentTraceVisible));
   scheduleCenterPaneLayout();
@@ -580,12 +599,16 @@ function renderByteStrip(name, opts = {}) {
   }
 
   function byteHoverTitle(sigIdx, idx) {
-    const role = sigIdx === byteCount - 1 ? 'MSB' : sigIdx === 0 ? 'LSB' : `byte ${sigIdx}`;
+    const role = sigIdx === byteCount - 1
+      ? t('ui.byte.role.msb')
+      : sigIdx === 0
+        ? t('ui.byte.role.lsb')
+        : t('ui.byte.role.byte', sigIdx);
     const offset = byteMemoryOffset(idx);
     const memInfo = offset === null
-      ? 'fora da largura/operacao atual'
-      : `ordem de memoria: A+${offset}`;
-    return `${name} · ${role} · ${memInfo}`;
+      ? t('ui.byte.mem.outside')
+      : t('ui.byte.mem.offset', offset);
+    return t('ui.byte.hover', name, role, memInfo);
   }
 
   return displaySigIdxs.map((sigIdx, idx) => {
@@ -797,6 +820,7 @@ function renderMemGrid() {
   // Painel de breakpoints — sempre visível, lista todos, destaca o atingido
   const bpStatus = $('memBpStatus');
   if (bpStatus) {
+    bpStatus.setAttribute('data-empty-label', t('mem.bp.none'));
     if (S.breakpoints.size > 0) {
       const sorted = [...S.breakpoints].sort((a, b) => a - b);
       bpStatus.innerHTML = '<div class="mem-bp-status-list">' + sorted.map((a, i) => {
@@ -805,7 +829,7 @@ function renderMemGrid() {
         return `<div class="bp-status-item${isHit ? ' bp-status-item-hit' : ''}">`
           + `<span class="bp-status-num">BP #${num}</span>`
           + `<span class="bp-status-addr">0x${fmtA(a)}</span>`
-          + (isHit ? '<span class="bp-status-hit-lbl">PAUSA</span>' : '')
+          + (isHit ? `<span class="bp-status-hit-lbl">${t('mem.bp.hit')}</span>` : '')
           + '</div>';
       }).join('') + '</div>';
     } else {
@@ -976,9 +1000,7 @@ function setEndian(e) {
   S.endian = e;
   $('eLittle').classList.toggle('active', e === 'little');
   $('eBig').classList.toggle('active', e === 'big');
-  $('endianHint').innerHTML = e === 'little'
-    ? '<span class="eh-arrow">0x0000</span> ← byte menos significativo (LSB)'
-    : '<span class="eh-arrow">0x0000</span> ← byte mais significativo (MSB)';
+  syncEndianHint();
   renderRegPicker();
   renderStackView();
   syncPicker();
@@ -1058,8 +1080,9 @@ function setArch(arch) {
   const chip = $('archDisplay'); if (chip) chip.textContent = arch === 'x64' ? 'x86-64' : 'IA-32';
   const stackLbl = $('stackArchLbl'); if (stackLbl) stackLbl.textContent = `STACK  ${arch === 'x64' ? 'RSP/RBP' : 'ESP/EBP'}`;
   const asmPh = $('asmInput'); if (asmPh) asmPh.placeholder = t(arch === 'x64' ? 'asm.hint.placeholder.x64' : 'asm.hint.placeholder.ia32');
+  syncInstructionPointerUI();
   refreshAsmValidation();
-  setStatus(t('status.demo_arch', arch === 'x64' ? 'x86-64' : 'IA-32'), 'lbl-done');
+  setStatus(t('status.demo_arch', arch === 'x64' ? 'x86-64' : 'IA-32', ipReg()), 'lbl-done');
   lg('sys', t('log.sys.arch', arch === 'x64' ? 'x86-64' : 'IA-32'));
   lg('sys', demoProgramForArch(arch).listing.join(' | '));
 }
@@ -1209,11 +1232,11 @@ function stackRowMeta(addr) {
   const ret = bp + ptrSize();
   const tags = [];
 
-  if (addr === sp) tags.push({ cls: 'sp', text: `${is64() ? 'RSP' : 'ESP'} topo` });
-  if (addr === bp) tags.push({ cls: 'bp', text: `${is64() ? 'RBP' : 'EBP'} base` });
-  if (sp !== bp && addr === ret) tags.push({ cls: 'ret', text: 'retorno' });
-  if (addr === S.pc) tags.push({ cls: 'pc', text: 'PC' });
-  if (inActiveFrame(addr, sp, bp)) tags.push({ cls: 'frame', text: 'frame ativo' });
+  if (addr === sp) tags.push({ cls: 'sp', text: t('stack.row.tag.sp', is64() ? 'RSP' : 'ESP') });
+  if (addr === bp) tags.push({ cls: 'bp', text: t('stack.row.tag.bp', is64() ? 'RBP' : 'EBP') });
+  if (sp !== bp && addr === ret) tags.push({ cls: 'ret', text: t('stack.row.tag.ret') });
+  if (addr === S.pc) tags.push({ cls: 'pc', text: ipReg() });
+  if (inActiveFrame(addr, sp, bp)) tags.push({ cls: 'frame', text: t('stack.row.tag.frame') });
 
   const priority = ['sp', 'bp', 'ret', 'pc', 'frame'];
   const primary = tags.find(tag => priority.includes(tag.cls))?.cls || 'default';
@@ -1245,7 +1268,6 @@ function renderStackView() {
   const sp = S.regs.ESP >>> 0;
   const bp = S.regs.EBP >>> 0;
   const retInfo = currentReturnInfo();
-  const mode = S.stackMode === 'frame' ? 'FRAME' : 'FULL';
   const gran = stackGranBytes();
 
   // Lista de endereços base para cada linha (granulados, alinhados ao tamanho do grupo)
@@ -1271,7 +1293,7 @@ function renderStackView() {
     const meta = stackRowMeta(addr);
     const tags = meta.tags.length
       ? meta.tags.map(tag => `<span class="stack-tag stack-tag-${tag.cls}">${tag.text}</span>`).join('')
-      : '<span class="stack-row-empty">livre</span>';
+      : `<span class="stack-row-empty">${t('stack.row.empty')}</span>`;
     const valHex = gran === 1
       ? hex8(S.stackMem[addr] || 0)
       : stackGroupHex(addr, gran);
@@ -1285,12 +1307,11 @@ function renderStackView() {
 
   view.innerHTML = `
     <div class="stack-meta">
-      <div class="stack-meta-row stack-meta-row-mode"><span class="stack-meta-key">modo</span><span class="stack-meta-pill">${mode}</span></div>
-      <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">Tamanho da stack</span><span class="stack-meta-pill">${formatStackSize(S.stackSize)}</span></div>
-      <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">${ipReg()} (Contador)</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
-      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${spName} (Topo da Pilha)</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${bpName} (Base do Frame)</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
-      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">Endereco de retorno</span><span class="stack-meta-pill">${retInfo ? `0x${fmtA(retInfo.returnTo)}` : '—'}</span></div>
+      <div class="stack-meta-row stack-meta-row-size"><span class="stack-meta-key">${t('stack.meta.size')}</span><span class="stack-meta-pill">${formatStackSize(S.stackSize)}</span></div>
+      <div class="stack-meta-row stack-meta-row-pc"><span class="stack-meta-key">${t('stack.meta.ip', ipReg())}</span><span class="stack-meta-pill">0x${fmtA(S.pc)}</span></div>
+      <div class="stack-meta-row stack-meta-row-esp"><span class="stack-meta-key">${t('stack.meta.sp', spName)}</span><span class="stack-meta-pill">0x${fmtStackA(sp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ebp"><span class="stack-meta-key">${t('stack.meta.bp', bpName)}</span><span class="stack-meta-pill">0x${fmtStackA(bp)}</span></div>
+      <div class="stack-meta-row stack-meta-row-ret"><span class="stack-meta-key">${t('stack.meta.ret')}</span><span class="stack-meta-pill">${retInfo ? `0x${fmtA(retInfo.returnTo)}` : '—'}</span></div>
     </div>
     ${renderStackTrace()}
     <div class="stack-list">${rows}</div>`;
@@ -1481,7 +1502,7 @@ function saveSim() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   a.download = `memsim_${Date.now()}.json`; a.click();
-  lg('sys', 'Simulação salva.');
+  lg('sys', t('log.sys.sim_saved'));
 }
 
 function loadSim(e) {
@@ -1540,8 +1561,8 @@ function loadSim(e) {
       syncPicker(); refreshStats(); refreshPreview(); refreshBreakdown();
       $('opsDisplay').textContent = S.stats.ops;
       $('clockDisplay').textContent = '—';
-      lg('sys', 'Simulação carregada.');
-    } catch (err) { lg('error', 'Falha: ' + err.message); }
+      lg('sys', t('log.sys.sim_loaded'));
+    } catch (err) { lg('error', t('log.error.fail', err.message)); }
   };
   r.readAsText(file); e.target.value = '';
 }
@@ -1550,7 +1571,10 @@ function loadSim(e) {
 // HELP
 // ─────────────────────────────────────────────────────────
 function showHelp(page, tabEl) {
-  $('helpBody').innerHTML = t(`help.${page}`) || '';
+  const body = $('helpBody');
+  if (!body) return;
+  body.dataset.page = page;
+  body.innerHTML = t(`help.${page}`, ipReg()) || '';
   $$('.htab').forEach(tab => tab.classList.remove('active'));
   if (tabEl) tabEl.classList.add('active');
 }

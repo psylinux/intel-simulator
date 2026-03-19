@@ -192,7 +192,7 @@ function resetStackState() {
 function reportStackBoundsError(kind, addr, width, asm = null, opts = {}) {
   const first = addr;
   const last = addr + width - 1;
-  const message = `${kind}: o acesso exige ${width} byte(s), de 0x${fmtStackA(first)} até 0x${fmtStackA(last)}, mas a stack simulada vai de 0x0000 até 0x${fmtStackA(S.stackSize - 1)}.`;
+  const message = t('error.stack.bounds', kind, width, fmtStackA(first), fmtStackA(last), fmtStackA(S.stackSize - 1));
   reportStackError(message, asm, opts);
 }
 
@@ -226,7 +226,7 @@ function reportWidthOverflow(kind, addr, width, asm = null, opts = {}) {
   const addrs = [];
   const endAddr = addr + width - 1;
   for (let i = addr; i <= endAddr; i++) addrs.push(i & 0x3F);
-  const msg = `${kind}: o acesso de ${width} byte(s) a partir de 0x${fmtMemA(addr)} ultrapassa o limite do mapa de memória (0x3F).`;
+  const msg = t('error.mem.width_overflow', kind, width, fmtMemA(addr));
   reportMemoryError(addrs, msg, asm, opts);
 }
 

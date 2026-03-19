@@ -598,7 +598,7 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.015), inset 0 18px 20px rgba(239,68,68,.03);
 }
 .mem-bp-always:empty::after {
-  content: 'Nenhum breakpoint definido';
+  content: attr(data-empty-label);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2166,10 +2166,6 @@ body.code-mem-resizing #codeMemSplitHandle {
   letter-spacing: .6px;
   flex-shrink: 0;
 }
-.stack-meta-row-mode .stack-meta-key,
-.stack-meta-row-mode .stack-meta-pill {
-  color: var(--role-mode);
-}
 .stack-meta-row-size .stack-meta-key,
 .stack-meta-row-size .stack-meta-pill {
   color: var(--acc);
@@ -2178,11 +2174,6 @@ body.code-mem-resizing #codeMemSplitHandle {
   background: rgba(56,189,248,.12);
   border-color: rgba(56,189,248,.28);
   box-shadow: 0 0 14px rgba(56,189,248,.08);
-}
-.stack-meta-row-mode .stack-meta-pill {
-  background: rgba(125,255,114,.16);
-  border-color: rgba(125,255,114,.30);
-  box-shadow: 0 0 14px rgba(125,255,114,.08);
 }
 .stack-meta-row-esp .stack-meta-key,
 .stack-meta-row-esp .stack-meta-pill {

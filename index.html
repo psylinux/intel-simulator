@@ -40,10 +40,10 @@
 
     <nav class="tb-nav">
       <div class="pc-chip">
-        <span class="chip-lbl" data-i18n="topbar.chip.pc">PC</span>
+        <span class="chip-lbl" id="ipChipLbl" data-i18n="topbar.chip.pc">EIP/RIP</span>
         <span class="chip-val-prefix">0x</span>
         <input class="chip-val chip-pc-input" id="pcDisplay" type="text" maxlength="4" value="0000" spellcheck="false"
-          data-i18n-title="topbar.pc.title" title="Edite o PC manualmente" />
+          data-i18n-title="topbar.pc.title" title="Edite EIP/RIP manualmente" />
       </div>
       <div class="clock-chip" id="clockChip">
         <span class="chip-lbl" data-i18n="topbar.chip.lastop">LAST OP</span>
@@ -152,7 +152,7 @@
 
       <div id="editGuideBanner">
         <span class="eg-title" data-i18n="editguide.title">EDICAO RAPIDA</span>
-        <span class="eg-item" data-i18n-html="editguide.hint1">Clique no <strong>PC</strong> e nos <strong>valores dos
+        <span class="eg-item" id="editGuideHint1" data-i18n-html="editguide.hint1">Clique em <strong>EIP/RIP</strong> e nos <strong>valores dos
             registradores</strong> para editar. Use <strong>2× clique</strong> no <strong>MAPA DE MEMORIA</strong> para
           editar bytes.</span>
         <span class="eg-item" data-i18n-html="editguide.hint2">Edite o programa direto na <strong>LISTAGEM ASM</strong>
@@ -353,8 +353,8 @@
                           data-i18n="mem.legend.active">Ativo</span></span>
                       <span class="ml-item"><span class="ml-dot ml-written"></span><span
                           data-i18n="mem.legend.written">Escrito</span></span>
-                      <span class="ml-item"><span class="ml-dot ml-pc"></span><span
-                          data-i18n="mem.legend.pc">PC (EIP/RIP)</span></span>
+                      <span class="ml-item"><span class="ml-dot ml-pc"></span><span id="memLegendIpLbl"
+                          data-i18n="mem.legend.pc">EIP/RIP</span></span>
                       <span class="ml-item"><span class="ml-dot ml-fetch"></span><span
                           data-i18n="mem.legend.fetch">Fetch</span></span>
                       <span class="ml-item"><span class="ml-dot ml-bp"></span><span
@@ -523,10 +523,13 @@
     // Inicializa i18n após o DOM estar pronto e o app carregado
     document.addEventListener('DOMContentLoaded', () => {
       I18N.init();
+      const app = globalThis.App;
+      if (app && app._applyI18n) app._applyI18n();
     });
     // Quando idioma muda, re-aplica strings geradas por JS
     document.addEventListener('i18n:changed', () => {
-      if (window.App && App._applyI18n) App._applyI18n();
+      const app = globalThis.App;
+      if (app && app._applyI18n) app._applyI18n();
     });
   </script>
 </body>

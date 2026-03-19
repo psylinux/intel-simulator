@@ -96,6 +96,7 @@ function lg(type, msg, asm, opts = {}) {
   const indent = Math.max(0, Number.isFinite(opts.indent) ? opts.indent : (S.logIndent || 0));
   d.className = 'le le-' + type + (indent ? ` le-indent-${Math.min(indent, 3)}` : '');
   d.dataset.type = type;
+  d.dataset.kindOverride = opts.kindLabel || '';
   if (indent > 0) {
     const offset = indent * 20;
     d.style.marginLeft = `${offset}px`;
@@ -121,13 +122,23 @@ function lg(type, msg, asm, opts = {}) {
     asmEl.className = 'le-asm';
     const asmLbl = document.createElement('span');
     asmLbl.className = 'le-asm-lbl';
-    asmLbl.textContent = 'asm:';
+    asmLbl.textContent = t('log.asm.label');
     const code = document.createElement('code');
     code.textContent = asm;
     asmEl.append(asmLbl, code);
     d.appendChild(asmEl);
   }
   out.appendChild(d); out.scrollTop = out.scrollHeight;
+}
+function relocalizeLogOutput() {
+  const out = $('logOutput');
+  if (!out) return;
+  out.querySelectorAll('.le').forEach(entry => {
+    const kindEl = entry.querySelector('.le-kind');
+    if (kindEl) kindEl.textContent = logKindLabel(entry.dataset.type || 'sys', entry.dataset.kindOverride || '');
+    const asmLbl = entry.querySelector('.le-asm-lbl');
+    if (asmLbl) asmLbl.textContent = t('log.asm.label');
+  });
 }
 function clearLog() {
   const o = $('logOutput');

@@ -66,7 +66,7 @@ async function _executeOne(opts = {}) {
     try {
       reportMemoryError(
         instr.errorAddrs || [addr],
-        instr.errorDetail || `Falha de decode em 0x${fmtA(addr)}.`,
+        instr.errorDetail || t('log.error.decode_fail', fmtA(addr)),
         instr.asm,
         { halt: true, pc: addr }
       );
@@ -81,7 +81,7 @@ async function _executeOne(opts = {}) {
   // ── FASE 3: EXECUTE ────────────────────────────────────
   setStatus(t('status.execute', instr.mnem), 'lbl-load', { log: false });
   if (isStepTrace) {
-    lg('info', t('log.info.execute_desc'), instr.asm, { indent: 1, kindLabel: 'EXECUTE' });
+    lg('info', t('log.info.execute_desc', ipReg()), instr.asm, { indent: 1, kindLabel: 'EXECUTE' });
   }
   const prevIndent = S.logIndent;
   if (isStepTrace) S.logIndent = 2;
@@ -415,10 +415,10 @@ async function assembleInput() {
     return;
   }
   const result = writeAssembledBytes(addr, validation.normalized, undefined, validation.bytes);
-  if (!result) { lg('error', `ASM: não reconhecido — "${src}"`); return; }
-  lg('sys', `ASM: "${src}" → [${result.bytes.map(b => '0x' + hex8(b)).join(', ')}] @ 0x${fmtA(addr)}`);
+  if (!result) { lg('error', t('log.error.asm_unknown', src)); return; }
+  lg('sys', t('log.sys.asm_encoded', src, result.bytes.map(b => '0x' + hex8(b)).join(', '), fmtA(addr)));
   setPC((addr + result.bytes.length) & 0x3F);
-  lg('sys', `${result.bytes.length} byte(s) gravados em 0x${fmtA(addr)}`);
+  lg('sys', t('log.sys.asm_written', result.bytes.length, fmtA(addr)));
   inp.value = '';
   refreshAsmValidation();
 }
@@ -440,7 +440,7 @@ function clearSim() {
   $('clockDisplay').textContent = '—';
   $('opsDisplay').textContent = '0';
   setCpuState('idle');
-  setStatus(t('status.demo_reset'), 'lbl-done');
+  setStatus(t('status.demo_reset', ipReg()), 'lbl-done');
   lg('sys', t('log.sys.demo_reset'), asmForOp('clear', {}));
   lg('sys', demoProgramForArch().listing.join(' | '));
 }

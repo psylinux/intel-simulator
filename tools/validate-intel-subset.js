@@ -73,7 +73,7 @@ class MockElement {
     this.tagName     = tagName.toUpperCase();
     this.children    = [];
     this.dataset     = {};
-    this.style       = { setProperty() {}, cssText: '' };
+    this.style       = { setProperty() {}, removeProperty() {}, cssText: '' };
     this.classList   = new MockClassList();
     this.className   = '';
     this.value       = '';
@@ -109,6 +109,7 @@ class MockElement {
   hasAttribute(k)          { return k in this; }
   focus()  {}
   select() {}
+  scrollIntoView() {}
   remove() {}
   click()  { if (typeof this.onclick === 'function') this.onclick({ target: this, preventDefault() {}, stopPropagation() {} }); }
   closest()                { return null; }
@@ -130,7 +131,7 @@ function createDocument() {
   // IDs whose elements should return null (dynamic render targets, animation elements)
   const nullIds = [
     /^animStage$/, /^animSVG$/, /^rc-/, /^rcv-/, /^rcb-/, /^rpv-/, /^rpb-/,
-    /^r[A-Z0-9]+$/, /^asmTrace$/, /^stackView$/, /^stackLegend$/,
+    /^r[A-Z0-9]+$/, /^stackView$/, /^stackLegend$/,
     /^codeMemSplit/, /^sidebarResize/, /^stackResize/,
   ];
   const doc = {
@@ -181,6 +182,8 @@ function loadSimulator() {
     MutationObserver: class MutationObserver { observe(){} disconnect(){} },
     getComputedStyle() { return { getPropertyValue() { return ''; } }; },
     CSS: { supports() { return false; } },
+    addEventListener() {},
+    removeEventListener() {},
   };
   ctx.window = ctx;
   ctx.globalThis = ctx;
@@ -190,6 +193,7 @@ function loadSimulator() {
   const source = I18N_MOCK + appSource + `
 globalThis.__memsim = {
   S,
+  AppGlobal: typeof globalThis.App !== 'undefined' ? globalThis.App : null,
   init,
   decodeAt,
   validateAssembly,
@@ -345,6 +349,23 @@ function test(name, fn) {
   tests.push({ name: `[${currentSuite}] ${name}`, fn });
 }
 
+function sortedStrings(values) {
+  return [...values].sort();
+}
+
+function extractInlineLocaleKeys() {
+  const src = fs.readFileSync(path.join(ROOT, 'js/i18n.js'), 'utf8');
+  const ptMatch = src.match(/'pt-BR': \{([\s\S]*?)\n\s*\},\n\s*'en-US':/);
+  const enMatch = src.match(/'en-US': \{([\s\S]*?)\n\s*\},\n\s*\};/);
+  assert.ok(ptMatch, 'must find pt-BR locale block in js/i18n.js');
+  assert.ok(enMatch, 'must find en-US locale block in js/i18n.js');
+  const keys = block => [...block.matchAll(/"([^"]+)":/g)].map(m => m[1]);
+  return {
+    pt: new Set(keys(ptMatch[1])),
+    en: new Set(keys(enMatch[1])),
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  SUITE: PURE UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -373,6 +394,53 @@ test('fmtA: 4-char zero-padded hex', () => {
   assert.equal(api.fmtA(0x3F),   '003F');
   assert.equal(api.fmtA(0xABCD), 'ABCD');
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: I18N
+// ═══════════════════════════════════════════════════════════════════════════
+suite('i18n');
+
+test('inline i18n locale blocks expose the same keys for pt-BR and en-US', () => {
+  const inline = extractInlineLocaleKeys();
+  assert.deepEqual(
+    sortedStrings(inline.pt),
+    sortedStrings(inline.en),
+    'js/i18n.js must keep pt-BR and en-US key sets in sync'
+  );
+});
+
+test('locale JSON files expose the same keys for pt-BR and en-US', () => {
+  const pt = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/pt-BR.json'), 'utf8'));
+  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/en-US.json'), 'utf8'));
+  assert.deepEqual(
+    sortedStrings(Object.keys(pt)),
+    sortedStrings(Object.keys(en)),
+    'locales/*.json must keep pt-BR and en-US key sets in sync'
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUITE: BOOT
+// ═══════════════════════════════════════════════════════════════════════════
+suite('boot');
+
+test('App API is exposed on the global object for HTML handlers and post-init i18n hooks', () => {
+  const { api } = loadSimulator();
+  assert.ok(api.AppGlobal, 'globalThis.App must exist after loading app scripts');
+  assert.equal(typeof api.AppGlobal.setArch, 'function');
+  assert.equal(typeof api.AppGlobal._applyI18n, 'function');
+});
+
+test('init renders ASM trace on first load without requiring architecture re-selection', () => {
+  const { api, document } = loadSimulator();
+  api.init();
+  const trace = document.getElementById('asmTrace');
+  assert.ok(trace, 'asmTrace element must exist in the initial DOM');
+  assert.ok(/asm-line|trace-row|MOV|CALL/.test(trace.innerHTML), 'initial boot must populate the ASM listing');
+  assert.equal(document.getElementById('ipChipLbl').textContent, 'EIP', 'initial boot must sync the instruction pointer label');
+});
+
+suite('utils');
 
 test('clamp: boundaries and middle', () => {
   const { api } = loadSimulator();
@@ -1871,6 +1939,17 @@ test('ia32 → x64: ptrSize changes from 4 to 8', () => {
   assert.equal(api.ptrSize(), 4);
   api.S.arch = 'x64';
   assert.equal(api.ptrSize(), 8);
+});
+
+test('UI: instruction pointer labels follow active architecture', () => {
+  const { api, document } = loadSimulator();
+  resetSim(api, document, 'ia32');
+  api.setArch('ia32');
+  assert.equal(document.getElementById('ipChipLbl').textContent, 'EIP');
+  assert.equal(document.getElementById('memLegendIpLbl').textContent, 'EIP');
+  api.setArch('x64');
+  assert.equal(document.getElementById('ipChipLbl').textContent, 'RIP');
+  assert.equal(document.getElementById('memLegendIpLbl').textContent, 'RIP');
 });
 
 test('x64 MOV R9,imm: REX.B|W prefix, B8 opcode, R9 index=1', () => {
